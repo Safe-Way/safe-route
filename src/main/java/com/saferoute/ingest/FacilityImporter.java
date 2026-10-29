@@ -34,7 +34,7 @@ import tools.jackson.databind.json.JsonMapper;
  * 같은 종류·출처를 다시 넣으면 먼저 지우고 새로 넣으므로 몇 번을 실행해도 결과가 같다.
  *
  * 실행: ./mvnw spring-boot:run -Dspring-boot.run.profiles=import
- * 일부만: -Dspring-boot.run.arguments=--types=police,cctv
+ * 일부만: -Dspring-boot.run.arguments=--types=police,cctv (폴더 이름도 됨: --types=security_light_std)
  */
 @Component
 @Profile("import")
@@ -61,7 +61,8 @@ public class FacilityImporter implements ApplicationRunner {
             }
         }
         for (FacilityDataset ds : FacilityDataset.ALL) {
-            if (only.isEmpty() || only.contains(ds.type())) {
+            // 종류 이름(security_light)이나 폴더 이름(security_light_std)으로 고를 수 있다
+            if (only.isEmpty() || only.contains(ds.type()) || only.contains(ds.folder())) {
                 importApiDataset(ds);
             }
         }
@@ -129,14 +130,17 @@ public class FacilityImporter implements ApplicationRunner {
         String name = first(item, ds.nameKeys());
         String id = first(item, ds.idKeys());
         if (id == null) {
-            // 원본에 번호가 없으면 이름과 좌표로 같은 값이 나오는 번호를 만든다
-            id = hash(name + "|" + x + "|" + y);
+            // 원본에 번호가 없으면 줄 전체로 번호를 만든다 (똑같은 줄이 두 번 있으면 하나만 들어감)
+            id = hash(item.toString());
         }
         Set<String> used = new HashSet<>(List.of(ds.xKey(), ds.yKey()));
         used.addAll(ds.idKeys());
         used.addAll(ds.nameKeys());
         used.addAll(ds.addrKeys());
         used.addAll(ds.subtypeKeys());
+        if (ds.countKey() != null) {
+            used.add(ds.countKey());
+        }
         if (ds.sidoKey() != null) {
             used.add(ds.sidoKey());
         }
@@ -158,7 +162,7 @@ public class FacilityImporter implements ApplicationRunner {
         return new FacilityRow(ds.type(), cut(kind, 50), ds.source(), cut(id, 64),
                 cut(name, 200), cut(first(item, ds.addrKeys()), 300),
                 code(item, ds.sidoKey(), 2), code(item, ds.sggKey(), 5),
-                ll[0], ll[1], 1, attrs.isEmpty() ? null : json.writeValueAsString(attrs));
+                ll[0], ll[1], count(item, ds.countKey()), attrs.isEmpty() ? null : json.writeValueAsString(attrs));
     }
 
     // ---------- CCTV CSV (지방행정 인허가 데이터, CP949) ----------
@@ -421,6 +425,12 @@ public class FacilityImporter implements ApplicationRunner {
             }
         }
         return null;
+    }
+
+    /** 개수 칸 값. 없거나 이상하면 1 */
+    private static int count(JsonNode item, String key) {
+        Double v = key == null ? null : number(item, key);
+        return v == null || v < 1 ? 1 : (int) Math.min(v, Short.MAX_VALUE);
     }
 
     private static Double number(JsonNode item, String key) {

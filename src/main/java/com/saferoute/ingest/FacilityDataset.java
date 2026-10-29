@@ -13,7 +13,7 @@ import java.util.Map;
  * @param title       사람이 읽는 이름
  * @param api         API 주소
  * @param license     이용 조건
- * @param idKeys      원본 번호 칸. 모두 비면 이름+좌표로 번호를 만든다
+ * @param idKeys      원본 번호 칸. 모두 비면 원본 줄 전체로 번호를 만든다
  * @param nameKeys    이름 칸
  * @param addrKeys    주소 칸
  * @param subtypeKeys 세부 종류 칸
@@ -23,6 +23,7 @@ import java.util.Map;
  * @param yKey        y 칸 (메르카토르 y, 또는 위도)
  * @param lonLat      true면 x·y가 이미 경도·위도, false면 메르카토르(EPSG:3857)
  * @param kindNames   세부 종류가 코드로 올 때 이름으로 바꾸는 표 (없으면 빈 Map)
+ * @param countKey    개수 칸 (보안등 설치 개수 등). 없으면 null이고 개수는 1
  */
 public record FacilityDataset(
         String folder,
@@ -40,7 +41,8 @@ public record FacilityDataset(
         String xKey,
         String yKey,
         boolean lonLat,
-        Map<String, String> kindNames) {
+        Map<String, String> kindNames,
+        String countKey) {
 
     private static final String SAFETYDATA = "https://www.safetydata.go.kr/V2/api/";
     private static final String SAFEMAP = "https://www.safemap.go.kr/openapi2/";
@@ -54,7 +56,7 @@ public record FacilityDataset(
                 List.of("POLSTN_NM", "FCLT_GVMNFC_NM", "NTNLPLCAGNC_NM"),
                 List.of("ROAD_NM_ADDR", "ADDR"),
                 List.of("FCLT_TYPE"),
-                "STDG_CTPV_CD", "STDG_SGG_CD", "XMAP_CRTS", "YMAP_CRTS", false, Map.of());
+                "STDG_CTPV_CD", "STDG_SGG_CD", "XMAP_CRTS", "YMAP_CRTS", false, Map.of(), null);
     }
 
     /** 생활안전지도 */
@@ -62,7 +64,7 @@ public record FacilityDataset(
             List<String> idKeys, List<String> nameKeys, List<String> addrKeys, List<String> subtypeKeys,
             String sidoKey, String sggKey) {
         return new FacilityDataset(folder, type, "safemap", title, SAFEMAP + apiId, KOGL_4,
-                idKeys, nameKeys, addrKeys, subtypeKeys, sidoKey, sggKey, "x", "y", false, Map.of());
+                idKeys, nameKeys, addrKeys, subtypeKeys, sidoKey, sggKey, "x", "y", false, Map.of(), null);
     }
 
     /**
@@ -76,12 +78,24 @@ public record FacilityDataset(
             SAFETYDATA + "DSSP-IF-10804", "확인 필요",
             List.of("REARE_FCLT_NO"), List.of("REARE_NM"), List.of("RONA_DADDR", "DADDR"), List.of("FCLT_TYPE"),
             "REARE_FCLT_NO", "REARE_FCLT_NO", "LOT", "LAT", true,
-            Map.of("001", "공공시설", "003", "특정계층이용시설", "004", "생활밀착민간시설"));
+            Map.of("001", "공공시설", "003", "특정계층이용시설", "004", "생활밀착민간시설"), null);
+
+    /**
+     * 공공데이터포털 전국보안등정보표준데이터 (tn_pubr_public_scrty_lmp_api, 약 186만 건).
+     * 지자체가 직접 올려서 공통POI 보안등(약 95만 건)보다 촘촘하다. 원본 번호가 없어 줄 전체로 번호를 만든다.
+     * 기관 코드(insttCode)는 행정구역 코드가 아니라서 시도·시군구 코드는 비워 둔다.
+     */
+    static final FacilityDataset SECURITY_LIGHT_STD = new FacilityDataset(
+            "security_light_std", "security_light", "data_go_kr", "전국보안등정보표준데이터",
+            "https://api.data.go.kr/openapi/tn_pubr_public_scrty_lmp_api", "확인 필요",
+            List.of(), List.of("lmpLcNm"), List.of("rdnmadr", "lnmadr"), List.of("installationType"),
+            null, null, "longitude", "latitude", true, Map.of(), "installationCo");
 
     /** API로 받는 시설 데이터 전체 (CCTV는 CSV 파일이라 따로 읽는다) */
     public static final List<FacilityDataset> ALL = List.of(
             safetydata("police", "police", "행정안전부_공통POI_경찰", "DSSP-IF-00080"),
             safetydata("security_light", "security_light", "행정안전부_공통POI_보안등", "DSSP-IF-00083"),
+            SECURITY_LIGHT_STD,
             safetydata("streetlight", "streetlight", "행정안전부_공통POI_가로등", "DSSP-IF-00084"),
             safemap("emergency_bell", "emergency_bell", "생활안전지도_안전비상벨", "IF_0032",
                     List.of("objt_id"), List.of(), List.of("rn_adres", "ins_detail", "adres"),

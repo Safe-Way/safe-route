@@ -74,6 +74,31 @@ class IngestHelpersTests {
     }
 
     @Test
+    void securityLightStdRowUsesCountAndRowHash() {
+        // 전국보안등정보표준데이터 원본 한 줄. 원본 번호가 없어 줄 전체로 번호를 만든다
+        String item = """
+                {"lmpLcNm": "신학리102", "installationCo": "2", "rdnmadr": "",
+                 "lnmadr": "전남광주통합특별시 무안군 무안읍 신학리 188",
+                 "latitude": "34.98853107", "longitude": "126.4360657", "installationYear": "2011",
+                 "installationType": "한전주", "phoneNumber": "061-450-5456", "insttCode": "5880000"}
+                """;
+        tools.jackson.databind.json.JsonMapper mapper = tools.jackson.databind.json.JsonMapper.builder().build();
+        FacilityImporter importer = new FacilityImporter(null);
+        FacilityRow row = importer.toRow(FacilityDataset.SECURITY_LIGHT_STD, mapper.readTree(item));
+        FacilityRow again = importer.toRow(FacilityDataset.SECURITY_LIGHT_STD, mapper.readTree(item));
+
+        assertThat(row.type()).isEqualTo("security_light");
+        assertThat(row.source()).isEqualTo("data_go_kr");
+        assertThat(row.lon()).isEqualTo(126.4360657);
+        assertThat(row.lat()).isEqualTo(34.98853107);
+        assertThat(row.kind()).isEqualTo("한전주");
+        assertThat(row.unitCount()).isEqualTo(2);
+        assertThat(row.address()).isEqualTo("전남광주통합특별시 무안군 무안읍 신학리 188");
+        assertThat(row.sourceId()).isNotBlank().isEqualTo(again.sourceId());
+        assertThat(row.attrsJson()).contains("installationYear").doesNotContain("installationCo");
+    }
+
+    @Test
     void insertSqlAddsCountColumnOnlyWhereItExists() {
         assertThat(FacilityImporter.insertSql(FacilityTable.CCTV))
                 .startsWith("INSERT IGNORE INTO cctv ")

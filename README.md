@@ -41,6 +41,7 @@
 | 데이터 | 출처 | 건수 |
 |---|---|---|
 | 가로등 · 보안등 · 경찰 | 재난안전데이터 공유플랫폼 (행정안전부 공통POI) | 보안등 약 95만, 가로등 약 225만 |
+| 보안등 | 공공데이터포털 전국보안등정보표준데이터 (지자체 직접 등록) | 약 186만 |
 | 한파쉼터 | 재난안전데이터 공유플랫폼 (DSSP-IF-10804) | 약 5.4만 |
 | CCTV | 행정안전부 지방행정 인허가 데이터, 광주광역시 | 약 39만 |
 | 비상벨 · 편의점 · 지킴이집 · 무더위쉼터 · 공중화장실 | 생활안전지도 | 약 26만 |
@@ -54,7 +55,7 @@
 | 표 | 내용 | 종류별 칸 |
 |---|---|---|
 | `streetlight` | 가로등 | |
-| `security_light` | 보안등 | `lamp_count`, `install_year`, `manager` |
+| `security_light` | 보안등 | `lamp_count`, `install_year`, `manager`, `manager_phone` |
 | `cctv` | CCTV | `camera_count`, `pixels`, `direction`, `retention_days`, `installed`, `manager_phone` |
 | `police` | 경찰서 · 지구대 · 파출소 등 | `phone` |
 | `emergency_bell` | 안전 비상벨 | `purpose`, `police_linked`, `manager`, `manager_phone`, `last_inspected` 등 |
