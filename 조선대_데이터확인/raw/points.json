@@ -1,0 +1,3944 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-10-28T00:43:32Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "node",
+  "id": 368605258,
+  "lat": 35.1492000,
+  "lon": 126.9198514,
+  "tags": {
+    "amenity": "police",
+    "name": "광주동부경찰서",
+    "name:en": "Gwangjudongbu Police Station",
+    "name:ja": "光州東部警察署",
+    "name:ko": "광주동부경찰서",
+    "name:ko-Latn": "Gwangjudongbugyeongchalseo",
+    "wikidata": "Q11388369"
+  }
+},
+{
+  "type": "node",
+  "id": 368675590,
+  "lat": 35.1488133,
+  "lon": 126.9161574,
+  "tags": {
+    "addr:housenumber": "77-9",
+    "addr:postcode": "61482",
+    "addr:street": "충장로",
+    "branch": "줄리아나마트",
+    "name": "나들가게",
+    "name:en": "Nadeul Store",
+    "name:ko": "나들가게",
+    "phone": "+82 62 234 3658",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 368948846,
+  "lat": 35.1440300,
+  "lon": 126.9240990,
+  "tags": {
+    "brand": "CU",
+    "brand:wikidata": "Q12580836",
+    "brand:wikipedia": "ko:CU (편의점)",
+    "name": "CU",
+    "name:en": "CU",
+    "name:ko": "CU",
+    "name:ko-Latn": "Beullupyeonuijeom",
+    "operator": "BGF리테일",
+    "operator:en": "BGF Retail",
+    "payment:american_express": "yes",
+    "payment:cash": "yes",
+    "payment:coins": "yes",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "payment:diners_club": "yes",
+    "payment:discover_card": "yes",
+    "payment:jcb": "yes",
+    "payment:mastercard": "yes",
+    "payment:notes": "yes",
+    "payment:unionpay": "yes",
+    "payment:visa": "yes",
+    "shop": "convenience",
+    "smoking": "no",
+    "website": "https://cu.bgfretail.com/index.do"
+  }
+},
+{
+  "type": "node",
+  "id": 436837376,
+  "lat": 35.1507268,
+  "lon": 126.9331362,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 436842449,
+  "lat": 35.1566064,
+  "lon": 126.9378360,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 436873286,
+  "lat": 35.1497757,
+  "lon": 126.9455611,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 436874903,
+  "lat": 35.1358017,
+  "lon": 126.9223091,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 436874905,
+  "lat": 35.1377185,
+  "lon": 126.9210837,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 436874971,
+  "lat": 35.1352745,
+  "lon": 126.9218039,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 2007834442,
+  "lat": 35.1407745,
+  "lon": 126.9297155,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 3071562133,
+  "lat": 35.1309395,
+  "lon": 126.9293096,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4199844674,
+  "lat": 35.1492133,
+  "lon": 126.9447253,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4561700461,
+  "lat": 35.1493941,
+  "lon": 126.9369716,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4659169737,
+  "lat": 35.1426532,
+  "lon": 126.9288192,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4705010463,
+  "lat": 35.1355301,
+  "lon": 126.9224738,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4707562681,
+  "lat": 35.1419130,
+  "lon": 126.9273295,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4740552360,
+  "lat": 35.1423263,
+  "lon": 126.9206084,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814534779,
+  "lat": 35.1466850,
+  "lon": 126.9186813,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814534780,
+  "lat": 35.1458345,
+  "lon": 126.9190761,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814534782,
+  "lat": 35.1450639,
+  "lon": 126.9194305,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:island": "no",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814534783,
+  "lat": 35.1427712,
+  "lon": 126.9205904,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814534784,
+  "lat": 35.1406265,
+  "lon": 126.9219447,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814534785,
+  "lat": 35.1392283,
+  "lon": 126.9228387,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814534786,
+  "lat": 35.1391993,
+  "lon": 126.9229886,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814534787,
+  "lat": 35.1392486,
+  "lon": 126.9230907,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814534788,
+  "lat": 35.1393865,
+  "lon": 126.9226744,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560423,
+  "lat": 35.1329863,
+  "lon": 126.9283653,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560424,
+  "lat": 35.1329533,
+  "lon": 126.9282411,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560425,
+  "lat": 35.1308922,
+  "lon": 126.9291851,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560426,
+  "lat": 35.1298213,
+  "lon": 126.9295544,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560427,
+  "lat": 35.1296750,
+  "lon": 126.9292382,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560428,
+  "lat": 35.1300702,
+  "lon": 126.9296838,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560429,
+  "lat": 35.1300403,
+  "lon": 126.9295605,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560523,
+  "lat": 35.1394540,
+  "lon": 126.9194124,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560524,
+  "lat": 35.1390571,
+  "lon": 126.9189953,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560525,
+  "lat": 35.1389089,
+  "lon": 126.9189516,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560526,
+  "lat": 35.1388764,
+  "lon": 126.9191490,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560527,
+  "lat": 35.1377946,
+  "lon": 126.9171320,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4814560528,
+  "lat": 35.1354710,
+  "lon": 126.9216744,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240823,
+  "lat": 35.1510285,
+  "lon": 126.9304957,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240824,
+  "lat": 35.1510580,
+  "lon": 126.9302768,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240825,
+  "lat": 35.1509226,
+  "lon": 126.9301139,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240826,
+  "lat": 35.1507384,
+  "lon": 126.9301389,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240827,
+  "lat": 35.1507342,
+  "lon": 126.9303370,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240828,
+  "lat": 35.1493856,
+  "lon": 126.9293578,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240829,
+  "lat": 35.1494528,
+  "lon": 126.9291983,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240830,
+  "lat": 35.1491184,
+  "lon": 126.9289582,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240831,
+  "lat": 35.1490404,
+  "lon": 126.9291205,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240834,
+  "lat": 35.1471230,
+  "lon": 126.9275856,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240835,
+  "lat": 35.1470586,
+  "lon": 126.9277340,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240836,
+  "lat": 35.1467336,
+  "lon": 126.9275138,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4815240837,
+  "lat": 35.1467938,
+  "lon": 126.9273699,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 4820111502,
+  "lat": 35.1495844,
+  "lon": 126.9220116,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 5456752725,
+  "lat": 35.1578970,
+  "lon": 126.9354487,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 5460664225,
+  "lat": 35.1405965,
+  "lon": 126.9164174,
+  "tags": {
+    "amenity": "toilets"
+  }
+},
+{
+  "type": "node",
+  "id": 5693183377,
+  "lat": 35.1564643,
+  "lon": 126.9376182,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 5754084445,
+  "lat": 35.1322300,
+  "lon": 126.9411649,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 6589797695,
+  "lat": 35.1404123,
+  "lon": 126.9161825,
+  "tags": {
+    "amenity": "toilets",
+    "toilets:disposal": "flush"
+  }
+},
+{
+  "type": "node",
+  "id": 7178595086,
+  "lat": 35.1436902,
+  "lon": 126.9155682,
+  "tags": {
+    "name:en": "G25",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 7863602408,
+  "lat": 35.1418691,
+  "lon": 126.9281233,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 7863602409,
+  "lat": 35.1419658,
+  "lon": 126.9285403,
+  "tags": {
+    "crossing": "marked",
+    "crossing:island": "no",
+    "crossing:markings": "zebra",
+    "highway": "crossing",
+    "tactile_paving": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 7863602412,
+  "lat": 35.1409277,
+  "lon": 126.9280696,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "zebra",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 7863602414,
+  "lat": 35.1434119,
+  "lon": 126.9270626,
+  "tags": {
+    "crossing": "marked",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 7863602416,
+  "lat": 35.1422975,
+  "lon": 126.9247469,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing",
+    "tactile_paving": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 7863602417,
+  "lat": 35.1423663,
+  "lon": 126.9245776,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing",
+    "tactile_paving": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 8356331078,
+  "lat": 35.1469627,
+  "lon": 126.9278464,
+  "tags": {
+    "brand": "세븐일레븐",
+    "brand:en": "7-Eleven",
+    "brand:ko": "세븐일레븐",
+    "brand:wikidata": "Q259340",
+    "brand:wikipedia": "ko:미니스톱",
+    "int_name": "MINISTOP",
+    "level": "1",
+    "name": "세븐일레븐",
+    "name:en": "7-Eleven",
+    "name:ja": "ミニストップ",
+    "name:ko": "세븐일레븐",
+    "opening_hours": "24/7",
+    "operator": "미니스톱",
+    "operator:en": "MINISTOP",
+    "payment:american_express": "yes",
+    "payment:cash": "yes",
+    "payment:diners_club": "yes",
+    "payment:discover_card": "yes",
+    "payment:jcb": "yes",
+    "payment:maestro": "no",
+    "payment:mastercard": "yes",
+    "payment:telephone_cards": "no",
+    "payment:unionpay": "yes",
+    "payment:visa": "yes",
+    "shop": "convenience",
+    "website": "https://www.ministop.co.kr/"
+  }
+},
+{
+  "type": "node",
+  "id": 8726985918,
+  "lat": 35.1436622,
+  "lon": 126.9323460,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 8745101674,
+  "lat": 35.1415226,
+  "lon": 126.9347100,
+  "tags": {
+    "crossing": "marked",
+    "crossing:island": "no",
+    "crossing:markings": "yes",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 8745101676,
+  "lat": 35.1427130,
+  "lon": 126.9344317,
+  "tags": {
+    "crossing": "marked",
+    "crossing:island": "no",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 8747851763,
+  "lat": 35.1407947,
+  "lon": 126.9305014,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 9462145425,
+  "lat": 35.1321489,
+  "lon": 126.9362640,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 9619947196,
+  "lat": 35.1356146,
+  "lon": 126.9426806,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 9986054924,
+  "lat": 35.1530450,
+  "lon": 126.9421400,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10078685363,
+  "lat": 35.1257013,
+  "lon": 126.9303980,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10078685368,
+  "lat": 35.1254996,
+  "lon": 126.9314338,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10145571732,
+  "lat": 35.1570722,
+  "lon": 126.9400072,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10167820923,
+  "lat": 35.1322462,
+  "lon": 126.9441897,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10167820924,
+  "lat": 35.1321830,
+  "lon": 126.9428954,
+  "tags": {
+    "crossing": "marked",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10167820925,
+  "lat": 35.1322392,
+  "lon": 126.9415706,
+  "tags": {
+    "crossing": "marked",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10167820926,
+  "lat": 35.1321422,
+  "lon": 126.9410148,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10167820927,
+  "lat": 35.1322647,
+  "lon": 126.9428029,
+  "tags": {
+    "crossing": "marked",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10167820928,
+  "lat": 35.1323217,
+  "lon": 126.9440654,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10167820929,
+  "lat": 35.1323733,
+  "lon": 126.9458549,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10167820930,
+  "lat": 35.1322652,
+  "lon": 126.9456700,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10167820931,
+  "lat": 35.1323092,
+  "lon": 126.9461166,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10167820932,
+  "lat": 35.1321276,
+  "lon": 126.9458461,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10167820933,
+  "lat": 35.1320450,
+  "lon": 126.9424125,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10803968315,
+  "lat": 35.1397066,
+  "lon": 126.9231208,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing",
+    "tactile_paving": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 10803968316,
+  "lat": 35.1397968,
+  "lon": 126.9229042,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing",
+    "tactile_paving": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 10803968317,
+  "lat": 35.1396653,
+  "lon": 126.9227505,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing",
+    "tactile_paving": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 10803968318,
+  "lat": 35.1396079,
+  "lon": 126.9226609,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing",
+    "tactile_paving": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 10803968319,
+  "lat": 35.1395083,
+  "lon": 126.9231713,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing",
+    "tactile_paving": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 10803968327,
+  "lat": 35.1412617,
+  "lon": 126.9214247,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804340796,
+  "lat": 35.1353705,
+  "lon": 126.9267240,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804340797,
+  "lat": 35.1353247,
+  "lon": 126.9266089,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804340801,
+  "lat": 35.1331570,
+  "lon": 126.9280191,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804340803,
+  "lat": 35.1331596,
+  "lon": 126.9283924,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804342812,
+  "lat": 35.1293716,
+  "lon": 126.9296936,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804342813,
+  "lat": 35.1285383,
+  "lon": 126.9302483,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804342821,
+  "lat": 35.1288733,
+  "lon": 126.9304292,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804342823,
+  "lat": 35.1288278,
+  "lon": 126.9304372,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804342826,
+  "lat": 35.1341002,
+  "lon": 126.9277946,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804342827,
+  "lat": 35.1340691,
+  "lon": 126.9276955,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804342828,
+  "lat": 35.1340279,
+  "lon": 126.9275995,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10804342829,
+  "lat": 35.1443581,
+  "lon": 126.9213186,
+  "tags": {
+    "crossing": "traffic_signals;unmarked",
+    "crossing:markings": "no",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10830893542,
+  "lat": 35.1494653,
+  "lon": 126.9153804,
+  "tags": {
+    "amenity": "toilets",
+    "source": "survey 2023-04-22"
+  }
+},
+{
+  "type": "node",
+  "id": 10833332785,
+  "lat": 35.1403038,
+  "lon": 126.9160845,
+  "tags": {
+    "access": "yes",
+    "amenity": "toilets"
+  }
+},
+{
+  "type": "node",
+  "id": 10901961346,
+  "lat": 35.1425297,
+  "lon": 126.9209119,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10901961347,
+  "lat": 35.1426063,
+  "lon": 126.9210981,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10901961367,
+  "lat": 35.1425108,
+  "lon": 126.9211514,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10927137248,
+  "lat": 35.1490932,
+  "lon": 126.9369458,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 10927137249,
+  "lat": 35.1492655,
+  "lon": 126.9367557,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing",
+    "tactile_paving": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 10959175222,
+  "lat": 35.1405788,
+  "lon": 126.9217703,
+  "tags": {
+    "addr:housenumber": "19",
+    "addr:postcode": "61489",
+    "addr:street": "제봉로",
+    "branch": "남광주시장점",
+    "brand": "세븐일레븐",
+    "brand:en": "7-Eleven",
+    "brand:ko": "세븐일레븐",
+    "brand:wikidata": "Q259340",
+    "name": "세븐일레븐",
+    "name:en": "7-Eleven",
+    "name:ko": "세븐일레븐",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994509,
+  "lat": 35.1318900,
+  "lon": 126.9457518,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994510,
+  "lat": 35.1318283,
+  "lon": 126.9458488,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994511,
+  "lat": 35.1310062,
+  "lon": 126.9447295,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994512,
+  "lat": 35.1311057,
+  "lon": 126.9446001,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994513,
+  "lat": 35.1310010,
+  "lon": 126.9444921,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994514,
+  "lat": 35.1309850,
+  "lon": 126.9439809,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994515,
+  "lat": 35.1310846,
+  "lon": 126.9440977,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994516,
+  "lat": 35.1309922,
+  "lon": 126.9442239,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994517,
+  "lat": 35.1313699,
+  "lon": 126.9435995,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994518,
+  "lat": 35.1315717,
+  "lon": 126.9435958,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994519,
+  "lat": 35.1314550,
+  "lon": 126.9434759,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10977994520,
+  "lat": 35.1318692,
+  "lon": 126.9425901,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980105488,
+  "lat": 35.1329032,
+  "lon": 126.9478118,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980105499,
+  "lat": 35.1328642,
+  "lon": 126.9475480,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980110120,
+  "lat": 35.1321654,
+  "lon": 126.9441937,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980110126,
+  "lat": 35.1322864,
+  "lon": 126.9392392,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980110127,
+  "lat": 35.1322900,
+  "lon": 126.9395482,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980110128,
+  "lat": 35.1321568,
+  "lon": 126.9391896,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980110129,
+  "lat": 35.1321620,
+  "lon": 126.9396528,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980110130,
+  "lat": 35.1319139,
+  "lon": 126.9360645,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980110131,
+  "lat": 35.1320427,
+  "lon": 126.9359639,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980110132,
+  "lat": 35.1320421,
+  "lon": 126.9378690,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980110133,
+  "lat": 35.1321283,
+  "lon": 126.9379470,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 10980110134,
+  "lat": 35.1320696,
+  "lon": 126.9366208,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 11010623717,
+  "lat": 35.1420677,
+  "lon": 126.9215487,
+  "tags": {
+    "addr:housenumber": "42",
+    "addr:postcode": "61469",
+    "addr:street": "제봉로",
+    "branch": "광주전남대병원A점",
+    "brand": "세븐일레븐",
+    "brand:en": "7-Eleven",
+    "brand:ko": "세븐일레븐",
+    "brand:wikidata": "Q259340",
+    "level": "1",
+    "name": "세븐일레븐",
+    "name:en": "7-Eleven",
+    "name:ko": "세븐일레븐",
+    "phone": "+82 62 220 5065",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 11010623720,
+  "lat": 35.1407714,
+  "lon": 126.9225545,
+  "tags": {
+    "addr:housenumber": "42",
+    "addr:postcode": "61469",
+    "addr:street": "제봉로",
+    "branch": "광주전남대병원B점",
+    "brand": "세븐일레븐",
+    "brand:en": "7-Eleven",
+    "brand:ko": "세븐일레븐",
+    "brand:wikidata": "Q259340",
+    "level": "-1",
+    "name": "세븐일레븐",
+    "name:en": "7-Eleven",
+    "name:ko": "세븐일레븐",
+    "phone": "+82 62 220 5048",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 11012101334,
+  "lat": 35.1417423,
+  "lon": 126.9181982,
+  "tags": {
+    "addr:housenumber": "115-1",
+    "addr:postcode": "61488",
+    "addr:street": "백서로",
+    "branch": "금동중앙점",
+    "brand": "GS25",
+    "brand:wikidata": "Q624041",
+    "name": "GS25",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 11063397480,
+  "lat": 35.1481799,
+  "lon": 126.9403877,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 11063397481,
+  "lat": 35.1480933,
+  "lon": 126.9403367,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 11092631616,
+  "lat": 35.1564674,
+  "lon": 126.9377815,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 11092945305,
+  "lat": 35.1573805,
+  "lon": 126.9357419,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 11092945310,
+  "lat": 35.1566032,
+  "lon": 126.9360782,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 11092945333,
+  "lat": 35.1560837,
+  "lon": 126.9361855,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 11092945334,
+  "lat": 35.1567211,
+  "lon": 126.9359349,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 11092945341,
+  "lat": 35.1579641,
+  "lon": 126.9353391,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 11118354446,
+  "lat": 35.1436807,
+  "lon": 126.9269164,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing",
+    "tactile_paving": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 11121991569,
+  "lat": 35.1442568,
+  "lon": 126.9320238,
+  "tags": {
+    "crossing": "uncontrolled",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 11230541421,
+  "lat": 35.1393171,
+  "lon": 126.9163488,
+  "tags": {
+    "addr:housenumber": "76",
+    "addr:street": "백서로",
+    "branch": "광주양림점",
+    "brand": "세븐일레븐",
+    "brand:en": "7-Eleven",
+    "brand:ko": "세븐일레븐",
+    "brand:wikidata": "Q259340",
+    "name": "세븐일레븐",
+    "name:en": "7-Eleven",
+    "name:ko": "세븐일레븐",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 11446558722,
+  "lat": 35.1480454,
+  "lon": 126.9176782,
+  "tags": {
+    "branch": "광주충장로점",
+    "brand": "CU",
+    "brand:wikidata": "Q12580836",
+    "name": "CU",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 11518027795,
+  "lat": 35.1464259,
+  "lon": 126.9159406,
+  "tags": {
+    "addr:housenumber": "30-1",
+    "addr:postcode": "61484",
+    "addr:street": "중앙로160번길",
+    "branch": "광주황금점",
+    "brand": "세븐일레븐",
+    "brand:en": "7-Eleven",
+    "brand:ko": "세븐일레븐",
+    "brand:wikidata": "Q259340",
+    "name": "세븐일레븐",
+    "name:en": "7-Eleven",
+    "name:ko": "세븐일레븐",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 11518296318,
+  "lat": 35.1476308,
+  "lon": 126.9151803,
+  "tags": {
+    "branch": "광주황금점",
+    "brand": "CU",
+    "brand:wikidata": "Q12580836",
+    "name": "CU",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 11518823605,
+  "lat": 35.1461230,
+  "lon": 126.9168811,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 11971418984,
+  "lat": 35.1472072,
+  "lon": 126.9318777,
+  "tags": {
+    "branch": "조선대학교점",
+    "brand": "GS25",
+    "brand:wikidata": "Q624041",
+    "brand:wikipedia": "ko:GS25",
+    "int_name": "GS25",
+    "level": "1",
+    "name": "GS25",
+    "name:ko": "GS25",
+    "operator": "GS리테일",
+    "operator:en": "GS Retail",
+    "payment:american_express": "yes",
+    "payment:cash": "yes",
+    "payment:diners_club": "yes",
+    "payment:discover_card": "yes",
+    "payment:jcb": "yes",
+    "payment:maestro": "no",
+    "payment:mastercard": "yes",
+    "payment:telephone_cards": "no",
+    "payment:unionpay": "yes",
+    "payment:visa": "yes",
+    "shop": "convenience",
+    "website": "http://gs25.gsretail.com"
+  }
+},
+{
+  "type": "node",
+  "id": 11971418985,
+  "lat": 35.1472500,
+  "lon": 126.9318878,
+  "tags": {
+    "name": "거성마트",
+    "name:ko": "거성마트",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 12208429454,
+  "lat": 35.1540594,
+  "lon": 126.9150058,
+  "tags": {
+    "button_operated": "no",
+    "crossing": "traffic_signals",
+    "crossing:island": "no",
+    "highway": "crossing",
+    "tactile_paving": "yes",
+    "traffic_signals:sound": "no",
+    "traffic_signals:vibration": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 12208429455,
+  "lat": 35.1540617,
+  "lon": 126.9151614,
+  "tags": {
+    "button_operated": "no",
+    "crossing": "traffic_signals",
+    "crossing:island": "no",
+    "highway": "crossing",
+    "tactile_paving": "yes",
+    "traffic_signals:sound": "no",
+    "traffic_signals:vibration": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 12208429456,
+  "lat": 35.1539673,
+  "lon": 126.9151491,
+  "tags": {
+    "button_operated": "no",
+    "crossing": "traffic_signals",
+    "crossing:island": "no",
+    "highway": "crossing",
+    "tactile_paving": "yes",
+    "traffic_signals:sound": "no",
+    "traffic_signals:vibration": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 12208429457,
+  "lat": 35.1539407,
+  "lon": 126.9150251,
+  "tags": {
+    "button_operated": "no",
+    "crossing": "traffic_signals",
+    "crossing:island": "no",
+    "highway": "crossing",
+    "tactile_paving": "yes",
+    "traffic_signals:sound": "no",
+    "traffic_signals:vibration": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 12208429458,
+  "lat": 35.1524451,
+  "lon": 126.9158593,
+  "tags": {
+    "check_date": "2024-09-29",
+    "name": "7-eleven",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 12393060235,
+  "lat": 35.1350451,
+  "lon": 126.9206666,
+  "tags": {
+    "brand": "CU",
+    "brand:wikidata": "Q12580836",
+    "name": "CU",
+    "operator": "광주방림로점",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 12393071770,
+  "lat": 35.1278405,
+  "lon": 126.9183955,
+  "tags": {
+    "brand": "CU",
+    "brand:wikidata": "Q12580836",
+    "name": "CU",
+    "operator": "봉선라인점",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 12470697712,
+  "lat": 35.1446812,
+  "lon": 126.9195327,
+  "tags": {
+    "crossing": "traffic_signals",
+    "crossing:island": "no",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 12851177283,
+  "lat": 35.1366380,
+  "lon": 126.9239317,
+  "tags": {
+    "branch": "학동아이파크점",
+    "brand": "CU",
+    "brand:wikidata": "Q12580836",
+    "name": "CU",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 12851177302,
+  "lat": 35.1482374,
+  "lon": 126.9243631,
+  "tags": {
+    "branch": "광주장동점",
+    "brand": "GS25",
+    "brand:wikidata": "Q624041",
+    "name": "GS25",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 12851177304,
+  "lat": 35.1503329,
+  "lon": 126.9233209,
+  "tags": {
+    "branch": "광주동명로점",
+    "brand": "세븐일레븐",
+    "brand:en": "7-Eleven",
+    "brand:ko": "세븐일레븐",
+    "brand:wikidata": "Q259340",
+    "name": "세븐일레븐",
+    "name:en": "7-Eleven",
+    "name:ko": "세븐일레븐",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 12851177314,
+  "lat": 35.1522867,
+  "lon": 126.9157164,
+  "tags": {
+    "branch": "광주뉴대인센터점",
+    "brand": "세븐일레븐",
+    "brand:en": "7-Eleven",
+    "brand:ko": "세븐일레븐",
+    "brand:wikidata": "Q259340",
+    "name": "세븐일레븐",
+    "name:en": "7-Eleven",
+    "name:ko": "세븐일레븐",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 13050545587,
+  "lat": 35.1467466,
+  "lon": 126.9184039,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13050545588,
+  "lat": 35.1467817,
+  "lon": 126.9186364,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052447275,
+  "lat": 35.1471420,
+  "lon": 126.9220185,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052447283,
+  "lat": 35.1482955,
+  "lon": 126.9223030,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052447300,
+  "lat": 35.1485541,
+  "lon": 126.9227198,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052475507,
+  "lat": 35.1482522,
+  "lon": 126.9240508,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052475508,
+  "lat": 35.1486896,
+  "lon": 126.9231704,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052475509,
+  "lat": 35.1484233,
+  "lon": 126.9225954,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052475510,
+  "lat": 35.1482609,
+  "lon": 126.9220424,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052475512,
+  "lat": 35.1481712,
+  "lon": 126.9218898,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052475513,
+  "lat": 35.1483931,
+  "lon": 126.9219241,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052475515,
+  "lat": 35.1493244,
+  "lon": 126.9221006,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052475516,
+  "lat": 35.1459758,
+  "lon": 126.9219094,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052475517,
+  "lat": 35.1482307,
+  "lon": 126.9219610,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13052475520,
+  "lat": 35.1488158,
+  "lon": 126.9232871,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485314,
+  "lat": 35.1455558,
+  "lon": 126.9216230,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485348,
+  "lat": 35.1453681,
+  "lon": 126.9207986,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485359,
+  "lat": 35.1495937,
+  "lon": 126.9222814,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485368,
+  "lat": 35.1457077,
+  "lon": 126.9189915,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485369,
+  "lat": 35.1452194,
+  "lon": 126.9206903,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485370,
+  "lat": 35.1456393,
+  "lon": 126.9221740,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485371,
+  "lat": 35.1458751,
+  "lon": 126.9222038,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485372,
+  "lat": 35.1461866,
+  "lon": 126.9225907,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485374,
+  "lat": 35.1455401,
+  "lon": 126.9218361,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485375,
+  "lat": 35.1472811,
+  "lon": 126.9218947,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485376,
+  "lat": 35.1457068,
+  "lon": 126.9216425,
+  "tags": {
+    "crossing": "traffic_signals",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485377,
+  "lat": 35.1469926,
+  "lon": 126.9233965,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485379,
+  "lat": 35.1476957,
+  "lon": 126.9187683,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485380,
+  "lat": 35.1482580,
+  "lon": 126.9180401,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485383,
+  "lat": 35.1491591,
+  "lon": 126.9166766,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485455,
+  "lat": 35.1458154,
+  "lon": 126.9164413,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485456,
+  "lat": 35.1458503,
+  "lon": 126.9166329,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485457,
+  "lat": 35.1459568,
+  "lon": 126.9165232,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485458,
+  "lat": 35.1461631,
+  "lon": 126.9173136,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485459,
+  "lat": 35.1463121,
+  "lon": 126.9174966,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485460,
+  "lat": 35.1464578,
+  "lon": 126.9175897,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13056485461,
+  "lat": 35.1464087,
+  "lon": 126.9178479,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089326498,
+  "lat": 35.1433576,
+  "lon": 126.9209699,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335710,
+  "lat": 35.1445864,
+  "lon": 126.9212839,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335711,
+  "lat": 35.1446826,
+  "lon": 126.9213284,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335718,
+  "lat": 35.1441242,
+  "lon": 126.9198102,
+  "tags": {
+    "crossing": "unmarked",
+    "crossing:markings": "no",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335750,
+  "lat": 35.1443246,
+  "lon": 126.9254040,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335752,
+  "lat": 35.1453748,
+  "lon": 126.9225736,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335753,
+  "lat": 35.1449709,
+  "lon": 126.9235204,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335754,
+  "lat": 35.1447020,
+  "lon": 126.9241505,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335755,
+  "lat": 35.1445361,
+  "lon": 126.9245393,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335757,
+  "lat": 35.1453314,
+  "lon": 126.9230912,
+  "tags": {
+    "crossing": "unmarked",
+    "crossing:markings": "no",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335758,
+  "lat": 35.1455182,
+  "lon": 126.9226622,
+  "tags": {
+    "crossing": "unmarked",
+    "crossing:markings": "no",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335759,
+  "lat": 35.1447527,
+  "lon": 126.9246821,
+  "tags": {
+    "crossing": "uncontrolled",
+    "crossing:markings": "yes",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13089335760,
+  "lat": 35.1451042,
+  "lon": 126.9236132,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13097622523,
+  "lat": 35.1539155,
+  "lon": 126.9257697,
+  "tags": {
+    "branch": "산수그린점",
+    "brand": "GS25",
+    "brand:wikidata": "Q624041",
+    "name": "GS25",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 13097622524,
+  "lat": 35.1537993,
+  "lon": 126.9243589,
+  "tags": {
+    "branch": "광주산수점",
+    "brand": "CU",
+    "brand:wikidata": "Q12580836",
+    "name": "CU",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 13105994937,
+  "lat": 35.1508783,
+  "lon": 126.9347064,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13192522699,
+  "lat": 35.1489788,
+  "lon": 126.9250029,
+  "tags": {
+    "brand": "CU",
+    "brand:wikidata": "Q12580836",
+    "name": "CU",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 13621892246,
+  "lat": 35.1399248,
+  "lon": 126.9312231,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13621892251,
+  "lat": 35.1396219,
+  "lon": 126.9312655,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622042705,
+  "lat": 35.1425016,
+  "lon": 126.9331829,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622042733,
+  "lat": 35.1434738,
+  "lon": 126.9321762,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622042745,
+  "lat": 35.1423188,
+  "lon": 126.9317229,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622042753,
+  "lat": 35.1434868,
+  "lon": 126.9313713,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622042760,
+  "lat": 35.1434687,
+  "lon": 126.9303782,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622042763,
+  "lat": 35.1433833,
+  "lon": 126.9296586,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622042866,
+  "lat": 35.1411548,
+  "lon": 126.9292120,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622042991,
+  "lat": 35.1412705,
+  "lon": 126.9319407,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622042993,
+  "lat": 35.1415574,
+  "lon": 126.9318248,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622090994,
+  "lat": 35.1422806,
+  "lon": 126.9272383,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622090995,
+  "lat": 35.1419887,
+  "lon": 126.9269052,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622090996,
+  "lat": 35.1422211,
+  "lon": 126.9269720,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622090997,
+  "lat": 35.1422123,
+  "lon": 126.9271044,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622090998,
+  "lat": 35.1421313,
+  "lon": 126.9271704,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622090999,
+  "lat": 35.1421516,
+  "lon": 126.9269088,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622091000,
+  "lat": 35.1420082,
+  "lon": 126.9270741,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622091914,
+  "lat": 35.1435589,
+  "lon": 126.9268653,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622091915,
+  "lat": 35.1434809,
+  "lon": 126.9267186,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622091937,
+  "lat": 35.1414172,
+  "lon": 126.9271454,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622091938,
+  "lat": 35.1414467,
+  "lon": 126.9269484,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622091944,
+  "lat": 35.1420683,
+  "lon": 126.9264403,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622091988,
+  "lat": 35.1422831,
+  "lon": 126.9268262,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622091998,
+  "lat": 35.1408705,
+  "lon": 126.9319813,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622108218,
+  "lat": 35.1405223,
+  "lon": 126.9288268,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13622108225,
+  "lat": 35.1413720,
+  "lon": 126.9282871,
+  "tags": {
+    "crossing:markings": "zebra",
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13727281361,
+  "lat": 35.1464983,
+  "lon": 126.9373817,
+  "tags": {
+    "highway": "crossing"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558529,
+  "lat": 35.1386810,
+  "lon": 126.9159940,
+  "tags": {
+    "check_date": "2026-05-11",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 남구청",
+    "operator:phone": "+82 62 607 4222",
+    "operator:short": "남구청",
+    "operator:wikidata": "Q50361",
+    "operator:wikipedia": "ko:남구 (광주광역시)",
+    "start_date": "2018-06",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558531,
+  "lat": 35.1311796,
+  "lon": 126.9195897,
+  "tags": {
+    "check_date": "2026-05-11",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 남구청",
+    "operator:phone": "+82 62 607 4222",
+    "operator:short": "남구청",
+    "operator:wikidata": "Q50361",
+    "operator:wikipedia": "ko:남구 (광주광역시)",
+    "start_date": "2021-10",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558540,
+  "lat": 35.1256281,
+  "lon": 126.9172430,
+  "tags": {
+    "check_date": "2026-05-11",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 남구청",
+    "operator:phone": "+82 62 607 4222",
+    "operator:short": "남구청",
+    "operator:wikidata": "Q50361",
+    "operator:wikipedia": "ko:남구 (광주광역시)",
+    "start_date": "2023-09",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558541,
+  "lat": 35.1333800,
+  "lon": 126.9234170,
+  "tags": {
+    "check_date": "2026-05-11",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 남구청",
+    "operator:phone": "+82 62 607 4222",
+    "operator:short": "남구청",
+    "operator:wikidata": "Q50361",
+    "operator:wikipedia": "ko:남구 (광주광역시)",
+    "start_date": "2024-02",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558542,
+  "lat": 35.1314220,
+  "lon": 126.9248190,
+  "tags": {
+    "check_date": "2026-05-11",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 남구청",
+    "operator:phone": "+82 62 607 4222",
+    "operator:short": "남구청",
+    "operator:wikidata": "Q50361",
+    "operator:wikipedia": "ko:남구 (광주광역시)",
+    "start_date": "2024-02",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558548,
+  "lat": 35.1334508,
+  "lon": 126.9210401,
+  "tags": {
+    "check_date": "2026-05-11",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 남구청",
+    "operator:phone": "+82 62 607 4222",
+    "operator:short": "남구청",
+    "operator:wikidata": "Q50361",
+    "operator:wikipedia": "ko:남구 (광주광역시)",
+    "start_date": "2023-09",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558549,
+  "lat": 35.1317920,
+  "lon": 126.9230190,
+  "tags": {
+    "check_date": "2026-05-11",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 남구청",
+    "operator:phone": "+82 62 607 4222",
+    "operator:short": "남구청",
+    "operator:wikidata": "Q50361",
+    "operator:wikipedia": "ko:남구 (광주광역시)",
+    "start_date": "2024-02",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558550,
+  "lat": 35.1271327,
+  "lon": 126.9180978,
+  "tags": {
+    "check_date": "2026-05-11",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 남구청",
+    "operator:phone": "+82 62 607 4222",
+    "operator:short": "남구청",
+    "operator:wikidata": "Q50361",
+    "operator:wikipedia": "ko:남구 (광주광역시)",
+    "start_date": "2019-06",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558555,
+  "lat": 35.1382332,
+  "lon": 126.9155644,
+  "tags": {
+    "check_date": "2026-05-11",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 남구청",
+    "operator:phone": "+82 62 607 4222",
+    "operator:short": "남구청",
+    "operator:wikidata": "Q50361",
+    "operator:wikipedia": "ko:남구 (광주광역시)",
+    "start_date": "2019-02",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558556,
+  "lat": 35.1403780,
+  "lon": 126.9155425,
+  "tags": {
+    "check_date": "2026-05-11",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 남구청",
+    "operator:phone": "+82 62 607 4222",
+    "operator:short": "남구청",
+    "operator:wikidata": "Q50361",
+    "operator:wikipedia": "ko:남구 (광주광역시)",
+    "start_date": "2019-02",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558558,
+  "lat": 35.1379670,
+  "lon": 126.9187841,
+  "tags": {
+    "check_date": "2026-05-11",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 남구청",
+    "operator:phone": "+82 62 607 4222",
+    "operator:short": "남구청",
+    "operator:wikidata": "Q50361",
+    "operator:wikipedia": "ko:남구 (광주광역시)",
+    "start_date": "2019-02",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558646,
+  "lat": 35.1478122,
+  "lon": 126.9315304,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2015-12",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558647,
+  "lat": 35.1444836,
+  "lon": 126.9185887,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2015-02",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558648,
+  "lat": 35.1574320,
+  "lon": 126.9246210,
+  "tags": {
+    "check_date": "2020-08-18",
+    "count": "2",
+    "man_made": "surveillance",
+    "operator": "계림2동행정복지센터",
+    "operator:phone": "+82 62 608 3594",
+    "operator:wikidata": "Q12583972",
+    "operator:wikipedia": "ko:계림동 (광주)",
+    "start_date": "2018-07",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558649,
+  "lat": 35.1344250,
+  "lon": 126.9241890,
+  "tags": {
+    "check_date": "2020-08-18",
+    "count": "4",
+    "man_made": "surveillance",
+    "operator": "학동행정복지센터",
+    "operator:phone": "+82 62 608 3774",
+    "operator:wikidata": "Q12622599",
+    "operator:wikipedia": "ko:학동 (광주)",
+    "start_date": "2016-01",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558652,
+  "lat": 35.1554511,
+  "lon": 126.9362477,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2017-09",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558653,
+  "lat": 35.1582867,
+  "lon": 126.9265564,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2015-12",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558654,
+  "lat": 35.1594746,
+  "lon": 126.9359022,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2015-12",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558655,
+  "lat": 35.1442457,
+  "lon": 126.9187426,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "서남동행정복지센터",
+    "operator:phone": "+82 62 608 3751",
+    "operator:wikidata": "Q12600847",
+    "operator:wikipedia": "ko:서남동 (광주)",
+    "start_date": "2015-02",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558656,
+  "lat": 35.1458216,
+  "lon": 126.9307552,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2014-04",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558657,
+  "lat": 35.1334922,
+  "lon": 126.9330478,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2017-09",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558658,
+  "lat": 35.1519248,
+  "lon": 126.9233926,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2018-04",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558660,
+  "lat": 35.1467164,
+  "lon": 126.9258688,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "서남동행정복지센터",
+    "operator:phone": "+82 62 608 3751",
+    "operator:wikidata": "Q12600847",
+    "operator:wikipedia": "ko:서남동 (광주)",
+    "start_date": "2020-08",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558661,
+  "lat": 35.1482764,
+  "lon": 126.9299586,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2015-12",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558662,
+  "lat": 35.1490063,
+  "lon": 126.9327191,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "6",
+    "man_made": "surveillance",
+    "operator": "지산1동행정복지센터",
+    "operator:phone": "+82 62 608 3684",
+    "operator:wikidata": "Q12617987",
+    "operator:wikipedia": "ko:지산동 (동구)",
+    "start_date": "2020-12",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558663,
+  "lat": 35.1293462,
+  "lon": 126.9335120,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2018-11",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558664,
+  "lat": 35.1474330,
+  "lon": 126.9187614,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2016-10",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558665,
+  "lat": 35.1572905,
+  "lon": 126.9307367,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "3",
+    "man_made": "surveillance",
+    "operator": "산수1동행정복지센터",
+    "operator:phone": "+82 62 608 3624",
+    "operator:wikidata": "Q12600024",
+    "operator:wikipedia": "ko:산수동 (동구)",
+    "start_date": "2020-10",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558666,
+  "lat": 35.1407241,
+  "lon": 126.9200058,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2018-11",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558667,
+  "lat": 35.1445588,
+  "lon": 126.9232766,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2016-10",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558668,
+  "lat": 35.1493800,
+  "lon": 126.9304975,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2017-09",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558669,
+  "lat": 35.1508752,
+  "lon": 126.9227439,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2016-10",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558670,
+  "lat": 35.1478111,
+  "lon": 126.9360210,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "2",
+    "man_made": "surveillance",
+    "operator": "지산2동행정복지센터",
+    "operator:phone": "+82 62 608 3713",
+    "operator:wikidata": "Q12617987",
+    "operator:wikipedia": "ko:지산동 (동구)",
+    "start_date": "2020-08",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558671,
+  "lat": 35.1497084,
+  "lon": 126.9310679,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2018-04",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558672,
+  "lat": 35.1531342,
+  "lon": 126.9150506,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2012-07",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558673,
+  "lat": 35.1521896,
+  "lon": 126.9323082,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2015-12",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558674,
+  "lat": 35.1598951,
+  "lon": 126.9270861,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2017-09",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558676,
+  "lat": 35.1450240,
+  "lon": 126.9294083,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2015-12",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558677,
+  "lat": 35.1324721,
+  "lon": 126.9335446,
+  "tags": {
+    "check_date": "2020-08-18",
+    "count": "3",
+    "man_made": "surveillance",
+    "operator": "학운동행정복지센터",
+    "operator:phone": "+82 62 608 3804",
+    "operator:wikidata": "Q16183079",
+    "operator:wikipedia": "ko:학운동",
+    "start_date": "2019-05",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558678,
+  "lat": 35.1563434,
+  "lon": 126.9265230,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2016-10",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558680,
+  "lat": 35.1534599,
+  "lon": 126.9344143,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2018-04",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558681,
+  "lat": 35.1332823,
+  "lon": 126.9317006,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2017-09",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558682,
+  "lat": 35.1511740,
+  "lon": 126.9251980,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "동명동행정복지센터",
+    "operator:phone": "+82 62 608 3535",
+    "operator:wikidata": "Q16181655",
+    "operator:wikipedia": "ko:동명동 (광주)",
+    "start_date": "2019-12",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558684,
+  "lat": 35.1554399,
+  "lon": 126.9230732,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2018-01",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558685,
+  "lat": 35.1324597,
+  "lon": 126.9305646,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2015-12",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558688,
+  "lat": 35.1495722,
+  "lon": 126.9324859,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2016-10",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558689,
+  "lat": 35.1546979,
+  "lon": 126.9187146,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "계림1동행정복지센터",
+    "operator:phone": "+82 62 608 3574",
+    "operator:wikidata": "Q12583972",
+    "operator:wikipedia": "ko:계림동 (광주)",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558690,
+  "lat": 35.1462052,
+  "lon": 126.9159313,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2016-10",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558691,
+  "lat": 35.1406306,
+  "lon": 126.9204887,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2019-06",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558693,
+  "lat": 35.1521383,
+  "lon": 126.9190464,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2017-09",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558694,
+  "lat": 35.1523675,
+  "lon": 126.9221762,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2015-12",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558695,
+  "lat": 35.1452361,
+  "lon": 126.9284336,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "서남동행정복지센터",
+    "operator:phone": "+82 62 608 3751",
+    "operator:wikidata": "Q12600847",
+    "operator:wikipedia": "ko:서남동 (광주)",
+    "start_date": "2020-08",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558697,
+  "lat": 35.1532198,
+  "lon": 126.9188390,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2018-11",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558699,
+  "lat": 35.1325304,
+  "lon": 126.9282253,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2015-12",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558700,
+  "lat": 35.1474897,
+  "lon": 126.9286862,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2018-04",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558701,
+  "lat": 35.1487596,
+  "lon": 126.9367007,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "지산2동행정복지센터",
+    "operator:phone": "+82 62 608 3713",
+    "operator:wikidata": "Q12617987",
+    "operator:wikipedia": "ko:지산동 (동구)",
+    "start_date": "2020-08",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13895558702,
+  "lat": 35.1386908,
+  "lon": 126.9202887,
+  "tags": {
+    "check_date": "2020-08-14",
+    "count": "1",
+    "man_made": "surveillance",
+    "operator": "광주광역시 동구청",
+    "operator:phone": "+82 62 608 2513",
+    "operator:short": "동구청",
+    "operator:wikidata": "Q50375",
+    "operator:wikipedia": "ko:동구 (광주광역시)",
+    "start_date": "2015-02",
+    "surveillance": "public",
+    "surveillance:type": "camera"
+  }
+},
+{
+  "type": "node",
+  "id": 13906325224,
+  "lat": 35.1577665,
+  "lon": 126.9227804,
+  "tags": {
+    "branch": "계림두산위브점",
+    "brand": "GS25",
+    "brand:wikidata": "Q624041",
+    "name": "GS25",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "way",
+  "id": 471131142,
+  "center": {
+    "lat": 35.1455498,
+    "lon": 126.9253713
+  },
+  "tags": {
+    "brand": "CU",
+    "brand:wikidata": "Q12580836",
+    "brand:wikipedia": "ko:CU (편의점)",
+    "landuse": "commercial",
+    "name": "CU",
+    "name:ko": "CU",
+    "operator": "BGF리테일",
+    "operator:en": "BGF Retail",
+    "payment:american_express": "yes",
+    "payment:cash": "yes",
+    "payment:coins": "yes",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "payment:diners_club": "yes",
+    "payment:discover_card": "yes",
+    "payment:jcb": "yes",
+    "payment:mastercard": "yes",
+    "payment:notes": "yes",
+    "payment:unionpay": "yes",
+    "payment:visa": "yes",
+    "shop": "convenience",
+    "smoking": "no",
+    "website": "https://cu.bgfretail.com/index.do"
+  }
+},
+{
+  "type": "way",
+  "id": 628522651,
+  "center": {
+    "lat": 35.1429734,
+    "lon": 126.9152251
+  },
+  "tags": {
+    "addr:housenumber": "410",
+    "addr:street": "천변좌로",
+    "amenity": "police",
+    "building": "yes",
+    "name": "광주남부경찰서 양림파출소",
+    "name:en": "Yangnim Police Branch Office",
+    "name:ko": "광주남부경찰서 양림파출소",
+    "phone": "+82 062-671-0112"
+  }
+},
+{
+  "type": "way",
+  "id": 1180007411,
+  "center": {
+    "lat": 35.1408629,
+    "lon": 126.9199217
+  },
+  "tags": {
+    "addr:housenumber": "13",
+    "addr:postcode": "61489",
+    "addr:street": "양림로119번길",
+    "amenity": "police",
+    "building": "yes",
+    "name": "학서파출소",
+    "name:en": "Hakseo Police Box",
+    "name:ko": "학서파출소",
+    "operator": "광주동부경찰서",
+    "phone": "+82 62 226 5688"
+  }
+}
+
+  ]
+}

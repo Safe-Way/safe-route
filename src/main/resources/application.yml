@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: safe-route
+  config:
+    # 프로젝트 폴더의 .env 파일을 설정으로 읽는다. 파일이 없어도 오류 없이 넘어간다.
+    import: optional:file:.env[.properties]
+  datasource:
+    # 값은 모두 .env에 있다 (지금은 로컬 MySQL, 나중에 학교 서버로 옮김)
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      data-source-properties:
+        # 여러 줄 INSERT를 한 번에 보내서 대량 적재를 빠르게
+        rewriteBatchedStatements: true
+
+# 인증키는 .env에만 넣고, 여기서는 이름으로만 가리킨다.
+api-keys:
+  data-go-kr: ${DATA_GO_KR_KEY:}
+  safemap: ${SAFEMAP_KEY:}
+  kakao-rest: ${KAKAO_REST_KEY:}
+  safetydata-police: ${SAFETYDATA_POLICE_KEY:}
+  safetydata-security-light: ${SAFETYDATA_SECURITYLIGHT_KEY:}
+  safetydata-streetlight: ${SAFETYDATA_STREETLIGHT_KEY:}

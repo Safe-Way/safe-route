@@ -1,0 +1,69 @@
+{
+ "범위": {
+  "north": 35.16,
+  "south": 35.125,
+  "east": 126.95,
+  "west": 126.915
+ },
+ "보행망": {
+  "노드": 3515,
+  "링크": 4721,
+  "총길이_km": 253.3,
+  "차도망_총길이_km": 209.7
+ },
+ "종류별_길이_km": {
+  "residential": 78.66,
+  "service": 74.38,
+  "tertiary": 21.7,
+  "footway": 18.93,
+  "path": 14.05,
+  "primary": 11.93,
+  "secondary": 11.09,
+  "trunk": 6.25,
+  "cycleway": 5.25,
+  "trunk_link": 2.81,
+  "pedestrian": 2.69,
+  "track": 1.74,
+  "unclassified": 1.41,
+  "steps": 0.8,
+  "tertiary_link": 0.76,
+  "primary_link": 0.48,
+  "living_street": 0.3,
+  "secondary_link": 0.03
+ },
+ "묶음별_비율_%": {
+  "보행 전용": 17.2,
+  "골목·생활도로": 61.1,
+  "큰길(차도)": 21.7,
+  "기타": 0.0
+ },
+ "태그_붙은_길이_비율_%": {
+  "lit": 0.3,
+  "sidewalk": 7.9,
+  "surface": 42.6,
+  "incline": 0.4,
+  "width": 0.0,
+  "wheelchair": 0.1,
+  "covered": 0.0,
+  "name": 62.7
+ },
+ "lit_값": {
+  "yes": 23
+ },
+ "큰길_중_인도정보_있는_비율_%": 18.9,
+ "계단_개수": 16,
+ "연결성": {
+  "덩어리_수": 23,
+  "가장_큰_덩어리_노드_비율_%": 98.2,
+  "막다른_노드_비율_%": 24.0
+ },
+ "OSM_점_데이터_개수": {
+  "가로등(highway=street_lamp)": 0,
+  "CCTV(man_made=surveillance)": 57,
+  "횡단보도(highway=crossing)": 222,
+  "편의점(shop=convenience)": 26,
+  "경찰(amenity=police)": 3,
+  "화장실(amenity=toilets)": 4,
+  "편의점_중_24시간_표시": 1
+ }
+}

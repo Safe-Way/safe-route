@@ -1,0 +1,459 @@
+package com.saferoute.ingest;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.HexFormat;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * data/raw/national 에 내려받은 시설 파일을 facility 표에 넣는다.
+ * 같은 종류를 다시 넣으면 먼저 지우고 새로 넣으므로 몇 번을 실행해도 결과가 같다.
+ *
+ * 실행: ./mvnw spring-boot:run -Dspring-boot.run.profiles=import
+ * 일부만: -Dspring-boot.run.arguments=--types=police,cctv
+ */
+@Component
+@Profile("import")
+public class FacilityImporter implements ApplicationRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(FacilityImporter.class);
+    private static final Path RAW = Path.of("data", "raw", "national");
+    private static final int PAGE_SIZE = 1000;
+    private static final int BATCH = 5000;
+
+    private static final String INSERT_SQL = """
+            INSERT IGNORE INTO facility
+              (type, subtype, source, source_id, name, address, sido_code, sgg_code,
+               lon, lat, unit_count, geom, attrs)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ST_SRID(POINT(?, ?), 0), ?)
+            """;
+
+    private final JdbcTemplate jdbc;
+    private final JsonMapper json = JsonMapper.builder().build();
+
+    public FacilityImporter(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) throws Exception {
+        Set<String> only = new HashSet<>();
+        if (args.containsOption("types")) {
+            for (String v : args.getOptionValues("types")) {
+                only.addAll(List.of(v.split(",")));
+            }
+        }
+        for (FacilityDataset ds : FacilityDataset.ALL) {
+            if (only.isEmpty() || only.contains(ds.type())) {
+                importApiDataset(ds);
+            }
+        }
+        if (only.isEmpty() || only.contains("cctv")) {
+            importCctvCsv();
+        }
+        for (RegionalCsv rc : REGIONAL) {
+            if (only.isEmpty() || only.contains(rc.type())) {
+                importRegionalCsv(rc);
+            }
+        }
+        log.info("적재 끝");
+    }
+
+    // ---------- API로 받은 JSON 페이지 ----------
+
+    private void importApiDataset(FacilityDataset ds) throws IOException {
+        Path dir = RAW.resolve(ds.folder());
+        Path totalFile = dir.resolve("_total.txt");
+        if (!Files.exists(totalFile)) {
+            log.info("{}: 아직 받은 파일이 없어 건너뜀", ds.title());
+            return;
+        }
+        int total = Integer.parseInt(Files.readString(totalFile).trim());
+        List<Path> pages;
+        try (Stream<Path> s = Files.list(dir)) {
+            pages = s.filter(p -> p.getFileName().toString().matches("p\\d{5}\\.json")).sorted().toList();
+        }
+        int needPages = (total + PAGE_SIZE - 1) / PAGE_SIZE;
+        boolean complete = pages.size() >= needPages;
+
+        deleteType(ds.type(), ds.source());
+        List<FacilityRow> batch = new ArrayList<>(BATCH);
+        int skipped = 0;
+        for (Path page : pages) {
+            for (JsonNode item : json.readTree(page.toFile())) {
+                FacilityRow row = toRow(ds, item);
+                if (row == null) {
+                    skipped++;
+                    continue;
+                }
+                batch.add(row);
+                if (batch.size() >= BATCH) {
+                    insert(batch);
+                    batch.clear();
+                }
+            }
+        }
+        insert(batch);
+        int loaded = saveSource(ds.type(), ds.source(), ds.title(), ds.api(), ds.license(), total, skipped, complete);
+        log.info("{}: {}건 적재, {}건 제외 (받은 쪽 {}/{}{})", ds.title(), loaded, skipped,
+                pages.size(), needPages, complete ? "" : ", 아직 다 받지 않음");
+    }
+
+    private FacilityRow toRow(FacilityDataset ds, JsonNode item) {
+        Double x = number(item, ds.xKey());
+        Double y = number(item, ds.yKey());
+        if (x == null || y == null) {
+            return null;
+        }
+        double[] ll = Mercator.toLonLat(x, y);
+        if (!Mercator.inKorea(ll[0], ll[1])) {
+            return null;
+        }
+        String name = first(item, ds.nameKeys());
+        String id = first(item, ds.idKeys());
+        if (id == null) {
+            // 원본에 번호가 없으면 이름과 좌표로 같은 값이 나오는 번호를 만든다
+            id = hash(name + "|" + x + "|" + y);
+        }
+        Set<String> used = new HashSet<>(List.of(ds.xKey(), ds.yKey()));
+        used.addAll(ds.idKeys());
+        used.addAll(ds.nameKeys());
+        used.addAll(ds.addrKeys());
+        used.addAll(ds.subtypeKeys());
+        if (ds.sidoKey() != null) {
+            used.add(ds.sidoKey());
+        }
+        if (ds.sggKey() != null) {
+            used.add(ds.sggKey());
+        }
+        Map<String, String> attrs = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonNode> e : item.properties()) {
+            String v = clean(e.getValue());
+            if (!used.contains(e.getKey()) && v != null && !e.getKey().equals("GEOM")) {
+                attrs.put(e.getKey(), v);
+            }
+        }
+        return new FacilityRow(ds.type(), cut(first(item, ds.subtypeKeys()), 50), ds.source(), cut(id, 64),
+                cut(name, 200), cut(first(item, ds.addrKeys()), 300),
+                code(item, ds.sidoKey(), 2), code(item, ds.sggKey(), 5),
+                ll[0], ll[1], 1, attrs.isEmpty() ? null : json.writeValueAsString(attrs));
+    }
+
+    // ---------- CCTV CSV (지방행정 인허가 데이터, CP949) ----------
+
+    private void importCctvCsv() throws IOException {
+        Path file = RAW.resolve("cctv_national.csv");
+        if (!Files.exists(file)) {
+            log.info("CCTV: 파일이 없어 건너뜀");
+            return;
+        }
+        deleteType("cctv", "localdata");
+        List<FacilityRow> batch = new ArrayList<>(BATCH);
+        int total = 0;
+        int skipped = 0;
+        try (BufferedReader r = Files.newBufferedReader(file, Charset.forName("MS949"))) {
+            List<String> header = parseCsvLine(r.readLine());
+            Map<String, Integer> col = new LinkedHashMap<>();
+            for (int i = 0; i < header.size(); i++) {
+                col.put(header.get(i).trim(), i);
+            }
+            String line;
+            while ((line = r.readLine()) != null) {
+                total++;
+                List<String> f = parseCsvLine(line);
+                FacilityRow row = cctvRow(f, col);
+                if (row == null) {
+                    skipped++;
+                    continue;
+                }
+                batch.add(row);
+                if (batch.size() >= BATCH) {
+                    insert(batch);
+                    batch.clear();
+                }
+            }
+        }
+        insert(batch);
+        int loaded = saveSource("cctv", "localdata", "행정안전부_CCTV정보 (지방행정 인허가 데이터)", "cctv_national.csv",
+                "이용허락범위 제한 없음", total, skipped, true);
+        log.info("CCTV: {}건 적재, {}건 제외", loaded, skipped);
+    }
+
+    private FacilityRow cctvRow(List<String> f, Map<String, Integer> col) {
+        Double lat = parseDouble(get(f, col, "WGS84위도"));
+        Double lon = parseDouble(get(f, col, "WGS84경도"));
+        String id = get(f, col, "관리번호");
+        if (lat == null || lon == null || id == null || !Mercator.inKorea(lon, lat)) {
+            return null;
+        }
+        String address = get(f, col, "소재지도로명주소");
+        if (address == null) {
+            address = get(f, col, "소재지지번주소");
+        }
+        Double cameras = parseDouble(get(f, col, "카메라대수"));
+        int count = cameras == null || cameras < 1 ? 1 : (int) Math.min(cameras, Short.MAX_VALUE);
+        Map<String, String> attrs = new LinkedHashMap<>();
+        for (String k : List.of("카메라화소수", "촬영방면정보", "보관일수", "설치연월", "관리기관전화번호", "데이터기준일자")) {
+            String v = get(f, col, k);
+            if (v != null) {
+                attrs.put(k, v);
+            }
+        }
+        return new FacilityRow("cctv", cut(get(f, col, "설치목적구분"), 50), "localdata", cut(id, 64),
+                cut(get(f, col, "관리기관명"), 200), cut(address, 300), null, null, lon, lat, count,
+                attrs.isEmpty() ? null : json.writeValueAsString(attrs));
+    }
+
+    // ---------- 지자체가 직접 낸 보충 파일 (시연 지역) ----------
+    // 전국 데이터에는 조선대 1km 안 CCTV가 25곳, 보안등이 5개뿐이다.
+    // 광주시·동구청 파일에는 각각 92곳, 742개가 있어 시연 지역은 이 파일로 보충한다.
+    // 전국 데이터와 같은 시설이 겹칠 수 있어서, 길 점수를 매길 때 10m 안의 같은 종류는 하나로 본다.
+
+    /** 위도·경도 칸이 있는 지자체 CSV 하나를 읽는 규칙 */
+    record RegionalCsv(String file, String charset, String type, String source, String title, String api,
+            String license, String nameCol, String subtypeCol, String countCol, List<String> attrCols) {
+    }
+
+    static final List<RegionalCsv> REGIONAL = List.of(
+            new RegionalCsv("gwangju_cctv.csv", "MS949", "cctv", "gwangju", "광주광역시_CCTV 설치 현황",
+                    "공공데이터포털 15084631", "이용허락범위 제한 없음", "관리기관명", null, "카메라대수",
+                    List.of("카메라화소", "촬영방면", "보관일수", "설치연도", "데이터기준일자")),
+            new RegionalCsv("donggu_security_light.csv", "UTF-8", "security_light", "gwangju_donggu",
+                    "광주광역시 동구_보안등정보 (표준데이터)", "공공데이터포털 전국보안등정보표준데이터 15017320",
+                    "확인 필요", "보안등위치명", "설치형태",
+                    "설치개수", List.of("설치연도", "관리기관명", "데이터기준일자")));
+
+    private void importRegionalCsv(RegionalCsv rc) throws IOException {
+        Path file = Path.of("data", "raw", "regional", rc.file());
+        if (!Files.exists(file)) {
+            log.info("{}: 파일이 없어 건너뜀", rc.title());
+            return;
+        }
+        deleteType(rc.type(), rc.source());
+        List<FacilityRow> batch = new ArrayList<>();
+        int total = 0;
+        int skipped = 0;
+        try (BufferedReader r = Files.newBufferedReader(file, Charset.forName(rc.charset()))) {
+            List<String> header = parseCsvLine(r.readLine().replace("\uFEFF", ""));
+            Map<String, Integer> col = new LinkedHashMap<>();
+            for (int i = 0; i < header.size(); i++) {
+                col.put(header.get(i).trim(), i);
+            }
+            String line;
+            while ((line = r.readLine()) != null) {
+                total++;
+                List<String> f = parseCsvLine(line);
+                Double lat = parseDouble(get(f, col, "위도"));
+                Double lon = parseDouble(get(f, col, "경도"));
+                if (lat == null || lon == null || !Mercator.inKorea(lon, lat)) {
+                    skipped++;
+                    continue;
+                }
+                String address = get(f, col, "소재지도로명주소");
+                if (address == null) {
+                    address = get(f, col, "소재지지번주소");
+                }
+                Double units = parseDouble(get(f, col, rc.countCol()));
+                int count = units == null || units < 1 ? 1 : (int) Math.min(units, Short.MAX_VALUE);
+                Map<String, String> attrs = new LinkedHashMap<>();
+                for (String k : rc.attrCols()) {
+                    String v = get(f, col, k);
+                    if (v != null) {
+                        attrs.put(k, v);
+                    }
+                }
+                // 원본에 번호가 없어서 줄 내용으로 번호를 만든다 (똑같은 줄이 두 번 있으면 하나만 들어감)
+                batch.add(new FacilityRow(rc.type(), cut(rc.subtypeCol() == null ? null : get(f, col, rc.subtypeCol()), 50),
+                        rc.source(), hash(line), cut(get(f, col, rc.nameCol()), 200), cut(address, 300), null, null,
+                        lon, lat, count, attrs.isEmpty() ? null : json.writeValueAsString(attrs)));
+            }
+        }
+        insert(batch);
+        int loaded = saveSource(rc.type(), rc.source(), rc.title(), rc.api() + " (" + rc.file() + ")", rc.license(),
+                total, skipped, true);
+        log.info("{}: {}건 적재, {}건 제외, {}건 중복", rc.title(), loaded, skipped, total - skipped - loaded);
+    }
+
+    /** 따옴표 안의 쉼표를 지키는 간단한 CSV 한 줄 읽기 */
+    static List<String> parseCsvLine(String line) {
+        List<String> out = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        boolean quoted = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (quoted) {
+                if (c == '"' && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    cur.append('"');
+                    i++;
+                } else if (c == '"') {
+                    quoted = false;
+                } else {
+                    cur.append(c);
+                }
+            } else if (c == '"') {
+                quoted = true;
+            } else if (c == ',') {
+                out.add(cur.toString());
+                cur.setLength(0);
+            } else {
+                cur.append(c);
+            }
+        }
+        out.add(cur.toString());
+        return out;
+    }
+
+    private static String get(List<String> f, Map<String, Integer> col, String name) {
+        Integer i = col.get(name);
+        if (i == null || i >= f.size()) {
+            return null;
+        }
+        String v = f.get(i).trim();
+        return v.isEmpty() ? null : v;
+    }
+
+    // ---------- DB ----------
+
+    private void deleteType(String type, String source) {
+        int n;
+        do {
+            // 한 번에 많이 지우면 MySQL이 무거워져서 나눠 지운다
+            n = jdbc.update("DELETE FROM facility WHERE type = ? AND source = ? LIMIT 50000", type, source);
+        } while (n > 0);
+    }
+
+    private int insert(List<FacilityRow> rows) {
+        if (rows.isEmpty()) {
+            return 0;
+        }
+        int[][] result = jdbc.batchUpdate(INSERT_SQL, rows, rows.size(), (ps, r) -> {
+            ps.setString(1, r.type());
+            ps.setString(2, r.subtype());
+            ps.setString(3, r.source());
+            ps.setString(4, r.sourceId());
+            ps.setString(5, r.name());
+            ps.setString(6, r.address());
+            ps.setString(7, r.sidoCode());
+            ps.setString(8, r.sggCode());
+            ps.setDouble(9, r.lon());
+            ps.setDouble(10, r.lat());
+            ps.setInt(11, r.unitCount());
+            ps.setDouble(12, r.lon());
+            ps.setDouble(13, r.lat());
+            ps.setString(14, r.attrsJson());
+        });
+        int n = 0;
+        for (int[] part : result) {
+            for (int v : part) {
+                // 묶어서 보내면 드라이버가 건수 대신 -2(성공, 건수 모름)를 줄 수 있다
+                n += v == -2 ? 1 : Math.max(v, 0);
+            }
+        }
+        return n;
+    }
+
+    /** 출처별 현황을 남기고, DB에 실제로 들어간 건수를 돌려준다 (중복으로 빠진 줄은 세지 않음) */
+    private int saveSource(String type, String source, String title, String api, String license,
+            int total, int skipped, boolean complete) {
+        Integer loaded = jdbc.queryForObject("SELECT COUNT(*) FROM facility WHERE type = ? AND source = ?",
+                Integer.class, type, source);
+        jdbc.update("""
+                INSERT INTO data_source (type, source, title, api, license, total_count, loaded_count,
+                                         skipped_count, complete, loaded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                ON DUPLICATE KEY UPDATE title = VALUES(title), api = VALUES(api), license = VALUES(license),
+                  total_count = VALUES(total_count), loaded_count = VALUES(loaded_count),
+                  skipped_count = VALUES(skipped_count), complete = VALUES(complete), loaded_at = NOW()
+                """, type, source, title, api, license, total, loaded, skipped, complete);
+        return loaded;
+    }
+
+    // ---------- 값 다듬기 ----------
+
+    private static String clean(JsonNode n) {
+        if (n == null || n.isNull()) {
+            return null;
+        }
+        String v = n.asString().trim();
+        return v.isEmpty() || v.equals("-") || v.equalsIgnoreCase("null") ? null : v;
+    }
+
+    private static String first(JsonNode item, List<String> keys) {
+        for (String k : keys) {
+            String v = clean(item.get(k));
+            if (v != null) {
+                return v;
+            }
+        }
+        return null;
+    }
+
+    private static Double number(JsonNode item, String key) {
+        return parseDouble(clean(item.get(key)));
+    }
+
+    private static Double parseDouble(String v) {
+        if (v == null) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(v);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** "11.0", "1.1320108E7" 같은 숫자 모양 코드를 "11", "11320108"로 */
+    private static String code(JsonNode item, String key, int length) {
+        if (key == null) {
+            return null;
+        }
+        String v = clean(item.get(key));
+        if (v == null) {
+            return null;
+        }
+        try {
+            v = new BigDecimal(v).stripTrailingZeros().toPlainString();
+        } catch (NumberFormatException ignored) {
+            // 숫자가 아니면 그대로
+        }
+        return v.length() >= length ? v.substring(0, length) : null;
+    }
+
+    private static String cut(String v, int max) {
+        return v == null || v.length() <= max ? v : v.substring(0, max);
+    }
+
+    private static String hash(String s) {
+        try {
+            byte[] d = MessageDigest.getInstance("SHA-1").digest(s.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(d, 0, 12);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+}

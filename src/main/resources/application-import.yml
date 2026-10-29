@@ -1,0 +1,5 @@
+# 데이터 적재 전용 실행 설정 (-Dspring-boot.run.profiles=import)
+# 웹 서버를 띄우지 않고 적재만 하고 끝낸다.
+spring:
+  main:
+    web-application-type: none
