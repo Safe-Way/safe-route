@@ -8,6 +8,7 @@
 
 - 대상: 전국 (시연 지역은 조선대학교 · 광주 동구)
 - 사용자 모드: 기본 · 여성 안심 · 아이 · 어르신
+- 요구사항: [docs/requirements.md](docs/requirements.md) (변경 이력: [docs/CHANGELOG.md](docs/CHANGELOG.md))
 
 ## 팀
 
@@ -146,6 +147,7 @@ src/main/resources/
   db/migration/            한 번만 돌리는 DB 변경 기록
 scripts/             데이터 내려받기 스크립트
 data/raw/            내려받은 원본 (git에 올리지 않음)
+docs/               요구사항 분석서와 변경 이력
 조선대_데이터확인/    시연 지역 데이터 확인 기록
 ```
 
