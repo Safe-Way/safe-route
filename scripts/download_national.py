@@ -34,7 +34,8 @@ DATASETS = [
     ("convenience_store", SAFEMAP + "IF_0039", "SAFEMAP_KEY", "safemap"),
     ("child_safety_house", SAFEMAP + "IF_0055", "SAFEMAP_KEY", "safemap"),
     ("heat_shelter", SAFEMAP + "IF_0001", "SAFEMAP_KEY", "safemap"),
-    ("cold_shelter", SAFEMAP + "IF_0136", "SAFEMAP_KEY", "safemap"),
+    # 한파쉼터: 생활안전지도(IF_0136)는 10,000건까지만 줘서 재난안전데이터로 바꿈
+    ("cold_shelter_safetydata", SAFETYDATA + "DSSP-IF-10804", "SAFETYDATA_COLDSHELTER_KEY", "safetydata"),
     ("public_toilet", SAFEMAP + "IF_0132", "SAFEMAP_KEY", "safemap"),
 ]
 
