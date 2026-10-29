@@ -8,7 +8,7 @@
 
 - 대상: 전국 (시연 지역은 조선대학교 · 광주 동구)
 - 사용자 모드: 어린이·청소년 · 청년·중년 · 노인 (모든 모드에서 '안심 강화'를 켤 수 있음)
-- 요구사항: [docs/requirements.md](docs/requirements.md) (변경 이력: [docs/CHANGELOG.md](docs/CHANGELOG.md))
+- 요구사항: [docs/requirements.md](docs/requirements.md) (탭 7개로 나뉜 목차, 변경 이력: [docs/CHANGELOG.md](docs/CHANGELOG.md))
 
 ## 주요 기능
 
@@ -21,7 +21,7 @@
 | 5 | 전국 안전 데이터 | 공공데이터 약 160만 건으로 길마다 점수, 데이터가 빈 곳은 "데이터 부족" 표시 |
 | 6 | 효과 증명 | 조선대 주변 30쌍에서 TMAP 경로와 비교 평가 |
 
-자세한 내용은 [요구사항 분석서](docs/requirements.md)에 있습니다.
+자세한 내용은 [요구사항 분석서](docs/requirements.md)에 있습니다. 처음이라면 [0. 한눈에 보기](docs/requirements/00-overview.md)부터 보세요.
 
 ## 팀
 
