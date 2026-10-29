@@ -44,26 +44,56 @@
 
 생활안전지도 데이터는 **공공누리 4유형**(출처표시 · 상업적 이용 금지 · 변경 금지)입니다.
 
+## DB 표
+
+시설은 종류마다 표 하나씩 있습니다. 모든 표에 공통 칸이 있고, 종류마다 필요한 칸이 붙습니다.
+
+| 표 | 내용 | 종류별 칸 |
+|---|---|---|
+| `streetlight` | 가로등 | |
+| `security_light` | 보안등 | `lamp_count`, `install_year`, `manager` |
+| `cctv` | CCTV | `camera_count`, `pixels`, `direction`, `retention_days`, `installed`, `manager_phone` |
+| `police` | 경찰서 · 지구대 · 파출소 등 | `phone` |
+| `emergency_bell` | 안전 비상벨 | `purpose`, `police_linked`, `manager`, `manager_phone`, `last_inspected` 등 |
+| `convenience_store` | 편의점 | |
+| `child_safety_house` | 아동안전지킴이집 | `phone` |
+| `heat_shelter` | 무더위쉼터 | `capacity`, `area_m2`, `night_open`, `weekend_open` |
+| `cold_shelter` | 한파쉼터 | `capacity` |
+| `public_toilet` | 공중화장실 | `phone`, `open_hours` |
+| `facility_all` (뷰) | 위 표 전체를 공통 칸만 모아 보기 | |
+| `data_source` | 출처별 적재 현황 (건수, 이용 조건, 받은 날) | |
+
+- **공통 칸:** `kind`(세부 종류), `source`, `source_id`, `name`, `address`, `sido_code`, `sgg_code`, `lon`, `lat`, `geom`, `attrs`
+- **인덱스:** 위치(`geom` 공간 인덱스), 출처, 세부 종류, 시군구 코드, 주소·이름 앞부분
+
+```sql
+-- 조선대 주변 지구대·파출소
+SELECT kind, name, phone, address FROM police
+WHERE MBRContains(ST_GeomFromText('POLYGON((126.92 35.13, 126.94 35.13, 126.94 35.15, 126.92 35.15, 126.92 35.13))'), geom)
+  AND kind IN ('지구대', '파출소');
+
+-- 조선대 500m 안 시설 수
+SELECT type, COUNT(*) FROM facility_all
+WHERE ST_Distance_Sphere(geom, POINT(126.9306, 35.1408)) < 500 GROUP BY type;
+```
+
 ## 실행 방법
 
 ### 1. 설정 파일 만들기
 
-프로젝트 폴더에 `.env` 파일을 만들고 아래 값을 채웁니다. **`.env`는 git에 올리지 않습니다.**
+`.env.example`을 복사해 `.env`를 만들고 빈 값을 채웁니다. 키와 DB 비밀번호는 팀 채팅으로 받습니다.
+**`.env`는 git에 올리지 않습니다.**
 
-```properties
-DB_URL=jdbc:mysql://localhost:3306/safe_route
-DB_USERNAME=safe_route
-DB_PASSWORD=
-
-DATA_GO_KR_KEY=
-SAFEMAP_KEY=
-KAKAO_REST_KEY=
-SAFETYDATA_POLICE_KEY=
-SAFETYDATA_SECURITYLIGHT_KEY=
-SAFETYDATA_STREETLIGHT_KEY=
+```bash
+cp .env.example .env
 ```
 
+- 기본은 **학교 DB**입니다. 학교 네트워크 안에서만 접속됩니다.
+- 학교 밖에서는 `.env`에서 학교 DB 세 줄을 주석 처리하고 로컬 MySQL 세 줄을 풀어서 씁니다.
+
 ### 2. DB 표 만들기
+
+학교 DB에는 이미 표와 데이터가 있습니다. 로컬 MySQL을 새로 쓸 때만 실행합니다.
 
 ```bash
 mysql -u safe_route -p safe_route < src/main/resources/db/schema.sql
@@ -106,11 +136,12 @@ CSV로만 받는 파일은 직접 내려받아 넣습니다.
 ```
 src/main/java/com/saferoute/
   SafeRouteApplication.java
-  ingest/            공공데이터를 facility 표로 옮기는 코드
+  ingest/            공공데이터를 종류별 시설 표로 옮기는 코드
 src/main/resources/
   application.yml          설정 (키는 .env에서 읽음)
   application-import.yml   데이터 적재용 프로필
-  db/schema.sql            DB 표
+  db/schema.sql            DB 표 (종류별 시설 표, 뷰, 적재 현황)
+  db/migration/            한 번만 돌리는 DB 변경 기록
 scripts/             데이터 내려받기 스크립트
 data/raw/            내려받은 원본 (git에 올리지 않음)
 조선대_데이터확인/    시연 지역 데이터 확인 기록
