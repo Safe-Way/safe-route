@@ -7,7 +7,8 @@
 조금 돌아가더라도 밝고 사람 눈이 닿는 길을 고릅니다.
 
 - 대상: 전국 (시연 지역은 조선대학교 · 광주 동구)
-- 사용자 모드: 기본 · 여성 안심 · 아이 · 어르신
+- 사용자 모드: 어린이·청소년 · 청년·중년 · 노인 (모든 모드에서 '안심 강화'를 켤 수 있음)
+- 요구사항: [docs/requirements.md](docs/requirements.md) (변경 이력: [docs/CHANGELOG.md](docs/CHANGELOG.md))
 
 ## 팀
 
@@ -147,6 +148,7 @@ src/main/resources/
   db/migration/            한 번만 돌리는 DB 변경 기록
 scripts/             데이터 내려받기 스크립트
 data/raw/            내려받은 원본 (git에 올리지 않음)
+docs/               요구사항 분석서와 변경 이력
 조선대_데이터확인/    시연 지역 데이터 확인 기록
 ```
 
