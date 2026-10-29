@@ -3,12 +3,12 @@ package com.saferoute.ingest;
 import java.util.List;
 
 /**
- * 내려받은 시설 데이터 하나를 facility 표로 옮기는 규칙.
+ * 내려받은 시설 데이터 하나를 시설 표로 옮기는 규칙.
  * 칸 이름 목록은 앞에서부터 값이 있는 첫 칸을 쓴다.
  *
  * @param folder     data/raw/national 아래 폴더 이름 (scripts/download_national.py와 같음)
- * @param type       facility.type 값
- * @param source     facility.source 값
+ * @param type       시설 표 이름 ({@link FacilityTable})
+ * @param source     출처 이름 (시설 표의 source 칸)
  * @param title      사람이 읽는 이름
  * @param api        API 주소
  * @param license    이용 조건

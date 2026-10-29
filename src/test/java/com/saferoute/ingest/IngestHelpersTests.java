@@ -1,6 +1,7 @@
 package com.saferoute.ingest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
 import java.util.List;
@@ -29,5 +30,36 @@ class IngestHelpersTests {
     void csvKeepsCommasInsideQuotes() {
         List<String> f = FacilityImporter.parseCsvLine("a,\"서울특별시 종로구, 1\",,\"따옴표 \"\"안\"\"\"");
         assertThat(f).containsExactly("a", "서울특별시 종로구, 1", "", "따옴표 \"안\"");
+    }
+
+    @Test
+    void everyDatasetHasItsTable() {
+        // 적재 규칙의 종류 이름이 모두 실제 표 이름이어야 한다 (오타가 있으면 여기서 걸림)
+        for (FacilityDataset ds : FacilityDataset.ALL) {
+            assertThat(FacilityTable.of(ds.type()).table()).isEqualTo(ds.type());
+        }
+        for (FacilityImporter.RegionalCsv rc : FacilityImporter.REGIONAL) {
+            assertThat(FacilityTable.of(rc.type()).table()).isEqualTo(rc.type());
+        }
+        assertThat(FacilityTable.of("cctv")).isEqualTo(FacilityTable.CCTV);
+    }
+
+    @Test
+    void unknownTypeIsRejected() {
+        // 표 이름을 SQL에 직접 넣으므로 목록에 없는 이름은 막아야 한다
+        assertThatThrownBy(() -> FacilityTable.of("facility; DROP TABLE cctv"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void insertSqlAddsCountColumnOnlyWhereItExists() {
+        assertThat(FacilityImporter.insertSql(FacilityTable.CCTV))
+                .startsWith("INSERT IGNORE INTO cctv ")
+                .contains(", camera_count)")
+                .endsWith(", ?, ?)");
+        assertThat(FacilityImporter.insertSql(FacilityTable.POLICE))
+                .startsWith("INSERT IGNORE INTO police ")
+                .doesNotContain("count")
+                .endsWith("0), ?)");
     }
 }
