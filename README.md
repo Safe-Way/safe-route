@@ -1,5 +1,7 @@
 # 세잎지도 (safe-route)
 
+[![CI](https://github.com/Safe-Way/safe-route/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/Safe-Way/safe-route/actions/workflows/ci.yml)
+
 밤길·혼자 걷는 길에서 **가장 짧은 길 대신 더 안전한 길**을 알려 주는 도보 길찾기 서비스입니다.
 가로등·보안등, CCTV, 비상벨, 편의점, 아동안전지킴이집 같은 공공데이터로 길마다 점수를 매기고,
 조금 돌아가더라도 밝고 사람 눈이 닿는 길을 고릅니다.
