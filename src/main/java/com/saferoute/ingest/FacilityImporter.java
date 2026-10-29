@@ -116,13 +116,13 @@ public class FacilityImporter implements ApplicationRunner {
                 pages.size(), needPages, complete ? "" : ", 아직 다 받지 않음");
     }
 
-    private FacilityRow toRow(FacilityDataset ds, JsonNode item) {
+    FacilityRow toRow(FacilityDataset ds, JsonNode item) {
         Double x = number(item, ds.xKey());
         Double y = number(item, ds.yKey());
         if (x == null || y == null) {
             return null;
         }
-        double[] ll = Mercator.toLonLat(x, y);
+        double[] ll = ds.lonLat() ? new double[] {x, y} : Mercator.toLonLat(x, y);
         if (!Mercator.inKorea(ll[0], ll[1])) {
             return null;
         }
@@ -150,7 +150,12 @@ public class FacilityImporter implements ApplicationRunner {
                 attrs.put(e.getKey(), v);
             }
         }
-        return new FacilityRow(ds.type(), cut(first(item, ds.subtypeKeys()), 50), ds.source(), cut(id, 64),
+        String kind = first(item, ds.subtypeKeys());
+        if (kind != null) {
+            // Map.of()는 null 키를 받지 않아서 값이 있을 때만 바꾼다
+            kind = ds.kindNames().getOrDefault(kind, kind);
+        }
+        return new FacilityRow(ds.type(), cut(kind, 50), ds.source(), cut(id, 64),
                 cut(name, 200), cut(first(item, ds.addrKeys()), 300),
                 code(item, ds.sidoKey(), 2), code(item, ds.sggKey(), 5),
                 ll[0], ll[1], 1, attrs.isEmpty() ? null : json.writeValueAsString(attrs));

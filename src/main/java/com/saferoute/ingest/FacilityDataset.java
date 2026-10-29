@@ -1,25 +1,28 @@
 package com.saferoute.ingest;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 내려받은 시설 데이터 하나를 시설 표로 옮기는 규칙.
  * 칸 이름 목록은 앞에서부터 값이 있는 첫 칸을 쓴다.
  *
- * @param folder     data/raw/national 아래 폴더 이름 (scripts/download_national.py와 같음)
- * @param type       시설 표 이름 ({@link FacilityTable})
- * @param source     출처 이름 (시설 표의 source 칸)
- * @param title      사람이 읽는 이름
- * @param api        API 주소
- * @param license    이용 조건
- * @param idKeys     원본 번호 칸. 모두 비면 이름+좌표로 번호를 만든다
- * @param nameKeys   이름 칸
- * @param addrKeys   주소 칸
+ * @param folder      data/raw/national 아래 폴더 이름 (scripts/download_national.py와 같음)
+ * @param type        시설 표 이름 ({@link FacilityTable})
+ * @param source      출처 이름 (시설 표의 source 칸)
+ * @param title       사람이 읽는 이름
+ * @param api         API 주소
+ * @param license     이용 조건
+ * @param idKeys      원본 번호 칸. 모두 비면 이름+좌표로 번호를 만든다
+ * @param nameKeys    이름 칸
+ * @param addrKeys    주소 칸
  * @param subtypeKeys 세부 종류 칸
- * @param sidoKey    시도 코드 칸 (없으면 null)
- * @param sggKey     시군구 코드 칸 (없으면 null)
- * @param xKey       메르카토르 x 칸
- * @param yKey       메르카토르 y 칸
+ * @param sidoKey     시도 코드 칸 (없으면 null). 값의 앞 2자리를 쓴다
+ * @param sggKey      시군구 코드 칸 (없으면 null). 값의 앞 5자리를 쓴다
+ * @param xKey        x 칸 (메르카토르 x, 또는 경도)
+ * @param yKey        y 칸 (메르카토르 y, 또는 위도)
+ * @param lonLat      true면 x·y가 이미 경도·위도, false면 메르카토르(EPSG:3857)
+ * @param kindNames   세부 종류가 코드로 올 때 이름으로 바꾸는 표 (없으면 빈 Map)
  */
 public record FacilityDataset(
         String folder,
@@ -35,7 +38,9 @@ public record FacilityDataset(
         String sidoKey,
         String sggKey,
         String xKey,
-        String yKey) {
+        String yKey,
+        boolean lonLat,
+        Map<String, String> kindNames) {
 
     private static final String SAFETYDATA = "https://www.safetydata.go.kr/V2/api/";
     private static final String SAFEMAP = "https://www.safemap.go.kr/openapi2/";
@@ -49,7 +54,7 @@ public record FacilityDataset(
                 List.of("POLSTN_NM", "FCLT_GVMNFC_NM", "NTNLPLCAGNC_NM"),
                 List.of("ROAD_NM_ADDR", "ADDR"),
                 List.of("FCLT_TYPE"),
-                "STDG_CTPV_CD", "STDG_SGG_CD", "XMAP_CRTS", "YMAP_CRTS");
+                "STDG_CTPV_CD", "STDG_SGG_CD", "XMAP_CRTS", "YMAP_CRTS", false, Map.of());
     }
 
     /** 생활안전지도 */
@@ -57,8 +62,21 @@ public record FacilityDataset(
             List<String> idKeys, List<String> nameKeys, List<String> addrKeys, List<String> subtypeKeys,
             String sidoKey, String sggKey) {
         return new FacilityDataset(folder, type, "safemap", title, SAFEMAP + apiId, KOGL_4,
-                idKeys, nameKeys, addrKeys, subtypeKeys, sidoKey, sggKey, "x", "y");
+                idKeys, nameKeys, addrKeys, subtypeKeys, sidoKey, sggKey, "x", "y", false, Map.of());
     }
+
+    /**
+     * 재난안전데이터 공유플랫폼 한파쉼터 (DSSP-IF-10804).
+     * 생활안전지도 한파쉼터(IF_0136)는 10,000건까지만 줘서 이것으로 바꿨다 (전국 54,378건).
+     * 쉼터 번호(REARE_FCLT_NO) 앞 5자리가 시군구 코드다 (예: 11110... = 서울 종로구).
+     * 시설 유형 코드는 생활안전지도 자료와 이름을 맞춰 보고 정했다.
+     */
+    static final FacilityDataset COLD_SHELTER = new FacilityDataset(
+            "cold_shelter_safetydata", "cold_shelter", "safetydata", "행정안전부_한파쉼터",
+            SAFETYDATA + "DSSP-IF-10804", "확인 필요",
+            List.of("REARE_FCLT_NO"), List.of("REARE_NM"), List.of("RONA_DADDR", "DADDR"), List.of("FCLT_TYPE"),
+            "REARE_FCLT_NO", "REARE_FCLT_NO", "LOT", "LAT", true,
+            Map.of("001", "공공시설", "003", "특정계층이용시설", "004", "생활밀착민간시설"));
 
     /** API로 받는 시설 데이터 전체 (CCTV는 CSV 파일이라 따로 읽는다) */
     public static final List<FacilityDataset> ALL = List.of(
@@ -77,9 +95,7 @@ public record FacilityDataset(
             safemap("heat_shelter", "heat_shelter", "생활안전지도_무더위쉼터", "IF_0001",
                     List.of("num"), List.of("cc_nm"), List.of("rn_adres", "adres"),
                     List.of("cc_type"), null, null),
-            safemap("cold_shelter", "cold_shelter", "생활안전지도_한파쉼터", "IF_0136",
-                    List.of(), List.of("reare_nm"), List.of("rona_daddr"),
-                    List.of("fclt_type"), null, null),
+            COLD_SHELTER,
             safemap("public_toilet", "public_toilet", "생활안전지도_공중화장실", "IF_0132",
                     List.of("num"), List.of("fclty_nm"), List.of("lctn_rona_addr", "lctn_lotno_addr"),
                     List.of("fclty_se"), null, null));

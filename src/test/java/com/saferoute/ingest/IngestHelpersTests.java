@@ -52,6 +52,28 @@ class IngestHelpersTests {
     }
 
     @Test
+    void coldShelterRowUsesLonLatAndKindNames() {
+        // 재난안전데이터 한파쉼터 원본 한 줄 (값 일부)
+        String item = """
+                {"REARE_NM": "청운효자동주민센터", "RONA_DADDR": "서울특별시 종로구 자하문로 92 (궁정동)",
+                 "UTZTN_PSBLTY_TNOP": 20, "WKDY_OPER_BGNG_HR": "0900", "WKDY_OPER_END_HR": "1800",
+                 "FCLT_TYPE": "001", "FCLTY_SCLAS": "001", "REARE_FCLT_NO": 11110515083865,
+                 "LOT": 126.970656, "LAT": 37.584095, "SNDY_OPER_BGNG_HR": null}
+                """;
+        FacilityImporter importer = new FacilityImporter(null);
+        FacilityRow row = importer.toRow(FacilityDataset.COLD_SHELTER,
+                tools.jackson.databind.json.JsonMapper.builder().build().readTree(item));
+
+        assertThat(row.lon()).isEqualTo(126.970656);
+        assertThat(row.lat()).isEqualTo(37.584095);
+        assertThat(row.kind()).isEqualTo("공공시설");
+        assertThat(row.sourceId()).isEqualTo("11110515083865");
+        assertThat(row.sidoCode()).isEqualTo("11");
+        assertThat(row.sggCode()).isEqualTo("11110");
+        assertThat(row.attrsJson()).contains("\"UTZTN_PSBLTY_TNOP\":\"20\"").doesNotContain("SNDY_OPER_BGNG_HR");
+    }
+
+    @Test
     void insertSqlAddsCountColumnOnlyWhereItExists() {
         assertThat(FacilityImporter.insertSql(FacilityTable.CCTV))
                 .startsWith("INSERT IGNORE INTO cctv ")

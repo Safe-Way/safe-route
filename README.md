@@ -41,8 +41,9 @@
 | 데이터 | 출처 | 건수 |
 |---|---|---|
 | 가로등 · 보안등 · 경찰 | 재난안전데이터 공유플랫폼 (행정안전부 공통POI) | 보안등 약 95만, 가로등 약 225만 |
+| 한파쉼터 | 재난안전데이터 공유플랫폼 (DSSP-IF-10804) | 약 5.4만 |
 | CCTV | 행정안전부 지방행정 인허가 데이터, 광주광역시 | 약 39만 |
-| 비상벨 · 편의점 · 지킴이집 · 무더위쉼터 · 한파쉼터 · 공중화장실 | 생활안전지도 | 약 27만 |
+| 비상벨 · 편의점 · 지킴이집 · 무더위쉼터 · 공중화장실 | 생활안전지도 | 약 26만 |
 
 생활안전지도 데이터는 **공공누리 4유형**(출처표시 · 상업적 이용 금지 · 변경 금지)입니다.
 
@@ -60,7 +61,7 @@
 | `convenience_store` | 편의점 | |
 | `child_safety_house` | 아동안전지킴이집 | `phone` |
 | `heat_shelter` | 무더위쉼터 | `capacity`, `area_m2`, `night_open`, `weekend_open` |
-| `cold_shelter` | 한파쉼터 | `capacity` |
+| `cold_shelter` | 한파쉼터 | `capacity`, `weekday_hours`, `saturday_hours`, `sunday_hours`, `holiday_hours`, `note` |
 | `public_toilet` | 공중화장실 | `phone`, `open_hours` |
 | `facility_all` (뷰) | 위 표 전체를 공통 칸만 모아 보기 | |
 | `data_source` | 출처별 적재 현황 (건수, 이용 조건, 받은 날) | |
