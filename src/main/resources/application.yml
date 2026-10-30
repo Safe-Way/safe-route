@@ -24,6 +24,7 @@ api-keys:
   safetydata-cold-shelter: ${SAFETYDATA_COLDSHELTER_KEY:}
   safetydata-streetlight: ${SAFETYDATA_STREETLIGHT_KEY:}
   odsay: ${ODSAY_API_KEY:}
+  tmap: ${TMAP_APP_KEY:}
 
 # 상황 판단 기준값 (C 파트). 숫자만 바꾸면 코드를 고치지 않아도 기준이 바뀐다.
 situation:

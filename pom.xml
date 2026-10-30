@@ -40,6 +40,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- 일몰·일출 계산 (밤 판단, FR-02). 인터넷 호출 없이 위치와 날짜로 계산 -->
+        <dependency>
+            <groupId>org.shredzone.commons</groupId>
+            <artifactId>commons-suncalc</artifactId>
+            <version>3.11</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
