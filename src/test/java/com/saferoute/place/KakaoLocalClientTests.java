@@ -21,10 +21,10 @@ class KakaoLocalClientTests {
 
     private static final String KAKAO_JSON = """
             { "documents": [
-              { "place_name": "조선대학교", "address_name": "광주 동구 서석동 375",
+              { "id": "8360227", "place_name": "조선대학교", "address_name": "광주 동구 서석동 375",
                 "road_address_name": "광주 동구 필문대로 309",
                 "x": "126.9336", "y": "35.1401", "distance": "12" },
-              { "place_name": "조선대학교병원", "address_name": "광주 동구 학동 588",
+              { "id": "10868735", "place_name": "조선대학교병원", "address_name": "광주 동구 학동 588",
                 "road_address_name": "", "x": "126.9265", "y": "35.1384", "distance": "" }
             ] }
             """;
@@ -45,9 +45,9 @@ class KakaoLocalClientTests {
         List<Place> places = client.search("조선대학교", 35.1401, 126.9336);
 
         assertThat(places).containsExactly(
-                new Place("조선대학교", "광주 동구 필문대로 309", 35.1401, 126.9336, 12),
+                new Place("8360227", "조선대학교", "광주 동구 필문대로 309", 35.1401, 126.9336, 12),
                 // 도로명 주소가 없으면 지번 주소, 거리가 비어 있으면 null
-                new Place("조선대학교병원", "광주 동구 학동 588", 35.1384, 126.9265, null));
+                new Place("10868735", "조선대학교병원", "광주 동구 학동 588", 35.1384, 126.9265, null));
         kakao.verify();
     }
 

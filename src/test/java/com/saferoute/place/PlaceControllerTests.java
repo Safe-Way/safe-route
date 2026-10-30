@@ -19,7 +19,7 @@ class PlaceControllerTests {
 
     @Test
     void returnsPlaces() {
-        Place chosun = new Place("조선대학교", "광주 동구 필문대로 309", 35.1401, 126.9336, 0);
+        Place chosun = new Place("8360227", "조선대학교", "광주 동구 필문대로 309", 35.1401, 126.9336, 0);
         when(kakao.search("조선대학교", 35.1401, 126.9336)).thenReturn(List.of(chosun));
 
         ResponseEntity<?> res = controller.places(" 조선대학교 ", 35.1401, 126.9336);

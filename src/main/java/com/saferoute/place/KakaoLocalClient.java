@@ -71,7 +71,7 @@ public class KakaoLocalClient {
     static Place toPlace(KakaoDocument d) {
         String address = isBlank(d.road_address_name()) ? d.address_name() : d.road_address_name();
         Integer distance = isBlank(d.distance()) ? null : Integer.valueOf(d.distance());
-        return new Place(d.place_name(), address, Double.parseDouble(d.y()), Double.parseDouble(d.x()), distance);
+        return new Place(d.id(), d.place_name(), address, Double.parseDouble(d.y()), Double.parseDouble(d.x()), distance);
     }
 
     private static boolean isBlank(String s) {
@@ -85,11 +85,11 @@ public class KakaoLocalClient {
         return f;
     }
 
-    /** 카카오 응답에서 쓰는 칸만. 이름은 카카오 JSON 그대로 (x 경도, y 위도, distance 는 m 문자열) */
+    /** 카카오 응답에서 쓰는 칸만. 이름은 카카오 JSON 그대로 (id 장소 id, x 경도, y 위도, distance 는 m 문자열) */
     record KakaoResponse(List<KakaoDocument> documents) {
     }
 
-    record KakaoDocument(String place_name, String address_name, String road_address_name,
+    record KakaoDocument(String id, String place_name, String address_name, String road_address_name,
                          String x, String y, String distance) {
     }
 }
