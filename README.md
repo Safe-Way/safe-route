@@ -8,7 +8,7 @@
 
 - 대상: 전국 (시연 지역은 조선대학교 · 광주 동구)
 - 사용자 모드: 어린이·청소년 · 청년·중년 · 노인 (모든 모드에서 '안심 강화'를 켤 수 있음)
-- 요구사항: [docs/requirements.md](docs/requirements.md) (탭 7개로 나뉜 목차, 변경 이력: [docs/CHANGELOG.md](docs/CHANGELOG.md))
+- 요구사항: 문서 전용 저장소 [safe-route-docs](https://github.com/Safe-Way/safe-route-docs)의 [requirements.md](https://github.com/Safe-Way/safe-route-docs/blob/develop/requirements.md) (탭 7개로 나뉜 목차, 변경 이력: [CHANGELOG.md](https://github.com/Safe-Way/safe-route-docs/blob/develop/CHANGELOG.md))
 
 ## 주요 기능
 
@@ -21,7 +21,7 @@
 | 5 | 전국 안전 데이터 | 공공데이터 약 160만 건으로 길마다 점수, 데이터가 빈 곳은 "데이터 부족" 표시 |
 | 6 | 효과 증명 | 조선대 주변 30쌍에서 TMAP 경로와 비교 평가 |
 
-자세한 내용은 [요구사항 분석서](docs/requirements.md)에 있습니다. 처음이라면 [0. 한눈에 보기](docs/requirements/00-overview.md)부터 보세요.
+자세한 내용은 [요구사항 분석서](https://github.com/Safe-Way/safe-route-docs/blob/develop/requirements.md)에 있습니다. 처음이라면 [0. 한눈에 보기](https://github.com/Safe-Way/safe-route-docs/blob/develop/requirements/00-overview.md)부터 보세요.
 
 ## 팀
 
@@ -161,7 +161,6 @@ src/main/resources/
   db/migration/            한 번만 돌리는 DB 변경 기록
 scripts/             데이터 내려받기 스크립트
 data/raw/            내려받은 원본 (git에 올리지 않음)
-docs/               요구사항 분석서와 변경 이력
 조선대_데이터확인/    시연 지역 데이터 확인 기록
 ```
 
