@@ -410,6 +410,22 @@ CREATE TABLE IF NOT EXISTS road_edge (
     SPATIAL INDEX sx_road_edge_geom (geom)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '도로망 길 구간 (OSM)';
 
+-- ---------------------------------------------------------------- 행정구역 경계 (SGIS)
+
+CREATE TABLE IF NOT EXISTS admin_area (
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    level      VARCHAR(10)  NOT NULL COMMENT 'sido, sigungu, dong',
+    code       VARCHAR(10)  NOT NULL COMMENT 'SGIS 행정구역 코드 (시도 2자리, 시군구 5자리, 행정동 8자리)',
+    name       VARCHAR(50)  NOT NULL,
+    full_name  VARCHAR(100) NULL COMMENT '예: 광주광역시 동구 충장동',
+    base_date  CHAR(8)      NOT NULL COMMENT '경계 기준일 (예: 20250630)',
+    geom       MULTIPOLYGON NOT NULL SRID 0 COMMENT '경도·위도 (WGS84로 바꾼 값)',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_admin_area (level, code),
+    KEY idx_admin_area_name (name),
+    SPATIAL INDEX sx_admin_area_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '행정구역 경계 (SGIS)';
+
 -- ---------------------------------------------------------------- 전체 보기
 
 -- 모든 시설을 한 번에 볼 때 쓰는 뷰. 종류별 표의 공통 칸만 이어 붙인다.
