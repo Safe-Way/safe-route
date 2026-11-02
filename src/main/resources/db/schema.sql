@@ -458,6 +458,20 @@ CREATE TABLE IF NOT EXISTS edge_stat (
     KEY idx_edge_stat_dong (dong_cd)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '길별 감점 원값';
 
+-- ---------------------------------------------------------------- 시군구별 시설 밀도 (데이터 부족 판정)
+
+CREATE TABLE IF NOT EXISTS region_density (
+    sgg_cd      VARCHAR(10) NOT NULL COMMENT 'SGIS 시군구 코드 (admin_area.code)',
+    kind        VARCHAR(10) NOT NULL COMMENT 'light, cctv, help, guard, rest (data_gap 비트 1, 2, 4, 8, 16)',
+    n           INT         NOT NULL COMMENT '시군구 경계 안 시설 수',
+    area_km2    DOUBLE      NOT NULL COMMENT '시군구 넓이(km², 위도 보정 근사)',
+    density     DOUBLE      NOT NULL COMMENT 'n ÷ area_km2',
+    ratio       DOUBLE      NULL COMMENT 'density ÷ 전국 시군구 중간값',
+    gap         TINYINT     NOT NULL COMMENT 'ratio가 0.1 아래면 1 (데이터 부족)',
+    computed_at DATETIME    NOT NULL,
+    PRIMARY KEY (sgg_cd, kind)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '시군구별 시설 밀도와 데이터 부족 판정';
+
 -- ---------------------------------------------------------------- 전체 보기
 
 -- 모든 시설을 한 번에 볼 때 쓰는 뷰. 종류별 표의 공통 칸만 이어 붙인다.

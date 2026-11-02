@@ -6,7 +6,8 @@
 - 표는 먼저 만든다: src/main/resources/db/migration/008_admin_area.sql
 - 원본 폴더 기본값: data/raw/boundary/ (SGIS에서 받은 "2. 경계" 폴더를 그대로 둔다)
 
-실행: python3 scripts/load_boundaries.py [--sql-only] [시도코드 ...] [--dir 경계 폴더]
+실행: python3 scripts/load_boundaries.py [--sql-only] [시도코드 ... | all] [--levels sido,sigungu,dong] [--dir 경계 폴더]
+예: 전국 시도·시군구만  python3 scripts/load_boundaries.py all --levels sido,sigungu
 DB 접속은 .env의 DB_URL·DB_USERNAME·DB_PASSWORD를 쓰고, mysql 명령으로 넣는다.
 """
 import glob
@@ -181,15 +182,24 @@ def main():
         i = args.index("--dir")
         base = args[i + 1]
         del args[i:i + 2]
-    sidos = [a for a in args if a.isdigit()] or ["24"]
+    levels = {"sido", "sigungu", "dong"}
+    if "--levels" in args:
+        i = args.index("--levels")
+        levels = set(args[i + 1].split(","))
+        del args[i:i + 2]
+    everything = "all" in args
+    sidos = [""] if everything else ([a for a in args if a.isdigit()] or ["24"])
 
     names = {}  # 코드 → 이름 (전체 이름 만들 때)
-    out_path = os.path.join(ROOT, "data", "raw", "boundary", "admin_area_" + "_".join(sidos) + ".sql")
+    tag = "all" if everything else "_".join(sidos)
+    out_path = os.path.join(ROOT, "data", "raw", "boundary", f"admin_area_{tag}_{'_'.join(sorted(levels))}.sql")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     counts = {}
     with open(out_path, "w", encoding="utf-8") as out:
         out.write("SET NAMES utf8mb4;\n")
         for level, prefix, code_col, name_col in LEVELS:
+            if level not in levels:
+                continue
             shp_path = glob.glob(os.path.join(base, "**", prefix + "_*.shp"), recursive=True)
             if not shp_path:
                 sys.exit(f"{prefix} SHP 파일이 {base} 아래에 없습니다.")
@@ -212,7 +222,7 @@ def main():
         for level, n in counts.items():
             out.write(f"""INSERT INTO data_source (type, source, title, api, license, total_count, loaded_count,
                     skipped_count, complete, loaded_at)
-VALUES ('admin_area_{level}', 'sgis', '통계청 SGIS 행정구역 경계 ({level}, 시도 {",".join(sidos)})',
+VALUES ('admin_area_{level}', 'sgis', '통계청 SGIS 행정구역 경계 ({level}, {"전국" if everything else "시도 " + ",".join(sidos)})',
         'SGIS 행정구역 통계 및 경계 (2025년 2분기)', '확인 필요', {n}, {n}, 0, 1, NOW())
 ON DUPLICATE KEY UPDATE title = VALUES(title), total_count = VALUES(total_count),
   loaded_count = VALUES(loaded_count), complete = 1, loaded_at = NOW();
