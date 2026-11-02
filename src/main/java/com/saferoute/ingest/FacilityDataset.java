@@ -49,11 +49,15 @@ public record FacilityDataset(
     private static final String KOGL_4 = "공공누리 4유형 (출처표시·상업적 이용 금지·변경 금지)";
     private static final String SAFETYDATA_LICENSE = "이용허락범위 제한 없음";
 
-    /** 재난안전데이터 공유플랫폼 (행정안전부 공통POI) */
+    /**
+     * 재난안전데이터 공유플랫폼 (행정안전부 공통POI).
+     * 이름은 시설 이름(FCLT_GVMNFC_NM, 예: 정릉3치안센터)을 먼저 쓴다. 관할 경찰서(POLSTN_NM, 예: 서울성북)를 먼저 쓰면
+     * 지구대·파출소가 모두 경찰서 이름으로 보인다 (2026-11-02 고침).
+     */
     private static FacilityDataset safetydata(String folder, String type, String title, String apiId) {
         return new FacilityDataset(folder, type, "safetydata", title, SAFETYDATA + apiId, SAFETYDATA_LICENSE,
                 List.of("SN"),
-                List.of("POLSTN_NM", "FCLT_GVMNFC_NM", "NTNLPLCAGNC_NM"),
+                List.of("FCLT_GVMNFC_NM", "POLSTN_NM", "NTNLPLCAGNC_NM"),
                 List.of("ROAD_NM_ADDR", "ADDR"),
                 List.of("FCLT_TYPE"),
                 "STDG_CTPV_CD", "STDG_SGG_CD", "XMAP_CRTS", "YMAP_CRTS", false, Map.of(), null);

@@ -24,7 +24,9 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from build_edge_stat import ROOT, query, run_file  # noqa: E402
+from build_edge_stat import CCTV_SKIP, ROOT, query, run_file  # noqa: E402
+
+CCTV_WHERE = f"AND purpose_group NOT IN {CCTV_SKIP}"  # 단속·관리용 CCTV는 세지 않음
 
 KINDS = {  # 종류: (비트, 표 목록)
     "light": (1, ["streetlight", "security_light"]),
@@ -90,8 +92,9 @@ def region_density():
     counts, lost = {}, {}
     tables = sorted({t for _, ts in KINDS.values() for t in ts})
     for t in tables:
-        rows = query(f"SELECT FLOOR(lon * {CELL}), FLOOR(lat * {CELL}), COUNT(*) FROM {t} "
-                     "WHERE lon IS NOT NULL GROUP BY 1, 2")
+        # 같은 시설이 출처 여러 곳·같은 줄 두 번으로 겹쳐 있어, 약 10m 칸(소수 넷째 자리)마다 하나로 센다
+        rows = query(f"SELECT FLOOR(lon * {CELL}), FLOOR(lat * {CELL}), COUNT(DISTINCT ROUND(lon, 4), ROUND(lat, 4)) "
+                     f"FROM {t} WHERE lon IS NOT NULL {CCTV_WHERE if t == 'cctv' else ''} GROUP BY 1, 2")
         for cx, cy, n in rows:
             c = which(int(cx), int(cy))
             if c is None:

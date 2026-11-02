@@ -3,7 +3,10 @@
 계산하는 값
 - light_n / light_cover_m : 길에서 30m 안 가로등·보안등 수, 길이 중 등 30m 안에 드는 길이
 - cctv_n / cctv_cover_m   : 길에서 50m 안 CCTV 위치 수, 길이 중 CCTV 50m 안에 드는 길이
+                            (교통·쓰레기 단속, 시설·재난 관리용은 빼고 셈. 목적 모름은 셈)
 - help_m / guard_m / rest_m : 길 가운데에서 가장 가까운 도움 지점·지킴이집·쉼 곳까지 거리 (2km 넘으면 NULL)
+- help_night_m            : 밤에도 열린 도움 지점(24시간 경찰·길가 비상벨·편의점)까지 거리 (밤 경로용)
+- school_zone_m           : 가장 가까운 어린이보호구역 대상 시설까지 거리 (300m 안이면 보호구역 안, 어린이 모드)
 - heat_m / cold_m        : 가장 가까운 무더위쉼터·한파쉼터까지 거리 (폭염·한파 가중치용, 2km 넘으면 NULL)
 - *_n_1km                 : 길 가운데 반경 1km 안 개수 (지역 밀도 기준 A5)
 - xing_*                  : 이 길에서 건너는 횡단보도의 신호별 수 (C4: 횡단 구간 footway=crossing, 없으면
@@ -14,7 +17,8 @@
 - sgg_cd / dong_cd        : 길 시작점이 있는 시군구·행정동 (admin_area)
 - data_gap                : 아직 판정하지 않음 (전국 시군구 경계를 넣은 뒤 구 단위로 판정, A4)
 
-같은 종류 시설이 10m 안에 겹치면 하나로 센다(보안등은 출처 세 곳이 겹침, CCTV는 두 곳).
+같은 종류 시설이 10m 안에 겹치면 하나로 센다(보안등은 출처 세 곳이 겹침, CCTV는 두 곳, 나머지도 같은 줄이 두 번 있음).
+쉼 곳은 무더위·한파쉼터가 같은 경로당인 경우가 많아 30m 안을 한 곳으로 센다.
 거리는 범위 가운데 위도 기준 평면 근사(수 km 안 오차 0.1% 아래)로 잰다.
 여러 번 실행해도 된다 (계산한 길은 지우고 새로 넣음).
 
@@ -31,6 +35,7 @@ OUT = os.path.join(ROOT, "data", "raw", "osm", "edge_stat.sql")
 LIGHT_R, CCTV_R, SAMPLE = 30.0, 50.0, 5.0
 NEAR_CAP, DENSITY_R, DEDUP = 2000.0, 1000.0, 10.0
 XING_STD_R, BRIDGE_R, SIDEWALK_R = 15.0, 40.0, 15.0
+CCTV_SKIP = "('교통', '쓰레기', '시설·재난')"  # 사람을 지켜보지 않는 단속·관리용 CCTV (cctv.purpose_group, 013)
 ROADS = {"trunk": 6, "trunk_link": 6, "primary": 5, "primary_link": 5, "secondary": 4, "secondary_link": 4,
          "tertiary": 3, "tertiary_link": 3, "unclassified": 2, "residential": 2, "living_street": 1, "service": 1}
 SIGNAL = {"traffic_signals": "signal", "uncontrolled": "nosignal", "marked": "nosignal", "unmarked": "nosignal",
@@ -209,11 +214,17 @@ def main():
 
     print("시설 읽는 중...")
     lights = dedup(pts("streetlight")) + dedup(pts("security_light"))
-    cctv = dedup(pts("cctv"))
-    help_pts = pts("police") + pts("convenience_store") + pts("child_safety_house") + pts("emergency_bell")
-    guard = pts("child_safety_house")
-    heat, cold = pts("heat_shelter"), pts("cold_shelter")
-    rest = heat + cold + pts("public_toilet")
+    cctv = dedup(pts("cctv", f"AND purpose_group NOT IN {CCTV_SKIP}"))  # 단속용(교통·쓰레기·시설·재난)은 빼고 셈
+    # 같은 종류 10m 안 중복은 하나로 (원본에 같은 시설이 두 번 적힌 줄이 있음). 쉼 곳은 같은 경로당이
+    # 무더위·한파쉼터 두 표에 있으므로 30m 안을 한 곳으로 센다
+    guard = dedup(pts("child_safety_house"))
+    help_pts = dedup(pts("police")) + dedup(pts("convenience_store")) + guard + dedup(pts("emergency_bell"))
+    heat, cold = dedup(pts("heat_shelter")), dedup(pts("cold_shelter"))
+    rest = dedup(heat + cold, 30.0) + dedup(pts("public_toilet"))
+    # 밤 도움 지점: 24시간 경찰(치안센터 빼고) + 길가·공원·주차장 비상벨 + 편의점 (016_edge_stat_night_school.sql)
+    help_night = (dedup(pts("police", "AND kind <> '치안센터'")) + dedup(pts("convenience_store"))
+                  + dedup(pts("emergency_bell", "AND kind IN ('공원', '가로변', '주차장')")))
+    school = dedup(pts("child_protection_zone"))
     std_x = [(plane.xy(float(r[0]), float(r[1])), num(r[2]), num(r[3])) for r in
              query(f"SELECT lon, lat, IFNULL(traffic_light,'NULL'), IFNULL(curb_lowered,'NULL') FROM crosswalk WHERE {box}")]
     bridges = [(plane.xy(float(r[0]), float(r[1])), int(r[2])) for r in
@@ -224,6 +235,7 @@ def main():
     g_light, g_cctv = Grid(lights, 50), Grid(cctv, 50)
     g_help, g_guard, g_rest = Grid(help_pts, 200), Grid(guard, 200), Grid(rest, 200)
     g_heat, g_cold = Grid(heat, 200), Grid(cold, 200)
+    g_night, g_school = Grid(help_night, 200), Grid(school, 200)
     g_std = Grid([(p[0][0], p[0][1], i) for i, p in enumerate(std_x)], 50)
 
     lines = {eid: [plane.xy(lon, lat) for lon, lat in ln] for eid, ln in lines_ll.items()}
@@ -273,6 +285,8 @@ def main():
         help_n, guard_n, rest_n = (count_within(g_help, mid, DENSITY_R), count_within(g_guard, mid, DENSITY_R),
                                    count_within(g_rest, mid, DENSITY_R))
         heat_m, cold_m = nearest(g_heat, mid, NEAR_CAP), nearest(g_cold, mid, NEAR_CAP)
+        night_m, night_n = nearest(g_night, mid, NEAR_CAP), count_within(g_night, mid, DENSITY_R)
+        school_m = nearest(g_school, mid, NEAR_CAP)
         heat_n, cold_n = count_within(g_heat, mid, DENSITY_R), count_within(g_cold, mid, DENSITY_R)
         # 횡단: 횡단 구간이면 그 길의 신호 태그와 횡단 점, 아니면 보행 길에 붙은 횡단 점.
         # 횡단 점에서 길이 둘로 잘리므로 그 점이 '도착 점'인 쪽 하나에만 센다 (한 번 건너는데 두 번 세지 않게)
@@ -315,7 +329,7 @@ def main():
             rc = best[1] if best else None
         out_rows.append((eid, light_n, light_cover, cctv_n, cctv_cover, help_m, guard_m, rest_m, heat_m, cold_m,
                          help_n, guard_n, rest_n, heat_n, cold_n, xs["signal"], xs["nosignal"], xs["unknown"],
-                         curb, fb, rc))
+                         curb, fb, rc, night_m, night_n, school_m))
         if (i + 1) % 2000 == 0:
             print(f"  {i + 1}/{len(edges)}")
 
@@ -331,7 +345,7 @@ def main():
         for k in range(0, len(out_rows), 1000):
             f.write("INSERT INTO edge_stat (edge_id, light_n, light_cover_m, cctv_n, cctv_cover_m, help_m, guard_m, "
                     "rest_m, heat_m, cold_m, help_n_1km, guard_n_1km, rest_n_1km, heat_n_1km, cold_n_1km, xing_signal, xing_nosignal, xing_unknown, curb, "
-                    "footbridge_ok, road_class, computed_at) VALUES\n"
+                    "footbridge_ok, road_class, help_night_m, help_night_n_1km, school_zone_m, computed_at) VALUES\n"
                     + ",\n".join("(" + ",".join(v(x) for x in r) + ",NOW())" for r in out_rows[k:k + 1000]) + ";\n")
         # 시작점이 있는 행정동·시군구
         f.write("""UPDATE edge_stat s JOIN road_edge e ON e.id = s.edge_id
