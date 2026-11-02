@@ -6,7 +6,7 @@
 - 원본: data/raw/national/public_toilet_std.csv (공공데이터포털 "공중화장실정보", cp949, 53,578건)
 - 도로명주소로 먼저 찾고, 없으면 지번주소로 찾는다. 결과는 data/raw/national/public_toilet_geocode.csv에
   남겨 두고 다음에 다시 쓴다 (같은 주소를 두 번 부르지 않음)
-- 넣을 지역의 생활안전지도(safemap) 화장실은 지우고 새 자료(data_go_kr)로 바꾼다
+- 넣을 지역의 화장실(옛 생활안전지도와 전에 넣은 새 자료)을 지우고 다시 넣는다. 주소 칸에는 좌표를 찾은 주소를 넣는다
 - 카카오 REST 키는 .env의 KAKAO_REST_KEY (하루 10만 번 무료)
 
 실행: python3 scripts/load_toilet_std.py [gwangju | all] [--sql-only]   (기본 gwangju)
@@ -35,6 +35,9 @@ KEEP = {  # CSV 칸 → attrs 이름 (telno·opn_hr는 표의 phone·open_hours 
     "화장실입구CCTV설치유무": "fclty_cctv_instl_yn", "기저귀교환대유무": "dpr_exch_yn", "설치연월": "instl_ym",
     "화장실소유구분명": "owner", "데이터기준일자": "dtin_stda",
 }
+
+
+COL = {"road": "소재지도로명주소", "lotno": "소재지지번주소"}  # 좌표를 찾은 주소 칸 (주소 칸에도 이것을 넣음)
 
 
 def precise(addr):
@@ -130,15 +133,15 @@ def main():
             # 광주 경계 안의 옛 생활안전지도 화장실을 지운다
             f.write("DELETE t FROM public_toilet t JOIN admin_area a ON a.level = 'sido' AND a.code = "
                     f"'{GWANGJU_SIDO}' AND MBRContains(a.geom, t.geom) AND ST_Contains(a.geom, t.geom) "
-                    "WHERE t.source = 'safemap';\n")
+                    "WHERE t.source IN ('safemap', 'data_go_kr');\n")
         else:
-            f.write("DELETE FROM public_toilet WHERE source = 'safemap';\n")
+            f.write("DELETE FROM public_toilet WHERE source IN ('safemap', 'data_go_kr');\n")
         for k in range(0, len(ok), 500):
             vals = []
             for r, c in ok[k:k + 500]:
                 attrs = {v: r[col].strip() for col, v in KEEP.items() if r.get(col, "").strip()}
                 vals.append(f"({q(r['구분명'] or None)},'data_go_kr',{q(r['관리번호'])},{q(r['화장실명'])},"
-                            f"{q(r['소재지도로명주소'] or r['소재지지번주소'])},{c['x']},{c['y']},"
+                            f"{q(r[COL[c['how']]])},{c['x']},{c['y']},"
                             f"ST_SRID(POINT({c['x']},{c['y']}),0),{q(json.dumps(attrs, ensure_ascii=False))})")
             f.write("INSERT INTO public_toilet (kind, source, source_id, name, address, lon, lat, geom, attrs) VALUES\n"
                     + ",\n".join(vals) + "\nON DUPLICATE KEY UPDATE kind = VALUES(kind), name = VALUES(name), "
