@@ -235,22 +235,27 @@ public class FacilityImporter implements ApplicationRunner {
     // 광주시·동구청 파일에는 각각 92곳, 742개가 있어 시연 지역은 이 파일로 보충한다.
     // 전국 데이터와 같은 시설이 겹칠 수 있어서, 길 점수를 매길 때 10m 안의 같은 종류는 하나로 본다.
 
-    /** 위도·경도 칸이 있는 지자체 CSV 하나를 읽는 규칙 */
+    /** 위도·경도 칸이 있는 CSV 하나를 읽는 규칙. file은 data/raw 아래 경로 */
     record RegionalCsv(String file, String charset, String type, String source, String title, String api,
             String license, String nameCol, String subtypeCol, String countCol, List<String> attrCols) {
     }
 
     static final List<RegionalCsv> REGIONAL = List.of(
-            new RegionalCsv("gwangju_cctv.csv", "MS949", "cctv", "gwangju", "광주광역시_CCTV 설치 현황",
+            new RegionalCsv("regional/gwangju_cctv.csv", "MS949", "cctv", "gwangju", "광주광역시_CCTV 설치 현황",
                     "공공데이터포털 15084631", "이용허락범위 제한 없음", "관리기관명", null, "카메라대수",
                     List.of("카메라화소", "촬영방면", "보관일수", "설치연도", "데이터기준일자")),
-            new RegionalCsv("donggu_security_light.csv", "UTF-8", "security_light", "gwangju_donggu",
+            new RegionalCsv("regional/donggu_security_light.csv", "UTF-8", "security_light", "gwangju_donggu",
                     "광주광역시 동구_보안등정보 (표준데이터)", "공공데이터포털 전국보안등정보표준데이터 15017320",
                     "확인 필요", "보안등위치명", "설치형태",
-                    "설치개수", List.of("설치연도", "관리기관명", "데이터기준일자")));
+                    "설치개수", List.of("설치연도", "관리기관명", "데이터기준일자")),
+            // 전국 파일이지만 API 활용 신청이 아직 반영되지 않아 포털에서 받은 CSV로 넣는다 (2026-11-02)
+            new RegionalCsv("national/child_protection_zone.csv", "MS949", "child_protection_zone", "data_go_kr",
+                    "전국어린이보호구역표준데이터", "공공데이터포털 15012891", "확인 필요", "대상시설명", "시설종류",
+                    null, List.of("관리기관명", "관할경찰서명", "CCTV설치여부", "CCTV설치대수", "어린이보호구역지정여부",
+                            "보호구역도로폭", "데이터기준일자", "제공기관명")));
 
     private void importRegionalCsv(RegionalCsv rc) throws IOException {
-        Path file = Path.of("data", "raw", "regional", rc.file());
+        Path file = Path.of("data", "raw").resolve(rc.file());
         if (!Files.exists(file)) {
             log.info("{}: 파일이 없어 건너뜀", rc.title());
             return;
@@ -295,7 +300,7 @@ public class FacilityImporter implements ApplicationRunner {
             }
         }
         insert(batch);
-        int loaded = saveSource(rc.type(), rc.source(), rc.title(), rc.api() + " (" + rc.file() + ")", rc.license(),
+        int loaded = saveSource(rc.type(), rc.source(), rc.title(), rc.api() + " (" + file.getFileName() + ")", rc.license(),
                 total, skipped, true);
         log.info("{}: {}건 적재, {}건 제외, {}건 중복", rc.title(), loaded, skipped, total - skipped - loaded);
     }

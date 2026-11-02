@@ -140,6 +140,19 @@ class IngestHelpersTests {
     }
 
     @Test
+    void childProtectionZoneComesFromNationalCsv() {
+        // API 대신 포털 CSV(CP949)로 넣는다. 개수 칸이 없는 표라 INSERT에도 개수 칸이 없어야 한다
+        FacilityImporter.RegionalCsv rc = FacilityImporter.REGIONAL.stream()
+                .filter(r -> r.type().equals("child_protection_zone")).findFirst().orElseThrow();
+        assertThat(rc.file()).isEqualTo("national/child_protection_zone.csv");
+        assertThat(rc.charset()).isEqualTo("MS949");
+        assertThat(rc.countCol()).isNull();
+        assertThat(FacilityImporter.insertSql(FacilityTable.CHILD_PROTECTION_ZONE))
+                .startsWith("INSERT IGNORE INTO child_protection_zone ")
+                .doesNotContain("count");
+    }
+
+    @Test
     void insertSqlAddsCountColumnOnlyWhereItExists() {
         assertThat(FacilityImporter.insertSql(FacilityTable.CCTV))
                 .startsWith("INSERT IGNORE INTO cctv ")
