@@ -38,7 +38,8 @@ DATASETS = [
     ("heat_shelter", SAFEMAP + "IF_0001", "SAFEMAP_KEY", "safemap"),
     # 한파쉼터: 생활안전지도(IF_0136)는 10,000건까지만 줘서 재난안전데이터로 바꿈
     ("cold_shelter_safetydata", SAFETYDATA + "DSSP-IF-10804", "SAFETYDATA_COLDSHELTER_KEY", "safetydata"),
-    ("public_toilet", SAFEMAP + "IF_0132", "SAFEMAP_KEY", "safemap"),
+    # 공중화장실: 생활안전지도(IF_0132)는 약 2.5만 곳이 엉뚱한 좌표 세 점에 몰려 있고 주소도 비어 있어 뺌.
+    # 대신 공공데이터포털 공중화장실 CSV를 카카오 주소 검색으로 좌표로 바꿔 넣는다: scripts/load_toilet_std.py
     # 전국보안등정보표준데이터: 지자체가 직접 올려서 공통POI 보안등보다 촘촘함 (약 186만 건)
     ("security_light_std", DATA_GO_KR + "tn_pubr_public_scrty_lmp_api",
      "DATA_GO_KR_SECURITYLIGHT_KEY|DATA_GO_KR_KEY", "datagokr"),

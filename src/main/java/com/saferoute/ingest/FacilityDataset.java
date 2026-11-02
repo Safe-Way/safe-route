@@ -135,9 +135,8 @@ public record FacilityDataset(
                     List.of("num"), List.of("cc_nm"), List.of("rn_adres", "adres"),
                     List.of("cc_type"), null, null),
             COLD_SHELTER,
-            safemap("public_toilet", "public_toilet", "생활안전지도_공중화장실", "IF_0132",
-                    List.of("num"), List.of("fclty_nm"), List.of("lctn_rona_addr", "lctn_lotno_addr"),
-                    List.of("fclty_se"), null, null),
+            // 공중화장실은 여기서 받지 않는다. 생활안전지도(IF_0132)는 약 2.5만 곳이 엉뚱한 좌표 세 점에 몰려 있고
+            // 주소도 비어 있다(2026-11-02 확인). 공공데이터포털 CSV를 scripts/load_toilet_std.py로 넣는다.
             FOOTBRIDGE,
             CROSSWALK);
 }
