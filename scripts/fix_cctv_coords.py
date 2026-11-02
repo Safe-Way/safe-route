@@ -8,9 +8,10 @@
 - 약 10m 칸 하나에 CCTV 20대 이상이 있고 서로 다른 주소가 10개 이상인 곳
 
 고치는 법: 주소(괄호 안 설명은 뺌)를 카카오 주소 검색으로 찾고, 없으면 번지 뒤 설명('앞 전신주' 등)을 잘라 한 번 더 찾는다. 번지가 없는 주소나 못 찾은 것은
-틀린 위치를 남기지 않으려고 지우고 data/raw/national/cctv_removed.csv에 남긴다.
+틀린 위치를 남기지 않으려고 cctv 표에서 빼서 facility_unlocated 표로 옮기고 data/raw/national/cctv_removed.csv에도 남긴다.
 찾은 좌표는 data/raw/national/cctv_geocode.csv에 저장해 다시 쓴다.
 CCTV를 다시 적재(Java FacilityImporter)하면 잘못된 좌표가 다시 들어오므로 이 스크립트도 다시 돌린다.
+그다음 classify_cctv.py(목적 분류)와 build_poi.py(정제 시설)도 차례로 다시 돌린다.
 
 실행: python3 scripts/fix_cctv_coords.py [--sql-only]
 """
@@ -54,6 +55,19 @@ def trimmed(addr):
     """번지 뒤에 붙은 설명을 자른다: '인주대로11번길 8-7 앞 전신주' → '인주대로11번길 8-7'"""
     m = NUMBER.match(addr)
     return m.group(1) if m else None
+
+
+def move_sql(table, ids, reason):
+    """지우기 전에 facility_unlocated로 옮기는 SQL (014_facility_unlocated.sql). ids: 문자열 id 목록"""
+    out = []
+    for k in range(0, len(ids), 1000):
+        part = ",".join(ids[k:k + 1000])
+        out.append(f"INSERT INTO facility_unlocated (tbl, source, source_id, kind, name, address, lon, lat, reason, tried, "
+                   f"attrs, moved_at) SELECT '{table}', source, source_id, kind, name, address, lon, lat, '{reason}', "
+                   f"address, attrs, NOW() FROM {table} WHERE id IN ({part}) "
+                   f"ON DUPLICATE KEY UPDATE reason = VALUES(reason), moved_at = NOW();")
+        out.append(f"DELETE FROM {table} WHERE id IN ({part});")
+    return out
 
 
 def precise(addr):
@@ -117,8 +131,8 @@ def main():
             f.write(f"UPDATE cctv SET lon = {x}, lat = {y}, geom = ST_SRID(POINT({x}, {y}), 0), "
                     "attrs = JSON_SET(COALESCE(attrs, JSON_OBJECT()), '$.\"좌표\"', '카카오 주소 검색 (원본 좌표 오류)') "
                     f"WHERE id = {rid};\n")
-        for k in range(0, len(removed), 1000):
-            f.write("DELETE FROM cctv WHERE id IN (" + ",".join(r[0] for r in removed[k:k + 1000]) + ");\n")
+        for line in move_sql("cctv", [r[0] for r in removed], "좌표 오류·주소로 못 찾음 (번지 없음·카카오에 없음)"):
+            f.write(line + "\n")
     with open(REMOVED, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["id", "source_id", "address", "lon", "lat"])

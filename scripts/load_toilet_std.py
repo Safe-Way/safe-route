@@ -4,7 +4,8 @@
 (강릉 쪽 한 점에 14,798곳 등) 주소 칸도 모두 비어 있다(2026-11-02 확인). 새 CSV는 주소가 모두 있다.
 
 - 원본: data/raw/national/public_toilet_std.csv (공공데이터포털 "공중화장실정보", cp949, 53,578건)
-- 도로명주소로 먼저 찾고, 없으면 지번주소로 찾는다. 결과는 data/raw/national/public_toilet_geocode.csv에
+- 도로명주소로 먼저 찾고, 없으면 지번주소, 그래도 없으면 '시·군 + 화장실 이름'으로 장소 검색한다.
+  못 찾은 것은 facility_unlocated 표에 원본 줄 그대로 둔다. 결과는 data/raw/national/public_toilet_geocode.csv에
   남겨 두고 다음에 다시 쓴다 (같은 주소를 두 번 부르지 않음)
 - 넣을 지역의 화장실(옛 생활안전지도와 전에 넣은 새 자료)을 지우고 다시 넣는다. 주소 칸에는 좌표를 찾은 주소를 넣는다
 - 카카오 REST 키는 .env의 KAKAO_REST_KEY (하루 10만 번 무료)
@@ -22,6 +23,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_edge_stat import ROOT, env, run_file  # noqa: E402
+from fix_pile_coords import region_of  # noqa: E402
 
 SRC = os.path.join(ROOT, "data", "raw", "national", "public_toilet_std.csv")
 CACHE = os.path.join(ROOT, "data", "raw", "national", "public_toilet_geocode.csv")
@@ -104,6 +106,48 @@ def geocode(rows, cache):
     return new
 
 
+def keyword_pass(rows, cache):
+    """주소로 못 찾았거나 번지 없는 주소인 화장실을 '시·군 + 화장실 이름'으로 장소 검색한다.
+    다른 지역의 같은 이름이 걸리지 않게 결과 주소에 그 시·군이 있어야 쓴다. 한 번 찾아본 것은 how로 남겨 다시 부르지 않음"""
+    key = env()["KAKAO_REST_KEY"]
+    todo = [r for r in rows if cache.get(r["관리번호"], {}).get("how") in ("none",) or
+            (cache.get(r["관리번호"], {}).get("x") and not usable(r, cache))]
+    print(f"이름으로 장소 검색: {len(todo)}건")
+
+    def one(r):
+        region, core = region_of(r["소재지도로명주소"], r["소재지지번주소"])
+        name = (r["화장실명"] or "").strip()
+        if not region or not name:
+            return r["관리번호"], None, "none_kw"
+        url = "https://dapi.kakao.com/v2/local/search/keyword.json?" + urllib.parse.urlencode(
+            {"query": f"{region} {name}", "size": 5})
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": "KakaoAK " + key}),
+                                        timeout=10) as res:
+                docs = json.load(res)["documents"]
+        except Exception as e:
+            return r["관리번호"], None, "error:" + type(e).__name__
+        d = next((d for d in docs if core in d["address_name"]), None)
+        return r["관리번호"], (float(d["x"]), float(d["y"])) if d else None, "keyword" if d else "none_kw"
+
+    with open(CACHE, "a", encoding="utf-8", newline="") as f, concurrent.futures.ThreadPoolExecutor(6) as pool:
+        w = csv.writer(f)
+        for rid, xy, how in pool.map(one, todo):
+            if how.startswith("error"):
+                continue
+            row = {"id": rid, "x": f"{xy[0]:.7f}" if xy else "", "y": f"{xy[1]:.7f}" if xy else "", "how": how}
+            w.writerow(row.values())
+            cache[rid] = row
+
+
+def usable(r, cache):
+    c = cache.get(r["관리번호"], {})
+    if c.get("how") == "keyword":
+        return bool(c.get("x"))
+    col = COL.get(c.get("how"))
+    return bool(c.get("x")) and col is not None and precise(r[col])
+
+
 def q(v):
     return "NULL" if v is None or v == "" else "'" + str(v).replace("\\", "\\\\").replace("'", "''") + "'"
 
@@ -114,13 +158,10 @@ def main():
     rows = read_rows(region)
     cache = load_cache()
     geocode(rows, cache)
-    def usable(r):
-        c = cache.get(r["관리번호"], {})
-        col = {"road": "소재지도로명주소", "lotno": "소재지지번주소"}.get(c.get("how"))
-        return bool(c.get("x")) and col is not None and precise(r[col])
-
-    ok = [(r, cache[r["관리번호"]]) for r in rows if usable(r)]
-    vague = sum(1 for r in rows if cache.get(r["관리번호"], {}).get("x") and not usable(r))
+    keyword_pass(rows, cache)
+    ok = [(r, cache[r["관리번호"]]) for r in rows if usable(r, cache)]
+    bad = [r for r in rows if not usable(r, cache)]
+    vague = sum(1 for r in bad if cache.get(r["관리번호"], {}).get("x"))
     how = {}
     for r in rows:
         h = cache.get(r["관리번호"], {}).get("how", "error")
@@ -141,12 +182,24 @@ def main():
             for r, c in ok[k:k + 500]:
                 attrs = {v: r[col].strip() for col, v in KEEP.items() if r.get(col, "").strip()}
                 vals.append(f"({q(r['구분명'] or None)},'data_go_kr',{q(r['관리번호'])},{q(r['화장실명'])},"
-                            f"{q(r[COL[c['how']]])},{c['x']},{c['y']},"
+                            f"{q(r[COL[c['how']]] if c['how'] in COL else (r['소재지도로명주소'] or r['소재지지번주소']))},"
+                            f"{c['x']},{c['y']},"
                             f"ST_SRID(POINT({c['x']},{c['y']}),0),{q(json.dumps(attrs, ensure_ascii=False))})")
             f.write("INSERT INTO public_toilet (kind, source, source_id, name, address, lon, lat, geom, attrs) VALUES\n"
                     + ",\n".join(vals) + "\nON DUPLICATE KEY UPDATE kind = VALUES(kind), name = VALUES(name), "
                     "address = VALUES(address), lon = VALUES(lon), lat = VALUES(lat), geom = VALUES(geom), "
                     "attrs = VALUES(attrs);\n")
+        # 주소·이름으로도 못 찾은 화장실은 지우지 않고 facility_unlocated에 원본 줄 그대로 둔다
+        for k in range(0, len(bad), 500):
+            vals = [f"('public_toilet','data_go_kr',{q(r['관리번호'])},{q(r['구분명'] or None)},{q(r['화장실명'])},"
+                    f"{q(r['소재지도로명주소'] or r['소재지지번주소'])},NULL,NULL,"
+                    f"{q('좌표 없음·주소와 이름으로 못 찾음' if not cache.get(r['관리번호'], {}).get('x') else '좌표 없음·번지 없는 주소')},"
+                    f"{q(((r['소재지도로명주소'] or '') + ' / ' + (r['화장실명'] or ''))[:300])},"
+                    f"{q(json.dumps({kk: vv for kk, vv in r.items() if vv}, ensure_ascii=False))},NOW())"
+                    for r in bad[k:k + 500]]
+            f.write("INSERT INTO facility_unlocated (tbl, source, source_id, kind, name, address, lon, lat, reason, tried, "
+                    "attrs, moved_at) VALUES\n" + ",\n".join(vals)
+                    + "\nON DUPLICATE KEY UPDATE reason = VALUES(reason), moved_at = NOW();\n")
         f.write("INSERT INTO data_source (type, source, title, api, license, total_count, loaded_count, skipped_count,"
                 " complete, loaded_at)\nVALUES ('public_toilet', 'data_go_kr', "
                 f"'공중화장실정보 CSV ({'광주' if region == 'gwangju' else '전국'}, 카카오 주소 검색으로 좌표)', "
