@@ -91,6 +91,31 @@ public record FacilityDataset(
             List.of(), List.of("lmpLcNm"), List.of("rdnmadr", "lnmadr"), List.of("installationType"),
             null, null, "longitude", "latitude", true, Map.of(), "installationCo");
 
+    /**
+     * 공공데이터포털 전국육교정보표준데이터 (tn_pubr_public_overpass_api, 약 1,400건).
+     * 장애인 편의시설 종류(handicapCvntlType: 없음, 경사로, 엘리베이터 등)를 세부 종류로 넣는다.
+     * 휠체어로 지나갈 수 있는지는 footbridge 표의 wheelchair_ok 칸이 판단한다 (schema.sql 참고).
+     * 원본 번호가 없어 줄 전체로 번호를 만든다.
+     */
+    static final FacilityDataset FOOTBRIDGE = new FacilityDataset(
+            "footbridge", "footbridge", "data_go_kr", "전국육교정보표준데이터",
+            "https://api.data.go.kr/openapi/tn_pubr_public_overpass_api", "확인 필요",
+            List.of(), List.of("ovrpsNm"), List.of("rdnmadr", "lctnLotnoAddr"), List.of("handicapCvntlType"),
+            null, null, "longitude", "latitude", true, Map.of(), null);
+
+    /**
+     * 공공데이터포털 전국횡단보도표준데이터 (tn_pubr_public_crosswalk_api, 약 5만 9천 건).
+     * 이름 칸이 없어 도로명을 이름으로 쓰고, 횡단보도 종류 코드는 "1"과 "01"처럼 섞여 와서 두 자리로 맞춘다.
+     * 보도턱 낮춤·점자블록·음향신호기 등은 attrs에 두고 crosswalk 표의 가상 칸으로 꺼낸다 (schema.sql 참고).
+     * 지역 편차가 커서 광주는 북구 285건뿐이다 (조선대 주변 없음).
+     */
+    static final FacilityDataset CROSSWALK = new FacilityDataset(
+            "crosswalk", "crosswalk", "data_go_kr", "전국횡단보도표준데이터",
+            "https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api", "확인 필요",
+            List.of(), List.of("roadNm"), List.of("rdnmadr", "lnmadr"), List.of("crslkKnd"),
+            null, null, "longitude", "latitude", true,
+            Map.of("1", "01", "2", "02", "3", "03", "4", "04"), null);
+
     /** API로 받는 시설 데이터 전체 (CCTV는 CSV 파일이라 따로 읽는다) */
     public static final List<FacilityDataset> ALL = List.of(
             safetydata("police", "police", "행정안전부_공통POI_경찰", "DSSP-IF-00080"),
@@ -112,5 +137,7 @@ public record FacilityDataset(
             COLD_SHELTER,
             safemap("public_toilet", "public_toilet", "생활안전지도_공중화장실", "IF_0132",
                     List.of("num"), List.of("fclty_nm"), List.of("lctn_rona_addr", "lctn_lotno_addr"),
-                    List.of("fclty_se"), null, null));
+                    List.of("fclty_se"), null, null),
+            FOOTBRIDGE,
+            CROSSWALK);
 }

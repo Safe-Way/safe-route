@@ -277,6 +277,70 @@ CREATE TABLE IF NOT EXISTS public_toilet (
     SPATIAL INDEX sx_public_toilet_geom (geom)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '공중화장실';
 
+-- ---------------------------------------------------------------- 길 위 구조물
+
+-- 육교: 안전 시설이 아니라 휠체어 모드에서 피할 곳을 찾는 데 쓴다. 그래서 facility_all 뷰에는 넣지 않는다.
+-- kind = 장애인 편의시설 종류 원문 (없음, 경사로, 엘리베이터, 승강기, 경사로+엘리베이터 등)
+-- wheelchair_ok = 엘리베이터·승강기·경사로가 있으면 1. 점자블록만 있거나 없음이면 0
+CREATE TABLE IF NOT EXISTS footbridge (
+    id            BIGINT       NOT NULL AUTO_INCREMENT,
+    kind          VARCHAR(50)  NULL COMMENT '장애인 편의시설 종류 (없음, 경사로, 엘리베이터 등)',
+    source        VARCHAR(20)  NOT NULL,
+    source_id     VARCHAR(64)  NOT NULL,
+    name          VARCHAR(200) NULL,
+    address       VARCHAR(300) NULL,
+    sido_code     CHAR(2)      NULL,
+    sgg_code      CHAR(5)      NULL,
+    lon           DOUBLE       NOT NULL,
+    lat           DOUBLE       NOT NULL,
+    geom          POINT        NOT NULL SRID 0,
+    attrs         JSON         NULL,
+    wheelchair_ok TINYINT      AS (CASE WHEN CONCAT_WS(' ', kind, attrs ->> '$.etcFcltyType') REGEXP '엘리베이터|승강기|경사로|E/V' THEN 1 ELSE 0 END) VIRTUAL COMMENT '휠체어 통과 가능 1, 불가 0 (kind와 기타 시설에서 판단)',
+    length_m      VARCHAR(10)  AS (attrs ->> '$.ovrpsEt') VIRTUAL COMMENT '육교 길이 m (attrs에서 꺼낸 값)',
+    width_m       VARCHAR(10)  AS (attrs ->> '$.ovrpsBt') VIRTUAL COMMENT '육교 폭 m (attrs에서 꺼낸 값)',
+    safe_grade    VARCHAR(10)  AS (attrs ->> '$.safeGrad') VIRTUAL COMMENT '안전 등급 (attrs에서 꺼낸 값)',
+    use_limit     VARCHAR(20)  AS (attrs ->> '$.useLmttType') VIRTUAL COMMENT '이용 제한 (attrs에서 꺼낸 값)',
+    manager       VARCHAR(100) AS (attrs ->> '$.institutionNm') VIRTUAL COMMENT '관리 기관 (attrs에서 꺼낸 값)',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_footbridge_source (source, source_id),
+    KEY idx_footbridge_kind (kind),
+    KEY idx_footbridge_address (address(20)),
+    KEY idx_footbridge_name (name(20)),
+    SPATIAL INDEX sx_footbridge_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '육교';
+
+-- 횡단보도: 장애인 모드에서 보도턱을 낮추지 않은 곳을 피하는 데 쓴다. facility_all 뷰에는 넣지 않는다.
+-- kind = 횡단보도 종류 코드 (원본 그대로, 두 자리로 맞춤). 값이 비어 있으면 가상 칸이 NULL = "확인 안 됨"
+CREATE TABLE IF NOT EXISTS crosswalk (
+    id             BIGINT       NOT NULL AUTO_INCREMENT,
+    kind           VARCHAR(50)  NULL COMMENT '횡단보도 종류 코드 (01, 02, 03, 04, 99)',
+    source         VARCHAR(20)  NOT NULL,
+    source_id      VARCHAR(64)  NOT NULL,
+    name           VARCHAR(200) NULL COMMENT '도로명',
+    address        VARCHAR(300) NULL,
+    sido_code      CHAR(2)      NULL,
+    sgg_code       CHAR(5)      NULL,
+    lon            DOUBLE       NOT NULL,
+    lat            DOUBLE       NOT NULL,
+    geom           POINT        NOT NULL SRID 0,
+    attrs          JSON         NULL,
+    curb_lowered   TINYINT      AS (CASE attrs ->> '$.ftpthLowerYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '보도턱 낮춤 1, 아님 0, 모름 NULL',
+    braille_block  TINYINT      AS (CASE attrs ->> '$.brllBlckYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '점자블록 있음 1, 없음 0, 모름 NULL',
+    sound_signal   TINYINT      AS (CASE attrs ->> '$.sondSgngnrYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '음향신호기 있음 1, 없음 0, 모름 NULL',
+    traffic_light  TINYINT      AS (CASE attrs ->> '$.tfclghtYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '보행자 신호등 있음 1, 없음 0, 모름 NULL',
+    raised         TINYINT      AS (CASE attrs ->> '$.highlandYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '고원식(턱 없이 높인 횡단보도) 1, 아님 0',
+    spot_light     TINYINT      AS (CASE attrs ->> '$.cnctrLghtFcltyYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '집중조명 있음 1, 없음 0, 모름 NULL',
+    green_seconds  VARCHAR(10)  AS (attrs ->> '$.greenSgngnrTime') VIRTUAL COMMENT '보행 신호 시간(초)',
+    lanes          VARCHAR(10)  AS (attrs ->> '$.cartrkCo') VIRTUAL COMMENT '차로 수',
+    length_m       VARCHAR(10)  AS (attrs ->> '$.et') VIRTUAL COMMENT '횡단 길이 m',
+    manager        VARCHAR(100) AS (attrs ->> '$.institutionNm') VIRTUAL COMMENT '관리 기관',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_crosswalk_source (source, source_id),
+    KEY idx_crosswalk_kind (kind),
+    KEY idx_crosswalk_address (address(20)),
+    SPATIAL INDEX sx_crosswalk_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '횡단보도';
+
 -- ---------------------------------------------------------------- 전체 보기
 
 -- 모든 시설을 한 번에 볼 때 쓰는 뷰. 종류별 표의 공통 칸만 이어 붙인다.

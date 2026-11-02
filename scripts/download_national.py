@@ -42,6 +42,12 @@ DATASETS = [
     # 전국보안등정보표준데이터: 지자체가 직접 올려서 공통POI 보안등보다 촘촘함 (약 186만 건)
     ("security_light_std", DATA_GO_KR + "tn_pubr_public_scrty_lmp_api",
      "DATA_GO_KR_SECURITYLIGHT_KEY|DATA_GO_KR_KEY", "datagokr"),
+    # 전국육교정보표준데이터: 휠체어 모드에서 엘리베이터·경사로 없는 육교를 빼려고 받음 (약 1,400건)
+    ("footbridge", DATA_GO_KR + "tn_pubr_public_overpass_api",
+     "DATA_GO_KR_FOOTBRIDGE_KEY|DATA_GO_KR_KEY", "datagokr"),
+    # 전국횡단보도표준데이터: 보도턱 낮춤·점자블록·음향신호기·보행 신호 시간 (약 5만 9천 건)
+    ("crosswalk", DATA_GO_KR + "tn_pubr_public_crosswalk_api",
+     "DATA_GO_KR_CROSSWALK_KEY|DATA_GO_KR_KEY", "datagokr"),
 ]
 
 

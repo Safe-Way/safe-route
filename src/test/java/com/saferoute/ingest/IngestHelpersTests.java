@@ -99,6 +99,47 @@ class IngestHelpersTests {
     }
 
     @Test
+    void footbridgeRowKeepsHandicapTypeAsKind() {
+        // 전국육교정보표준데이터 원본 한 줄 (값 일부). 장애인 편의시설 종류가 세부 종류가 된다
+        String item = """
+                {"ovrpsNm": "크라운호텔앞보도육교", "rdnmadr": "서울특별시 용산구 녹사평대로 132",
+                 "lctnLotnoAddr": "", "latitude": "37.53072639", "longitude": "126.9911211",
+                 "ovrpsEt": "26.7", "handicapCvntlYn": "N", "handicapCvntlType": "없음",
+                 "safeGrad": "보통", "institutionNm": "서울특별시 용산구청"}
+                """;
+        FacilityImporter importer = new FacilityImporter(null);
+        FacilityRow row = importer.toRow(FacilityDataset.FOOTBRIDGE,
+                tools.jackson.databind.json.JsonMapper.builder().build().readTree(item));
+
+        assertThat(row.type()).isEqualTo("footbridge");
+        assertThat(FacilityTable.of(row.type())).isEqualTo(FacilityTable.FOOTBRIDGE);
+        assertThat(row.name()).isEqualTo("크라운호텔앞보도육교");
+        assertThat(row.kind()).isEqualTo("없음");
+        assertThat(row.lon()).isEqualTo(126.9911211);
+        assertThat(row.address()).isEqualTo("서울특별시 용산구 녹사평대로 132");
+        assertThat(row.attrsJson()).contains("\"ovrpsEt\":\"26.7\"").doesNotContain("handicapCvntlType");
+    }
+
+    @Test
+    void crosswalkRowUsesRoadNameAndTwoDigitKind() {
+        // 전국횡단보도표준데이터 원본 한 줄 (값 일부). 종류 코드 "1"은 "01"로 맞추고, 빈 칸(" ")은 attrs에서 빠진다
+        String item = """
+                {"roadNm": "승지로", "rdnmadr": "", "lnmadr": "경기도 의정부시 민락동 610-15",
+                 "crslkKnd": "1", "latitude": "37.73857062", "longitude": "127.0903328",
+                 "ftpthLowerYn": "Y", "brllBlckYn": "Y", "sondSgngnrYn": " ", "greenSgngnrTime": "0"}
+                """;
+        FacilityImporter importer = new FacilityImporter(null);
+        FacilityRow row = importer.toRow(FacilityDataset.CROSSWALK,
+                tools.jackson.databind.json.JsonMapper.builder().build().readTree(item));
+
+        assertThat(FacilityTable.of(row.type())).isEqualTo(FacilityTable.CROSSWALK);
+        assertThat(row.name()).isEqualTo("승지로");
+        assertThat(row.kind()).isEqualTo("01");
+        assertThat(row.address()).isEqualTo("경기도 의정부시 민락동 610-15");
+        assertThat(row.attrsJson()).contains("\"ftpthLowerYn\":\"Y\"").doesNotContain("sondSgngnrYn");
+    }
+
+    @Test
     void insertSqlAddsCountColumnOnlyWhereItExists() {
         assertThat(FacilityImporter.insertSql(FacilityTable.CCTV))
                 .startsWith("INSERT IGNORE INTO cctv ")
