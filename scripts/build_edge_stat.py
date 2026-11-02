@@ -4,6 +4,7 @@
 - light_n / light_cover_m : 길에서 30m 안 가로등·보안등 수, 길이 중 등 30m 안에 드는 길이
 - cctv_n / cctv_cover_m   : 길에서 50m 안 CCTV 위치 수, 길이 중 CCTV 50m 안에 드는 길이
 - help_m / guard_m / rest_m : 길 가운데에서 가장 가까운 도움 지점·지킴이집·쉼 곳까지 거리 (2km 넘으면 NULL)
+- heat_m / cold_m        : 가장 가까운 무더위쉼터·한파쉼터까지 거리 (폭염·한파 가중치용, 2km 넘으면 NULL)
 - *_n_1km                 : 길 가운데 반경 1km 안 개수 (지역 밀도 기준 A5)
 - xing_*                  : 이 길에서 건너는 횡단보도의 신호별 수 (C4: 횡단 구간 footway=crossing, 없으면
                             차도가 아닌 보행 길이 끝에 횡단 점을 가진 경우)
@@ -211,16 +212,18 @@ def main():
     cctv = dedup(pts("cctv"))
     help_pts = pts("police") + pts("convenience_store") + pts("child_safety_house") + pts("emergency_bell")
     guard = pts("child_safety_house")
-    rest = pts("heat_shelter") + pts("cold_shelter") + pts("public_toilet")
+    heat, cold = pts("heat_shelter"), pts("cold_shelter")
+    rest = heat + cold + pts("public_toilet")
     std_x = [(plane.xy(float(r[0]), float(r[1])), num(r[2]), num(r[3])) for r in
              query(f"SELECT lon, lat, IFNULL(traffic_light,'NULL'), IFNULL(curb_lowered,'NULL') FROM crosswalk WHERE {box}")]
     bridges = [(plane.xy(float(r[0]), float(r[1])), int(r[2])) for r in
                query(f"SELECT lon, lat, wheelchair_ok FROM footbridge WHERE {box}")]
     print(f"  등 {len(lights)}, CCTV {len(cctv)}, 도움 지점 {len(help_pts)}, 지킴이집 {len(guard)}, 쉼 곳 {len(rest)}, "
-          f"횡단 표준 {len(std_x)}, 육교 {len(bridges)}")
+          f"무더위쉼터 {len(heat)}, 한파쉼터 {len(cold)}, 횡단 표준 {len(std_x)}, 육교 {len(bridges)}")
 
     g_light, g_cctv = Grid(lights, 50), Grid(cctv, 50)
     g_help, g_guard, g_rest = Grid(help_pts, 200), Grid(guard, 200), Grid(rest, 200)
+    g_heat, g_cold = Grid(heat, 200), Grid(cold, 200)
     g_std = Grid([(p[0][0], p[0][1], i) for i, p in enumerate(std_x)], 50)
 
     lines = {eid: [plane.xy(lon, lat) for lon, lat in ln] for eid, ln in lines_ll.items()}
@@ -269,6 +272,8 @@ def main():
         help_m, guard_m, rest_m = nearest(g_help, mid, NEAR_CAP), nearest(g_guard, mid, NEAR_CAP), nearest(g_rest, mid, NEAR_CAP)
         help_n, guard_n, rest_n = (count_within(g_help, mid, DENSITY_R), count_within(g_guard, mid, DENSITY_R),
                                    count_within(g_rest, mid, DENSITY_R))
+        heat_m, cold_m = nearest(g_heat, mid, NEAR_CAP), nearest(g_cold, mid, NEAR_CAP)
+        heat_n, cold_n = count_within(g_heat, mid, DENSITY_R), count_within(g_cold, mid, DENSITY_R)
         # 횡단: 횡단 구간이면 그 길의 신호 태그와 횡단 점, 아니면 보행 길에 붙은 횡단 점.
         # 횡단 점에서 길이 둘로 잘리므로 그 점이 '도착 점'인 쪽 하나에만 센다 (한 번 건너는데 두 번 세지 않게)
         xs = {"signal": 0, "nosignal": 0, "unknown": 0}
@@ -308,8 +313,9 @@ def main():
                 if (best is None or rank > best[0]) and line_dist(mid, rln) <= SIDEWALK_R:
                     best = (rank, name)
             rc = best[1] if best else None
-        out_rows.append((eid, light_n, light_cover, cctv_n, cctv_cover, help_m, guard_m, rest_m, help_n, guard_n,
-                         rest_n, xs["signal"], xs["nosignal"], xs["unknown"], curb, fb, rc))
+        out_rows.append((eid, light_n, light_cover, cctv_n, cctv_cover, help_m, guard_m, rest_m, heat_m, cold_m,
+                         help_n, guard_n, rest_n, heat_n, cold_n, xs["signal"], xs["nosignal"], xs["unknown"],
+                         curb, fb, rc))
         if (i + 1) % 2000 == 0:
             print(f"  {i + 1}/{len(edges)}")
 
@@ -324,7 +330,7 @@ def main():
         f.write("SET NAMES utf8mb4;\nDELETE FROM edge_stat WHERE edge_id IN (SELECT id FROM road_edge);\n")
         for k in range(0, len(out_rows), 1000):
             f.write("INSERT INTO edge_stat (edge_id, light_n, light_cover_m, cctv_n, cctv_cover_m, help_m, guard_m, "
-                    "rest_m, help_n_1km, guard_n_1km, rest_n_1km, xing_signal, xing_nosignal, xing_unknown, curb, "
+                    "rest_m, heat_m, cold_m, help_n_1km, guard_n_1km, rest_n_1km, heat_n_1km, cold_n_1km, xing_signal, xing_nosignal, xing_unknown, curb, "
                     "footbridge_ok, road_class, computed_at) VALUES\n"
                     + ",\n".join("(" + ",".join(v(x) for x in r) + ",NOW())" for r in out_rows[k:k + 1000]) + ";\n")
         # 시작점이 있는 행정동·시군구
