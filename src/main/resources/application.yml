@@ -24,3 +24,13 @@ api-keys:
   safetydata-cold-shelter: ${SAFETYDATA_COLDSHELTER_KEY:}
   safetydata-streetlight: ${SAFETYDATA_STREETLIGHT_KEY:}
   odsay: ${ODSAY_API_KEY:}
+  tmap: ${TMAP_APP_KEY:}
+
+# 상황 판단 기준값 (C 파트). 숫자만 바꾸면 코드를 고치지 않아도 기준이 바뀐다.
+situation:
+  # 기온(℃): 기상청 초단기실황의 기온(T1H)과 비교한다
+  heat-celsius: 33     # 이 값 이상이면 폭염
+  cold-celsius: -10    # 이 값 이하면 한파
+  # 미세먼지(㎍/㎥): 에어코리아 값과 비교한다. '나쁨' 등급이 시작하는 값
+  pm10-bad: 81         # 미세먼지(PM10) 나쁨: 81~150
+  pm25-bad: 36         # 초미세먼지(PM2.5) 나쁨: 36~75
