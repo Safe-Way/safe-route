@@ -64,8 +64,9 @@ CREATE TABLE IF NOT EXISTS security_light (
     geom         POINT        NOT NULL SRID 0,
     attrs        JSON         NULL,
     lamp_count   SMALLINT     NOT NULL DEFAULT 1 COMMENT '등 개수 (없으면 1)',
-    install_year VARCHAR(10)  AS (attrs ->> '$."설치연도"') VIRTUAL COMMENT '설치 연도 (attrs에서 꺼낸 값)',
-    manager      VARCHAR(100) AS (attrs ->> '$."관리기관명"') VIRTUAL COMMENT '관리 기관 (attrs에서 꺼낸 값)',
+    install_year  VARCHAR(10)  AS (COALESCE(attrs ->> '$.installationYear', attrs ->> '$."설치연도"')) VIRTUAL COMMENT '설치 연도 (attrs에서 꺼낸 값)',
+    manager       VARCHAR(100) AS (COALESCE(attrs ->> '$.institutionNm', attrs ->> '$."관리기관명"')) VIRTUAL COMMENT '관리 기관 (attrs에서 꺼낸 값)',
+    manager_phone VARCHAR(30)  AS (attrs ->> '$.phoneNumber') VIRTUAL COMMENT '관리 기관 전화 (attrs에서 꺼낸 값)',
     PRIMARY KEY (id),
     UNIQUE KEY uk_security_light_source (source, source_id),
     KEY idx_security_light_kind (kind),
@@ -275,6 +276,201 @@ CREATE TABLE IF NOT EXISTS public_toilet (
     KEY idx_public_toilet_name (name(20)),
     SPATIAL INDEX sx_public_toilet_geom (geom)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '공중화장실';
+
+-- ---------------------------------------------------------------- 길 위 구조물
+
+-- 육교: 안전 시설이 아니라 휠체어 모드에서 피할 곳을 찾는 데 쓴다. 그래서 facility_all 뷰에는 넣지 않는다.
+-- kind = 장애인 편의시설 종류 원문 (없음, 경사로, 엘리베이터, 승강기, 경사로+엘리베이터 등)
+-- wheelchair_ok = 엘리베이터·승강기·경사로가 있으면 1. 점자블록만 있거나 없음이면 0
+CREATE TABLE IF NOT EXISTS footbridge (
+    id            BIGINT       NOT NULL AUTO_INCREMENT,
+    kind          VARCHAR(50)  NULL COMMENT '장애인 편의시설 종류 (없음, 경사로, 엘리베이터 등)',
+    source        VARCHAR(20)  NOT NULL,
+    source_id     VARCHAR(64)  NOT NULL,
+    name          VARCHAR(200) NULL,
+    address       VARCHAR(300) NULL,
+    sido_code     CHAR(2)      NULL,
+    sgg_code      CHAR(5)      NULL,
+    lon           DOUBLE       NOT NULL,
+    lat           DOUBLE       NOT NULL,
+    geom          POINT        NOT NULL SRID 0,
+    attrs         JSON         NULL,
+    wheelchair_ok TINYINT      AS (CASE WHEN CONCAT_WS(' ', kind, attrs ->> '$.etcFcltyType') REGEXP '엘리베이터|승강기|경사로|E/V' THEN 1 ELSE 0 END) VIRTUAL COMMENT '휠체어 통과 가능 1, 불가 0 (kind와 기타 시설에서 판단)',
+    length_m      VARCHAR(10)  AS (attrs ->> '$.ovrpsEt') VIRTUAL COMMENT '육교 길이 m (attrs에서 꺼낸 값)',
+    width_m       VARCHAR(10)  AS (attrs ->> '$.ovrpsBt') VIRTUAL COMMENT '육교 폭 m (attrs에서 꺼낸 값)',
+    safe_grade    VARCHAR(10)  AS (attrs ->> '$.safeGrad') VIRTUAL COMMENT '안전 등급 (attrs에서 꺼낸 값)',
+    use_limit     VARCHAR(20)  AS (attrs ->> '$.useLmttType') VIRTUAL COMMENT '이용 제한 (attrs에서 꺼낸 값)',
+    manager       VARCHAR(100) AS (attrs ->> '$.institutionNm') VIRTUAL COMMENT '관리 기관 (attrs에서 꺼낸 값)',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_footbridge_source (source, source_id),
+    KEY idx_footbridge_kind (kind),
+    KEY idx_footbridge_address (address(20)),
+    KEY idx_footbridge_name (name(20)),
+    SPATIAL INDEX sx_footbridge_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '육교';
+
+-- 횡단보도: 장애인 모드에서 보도턱을 낮추지 않은 곳을 피하는 데 쓴다. facility_all 뷰에는 넣지 않는다.
+-- kind = 횡단보도 종류 코드 (원본 그대로, 두 자리로 맞춤). 값이 비어 있으면 가상 칸이 NULL = "확인 안 됨"
+CREATE TABLE IF NOT EXISTS crosswalk (
+    id             BIGINT       NOT NULL AUTO_INCREMENT,
+    kind           VARCHAR(50)  NULL COMMENT '횡단보도 종류 코드 (01, 02, 03, 04, 99)',
+    source         VARCHAR(20)  NOT NULL,
+    source_id      VARCHAR(64)  NOT NULL,
+    name           VARCHAR(200) NULL COMMENT '도로명',
+    address        VARCHAR(300) NULL,
+    sido_code      CHAR(2)      NULL,
+    sgg_code       CHAR(5)      NULL,
+    lon            DOUBLE       NOT NULL,
+    lat            DOUBLE       NOT NULL,
+    geom           POINT        NOT NULL SRID 0,
+    attrs          JSON         NULL,
+    curb_lowered   TINYINT      AS (CASE attrs ->> '$.ftpthLowerYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '보도턱 낮춤 1, 아님 0, 모름 NULL',
+    braille_block  TINYINT      AS (CASE attrs ->> '$.brllBlckYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '점자블록 있음 1, 없음 0, 모름 NULL',
+    sound_signal   TINYINT      AS (CASE attrs ->> '$.sondSgngnrYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '음향신호기 있음 1, 없음 0, 모름 NULL',
+    traffic_light  TINYINT      AS (CASE attrs ->> '$.tfclghtYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '보행자 신호등 있음 1, 없음 0, 모름 NULL',
+    raised         TINYINT      AS (CASE attrs ->> '$.highlandYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '고원식(턱 없이 높인 횡단보도) 1, 아님 0',
+    spot_light     TINYINT      AS (CASE attrs ->> '$.cnctrLghtFcltyYn' WHEN 'Y' THEN 1 WHEN 'N' THEN 0 END) VIRTUAL COMMENT '집중조명 있음 1, 없음 0, 모름 NULL',
+    green_seconds  VARCHAR(10)  AS (attrs ->> '$.greenSgngnrTime') VIRTUAL COMMENT '보행 신호 시간(초)',
+    lanes          VARCHAR(10)  AS (attrs ->> '$.cartrkCo') VIRTUAL COMMENT '차로 수',
+    length_m       VARCHAR(10)  AS (attrs ->> '$.et') VIRTUAL COMMENT '횡단 길이 m',
+    manager        VARCHAR(100) AS (attrs ->> '$.institutionNm') VIRTUAL COMMENT '관리 기관',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_crosswalk_source (source, source_id),
+    KEY idx_crosswalk_kind (kind),
+    KEY idx_crosswalk_address (address(20)),
+    SPATIAL INDEX sx_crosswalk_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '횡단보도';
+
+-- 어린이보호구역: 안전 시설이 아니라 구역 표시용이라 facility_all 뷰에는 넣지 않는다.
+-- kind = 시설 종류 (초등학교, 유치원, 어린이집, 특수학교, 학원, 대안학교)
+-- 지정여부·CCTV 칸은 대부분 비어 있어서(광주 429곳 중 2곳만 값이 있음) 목록에 있는 곳을 모두 보호구역으로 본다.
+CREATE TABLE IF NOT EXISTS child_protection_zone (
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    kind        VARCHAR(50)  NULL COMMENT '시설 종류 (초등학교, 유치원, 어린이집 등)',
+    source      VARCHAR(20)  NOT NULL,
+    source_id   VARCHAR(64)  NOT NULL,
+    name        VARCHAR(200) NULL COMMENT '대상 시설 이름',
+    address     VARCHAR(300) NULL,
+    sido_code   CHAR(2)      NULL,
+    sgg_code    CHAR(5)      NULL,
+    lon         DOUBLE       NOT NULL,
+    lat         DOUBLE       NOT NULL,
+    geom        POINT        NOT NULL SRID 0,
+    attrs       JSON         NULL,
+    road_width  VARCHAR(20)  AS (attrs ->> '$."보호구역도로폭"') VIRTUAL COMMENT '보호구역 도로 폭 m (원문, 예: 8, 5~12)',
+    cctv_count  VARCHAR(10)  AS (attrs ->> '$."CCTV설치대수"') VIRTUAL COMMENT 'CCTV 대수 (대부분 비어 있음)',
+    designated  CHAR(1)      AS (attrs ->> '$."어린이보호구역지정여부"') VIRTUAL COMMENT '지정 여부 Y/N (대부분 비어 있음)',
+    police      VARCHAR(50)  AS (attrs ->> '$."관할경찰서명"') VIRTUAL COMMENT '관할 경찰서',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_child_protection_zone_source (source, source_id),
+    KEY idx_child_protection_zone_kind (kind),
+    KEY idx_child_protection_zone_name (name(20)),
+    SPATIAL INDEX sx_child_protection_zone_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '어린이보호구역 (대상 시설 위치)';
+
+-- ---------------------------------------------------------------- 도로망 (OSM)
+
+-- 점: 길이 만나거나 끝나는 곳, 그리고 횡단보도·엘리베이터처럼 표시가 붙은 점. id는 OSM 노드 번호
+CREATE TABLE IF NOT EXISTS road_node (
+    id        BIGINT      NOT NULL COMMENT 'OSM 노드 번호',
+    lon       DOUBLE      NOT NULL,
+    lat       DOUBLE      NOT NULL,
+    geom      POINT       NOT NULL SRID 0,
+    tags      JSON        NULL COMMENT 'OSM 태그 (표시가 있는 점만)',
+    highway   VARCHAR(30) AS (tags ->> '$.highway') VIRTUAL COMMENT 'crossing, traffic_signals, elevator 등',
+    crossing  VARCHAR(30) AS (tags ->> '$.crossing') VIRTUAL COMMENT 'traffic_signals, uncontrolled, marked, unmarked 등. NULL = 모름',
+    kerb      VARCHAR(20) AS (tags ->> '$.kerb') VIRTUAL COMMENT '보도턱 (lowered, raised, flush 등)',
+    PRIMARY KEY (id),
+    KEY idx_road_node_highway (highway),
+    SPATIAL INDEX sx_road_node_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '도로망 점 (OSM)';
+
+-- 길: 두 점 사이의 한 구간. OSM 길(way)을 교차점과 표시가 있는 점에서 잘랐다. 걷는 방향은 양쪽 모두
+CREATE TABLE IF NOT EXISTS road_edge (
+    id        BIGINT       NOT NULL AUTO_INCREMENT,
+    way_id    BIGINT       NOT NULL COMMENT 'OSM 길 번호',
+    seq       INT          NOT NULL COMMENT '그 길 안에서 몇 번째 구간인지 (0부터)',
+    from_node BIGINT       NOT NULL,
+    to_node   BIGINT       NOT NULL,
+    length_m  DOUBLE       NOT NULL,
+    highway   VARCHAR(30)  NOT NULL COMMENT 'OSM 길 종류 (footway, residential, primary, steps 등)',
+    name      VARCHAR(200) NULL,
+    footway   VARCHAR(30)  NULL COMMENT 'sidewalk(차도 옆 인도), crossing(횡단 구간) 등',
+    steps     TINYINT      NOT NULL DEFAULT 0 COMMENT '계단이면 1',
+    covered   TINYINT      NOT NULL DEFAULT 0 COMMENT '덮인 길(covered·tunnel·indoor)이면 1',
+    bridge    TINYINT      NOT NULL DEFAULT 0 COMMENT '다리·육교 위면 1',
+    surface   VARCHAR(30)  NULL COMMENT '바닥 재질 (asphalt, paving_stones 등)',
+    tags      JSON         NULL COMMENT '그 밖의 OSM 태그',
+    geom      LINESTRING   NOT NULL SRID 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_road_edge_way_seq (way_id, seq),
+    KEY idx_road_edge_from (from_node),
+    KEY idx_road_edge_to (to_node),
+    KEY idx_road_edge_highway (highway),
+    SPATIAL INDEX sx_road_edge_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '도로망 길 구간 (OSM)';
+
+-- ---------------------------------------------------------------- 행정구역 경계 (SGIS)
+
+CREATE TABLE IF NOT EXISTS admin_area (
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    level      VARCHAR(10)  NOT NULL COMMENT 'sido, sigungu, dong',
+    code       VARCHAR(10)  NOT NULL COMMENT 'SGIS 행정구역 코드 (시도 2자리, 시군구 5자리, 행정동 8자리)',
+    name       VARCHAR(50)  NOT NULL,
+    full_name  VARCHAR(100) NULL COMMENT '예: 광주광역시 동구 충장동',
+    base_date  CHAR(8)      NOT NULL COMMENT '경계 기준일 (예: 20250630)',
+    geom       MULTIPOLYGON NOT NULL SRID 0 COMMENT '경도·위도 (WGS84로 바꾼 값)',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_admin_area (level, code),
+    KEY idx_admin_area_name (name),
+    SPATIAL INDEX sx_admin_area_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '행정구역 경계 (SGIS)';
+
+-- ---------------------------------------------------------------- 길별 감점 원값
+
+CREATE TABLE IF NOT EXISTS edge_stat (
+    edge_id        BIGINT      NOT NULL COMMENT 'road_edge.id',
+    light_n        SMALLINT    NOT NULL COMMENT '길에서 30m 안 가로등·보안등 수 (같은 종류 10m 안 중복은 하나)',
+    light_cover_m  DOUBLE      NOT NULL COMMENT '길이 중 등 30m 안에 드는 길이(m). 5m 간격 점으로 잼',
+    cctv_n         SMALLINT    NOT NULL COMMENT '길에서 50m 안 CCTV 위치 수 (10m 안 중복은 하나)',
+    cctv_cover_m   DOUBLE      NOT NULL COMMENT '길이 중 CCTV 50m 안에 드는 길이(m)',
+    help_m         DOUBLE      NULL COMMENT '길 가운데에서 가장 가까운 도움 지점(경찰·편의점·지킴이집·비상벨)까지 m. 2km 넘으면 NULL',
+    guard_m        DOUBLE      NULL COMMENT '가장 가까운 아동안전지킴이집까지 m. 2km 넘으면 NULL',
+    rest_m         DOUBLE      NULL COMMENT '가장 가까운 쉼 곳(무더위·한파쉼터·공중화장실)까지 m. 2km 넘으면 NULL',
+    heat_m         DOUBLE      NULL COMMENT '가장 가까운 무더위쉼터까지 m. 2km 넘으면 NULL',
+    cold_m         DOUBLE      NULL COMMENT '가장 가까운 한파쉼터까지 m. 2km 넘으면 NULL',
+    help_n_1km     SMALLINT    NOT NULL COMMENT '길 가운데 반경 1km 안 도움 지점 수 (지역 기준 A5)',
+    guard_n_1km    SMALLINT    NOT NULL COMMENT '반경 1km 안 지킴이집 수',
+    rest_n_1km     SMALLINT    NOT NULL COMMENT '반경 1km 안 쉼 곳 수',
+    heat_n_1km     SMALLINT    NOT NULL DEFAULT 0 COMMENT '반경 1km 안 무더위쉼터 수',
+    cold_n_1km     SMALLINT    NOT NULL DEFAULT 0 COMMENT '반경 1km 안 한파쉼터 수',
+    xing_signal    TINYINT     NOT NULL COMMENT '이 길에서 건너는 횡단보도 중 신호 있음',
+    xing_nosignal  TINYINT     NOT NULL COMMENT '신호 없음',
+    xing_unknown   TINYINT     NOT NULL COMMENT '신호 모름',
+    curb           TINYINT     NULL COMMENT '건너는 횡단보도 중 가장 나쁜 보도턱: 1 안 낮춤, 0 낮춤, NULL 모름',
+    footbridge_ok  TINYINT     NULL COMMENT '육교 위 길이면 휠체어 가능 1, 불가 0. 육교가 아니거나 모르면 NULL',
+    road_class     VARCHAR(30) NULL COMMENT '큰 차도 판정용 길 종류. 차도는 자기 종류, 차도 옆 인도는 15m 안 가장 큰 차도 종류',
+    sgg_cd         VARCHAR(10) NULL COMMENT '길 시작점이 있는 시군구 (SGIS 코드, admin_area)',
+    dong_cd        VARCHAR(10) NULL COMMENT '길 시작점이 있는 행정동 (SGIS 코드)',
+    data_gap       SMALLINT    NULL COMMENT '데이터 부족 비트 (1 밝기, 2 CCTV, 4 도움, 8 지킴이집, 16 쉼 곳, 32 횡단 신호, 64 보도턱). NULL = 아직 판정 안 함',
+    computed_at    DATETIME    NOT NULL,
+    PRIMARY KEY (edge_id),
+    KEY idx_edge_stat_dong (dong_cd)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '길별 감점 원값';
+
+-- ---------------------------------------------------------------- 시군구별 시설 밀도 (데이터 부족 판정)
+
+CREATE TABLE IF NOT EXISTS region_density (
+    sgg_cd      VARCHAR(10) NOT NULL COMMENT 'SGIS 시군구 코드 (admin_area.code)',
+    kind        VARCHAR(10) NOT NULL COMMENT 'light, cctv, help, guard, rest (data_gap 비트 1, 2, 4, 8, 16)',
+    n           INT         NOT NULL COMMENT '시군구 경계 안 시설 수',
+    area_km2    DOUBLE      NOT NULL COMMENT '시군구 넓이(km², 위도 보정 근사)',
+    density     DOUBLE      NOT NULL COMMENT 'n ÷ area_km2',
+    ratio       DOUBLE      NULL COMMENT 'density ÷ 전국 시군구 중간값',
+    gap         TINYINT     NOT NULL COMMENT 'ratio가 0.1 아래면 1 (데이터 부족)',
+    computed_at DATETIME    NOT NULL,
+    PRIMARY KEY (sgg_cd, kind)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '시군구별 시설 밀도와 데이터 부족 판정';
 
 -- ---------------------------------------------------------------- 전체 보기
 

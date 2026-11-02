@@ -17,7 +17,13 @@ public enum FacilityTable {
     CHILD_SAFETY_HOUSE("child_safety_house", "아동안전지킴이집", null),
     HEAT_SHELTER("heat_shelter", "무더위쉼터", null),
     COLD_SHELTER("cold_shelter", "한파쉼터", null),
-    PUBLIC_TOILET("public_toilet", "공중화장실", null);
+    PUBLIC_TOILET("public_toilet", "공중화장실", null),
+    /** 안전 시설이 아니라 길 위 구조물. 휠체어 모드에서 못 지나가는 육교를 빼는 데 쓴다 */
+    FOOTBRIDGE("footbridge", "육교", null),
+    /** 길 위 구조물. 보도턱 낮춤·점자블록·음향신호기 등으로 장애인 모드에서 쓴다 */
+    CROSSWALK("crosswalk", "횡단보도", null),
+    /** 구역 표시용. 어린이 모드 지도에 대상 시설 둘레 300m를 그린다 (FR-48) */
+    CHILD_PROTECTION_ZONE("child_protection_zone", "어린이보호구역", null);
 
     private final String table;
     private final String title;
