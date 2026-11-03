@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +16,7 @@ import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteRequest.Place;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.facility.Poi;
+import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge.EdgePenalty;
 import com.saferoute.route.engine.graph.RoadGraph;
 
@@ -120,5 +122,16 @@ class ModeRulesTests {
         assertThat(north(r)).isTrue();
         assertThat(r.routes()).hasSize(1);
         assertThat(r.explanation().text()).isEqualTo("휠체어로 지날 수 있는 길 중 가장 짧은 길입니다");
+    }
+
+    @Test
+    void wheelchairUsesStairsOnlyWithRamp() {
+        RoadGraph stairs = RouteFinderTests.diamond(0.0004, RouteFinderTests.STAIRS);
+        assertThat(north(route(stairs, List.of(), at(12), "wheelchair", "auto"))).isTrue();
+
+        // 경사로가 있는 계단: 휠체어는 지름길, 노인은 여전히 계단으로 보고 피한다
+        RoadGraph ramp = RouteFinderTests.diamond(0.0004, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), false, true));
+        assertThat(north(route(ramp, List.of(), at(12), "wheelchair", "auto"))).isFalse();
+        assertThat(north(route(ramp, List.of(), at(12), "senior", "auto"))).isTrue();
     }
 }

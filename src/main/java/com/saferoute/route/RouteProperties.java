@@ -97,9 +97,12 @@ public record RouteProperties(
             return isNight ? night : day;
         }
 
-        /** 이 사람이 지날 수 있는 길인지. 제외 성질 중 하나라도 1이면 못 지난다 */
+        /** 이 사람이 지날 수 있는 길인지. 제외 성질 중 하나라도 1이면 못 지난다. 휠체어 경사로가 있는 계단은 지난다 */
         public boolean passable(RoadEdge e) {
             for (Penalty p : exclude) {
+                if (p == Penalty.STAIRS && e.penalty().wheelchairRamp()) {
+                    continue;
+                }
                 if (e.penalty().get(p) >= 1.0) {
                     return false;
                 }
