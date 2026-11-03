@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Set;
 
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Component;
 
 import com.saferoute.ingest.FacilityTable;
 
@@ -15,10 +14,10 @@ import com.saferoute.route.engine.facility.Facility;
 import com.saferoute.route.engine.geo.BBox;
 
 /**
- * 종류별 시설 표에서 범위 안 시설을 읽는다.
+ * 종류별 원본 시설 표에서 범위 안 시설을 읽는다. 실험 도구(ChosunNetworkBuilder·DecisionTests) 전용이다.
+ * 서버는 정제 표 poi를 읽는다 ({@link MysqlPoiSource}).
  * facility_all 뷰 대신 표마다 MBRContains로 물어 공간 인덱스를 타게 한다 (schema.sql 주석).
  */
-@Component
 public class MysqlFacilitySource implements FacilitySource {
 
     private final JdbcTemplate jdbc;

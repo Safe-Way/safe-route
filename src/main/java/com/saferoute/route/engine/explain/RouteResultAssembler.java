@@ -1,6 +1,5 @@
 package com.saferoute.route.engine.explain;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -12,12 +11,12 @@ import org.springframework.stereotype.Component;
 
 import com.saferoute.route.RouteProperties;
 import com.saferoute.route.api.RouteResult;
-import com.saferoute.route.data.FacilitySource;
 import com.saferoute.route.engine.condition.Conditions;
-import com.saferoute.route.engine.facility.Facility;
-import com.saferoute.route.engine.facility.FacilityCounter.Counts;
 import com.saferoute.route.engine.facility.FacilityCounter;
+import com.saferoute.route.engine.facility.FacilityCounter.Counts;
 import com.saferoute.route.engine.facility.FacilityGroup;
+import com.saferoute.route.engine.facility.Nearby;
+import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.search.RoadPath;
 import com.saferoute.route.engine.search.RouteFinder;
@@ -31,12 +30,10 @@ public class RouteResultAssembler {
     private static final String NO_DATA_MESSAGE = "이 지역은 안전 데이터가 부족합니다";
 
     private final FacilityCounter counter;
-    private final FacilitySource facilities;
     private final RouteProperties props;
 
-    public RouteResultAssembler(FacilityCounter counter, FacilitySource facilities, RouteProperties props) {
+    public RouteResultAssembler(FacilityCounter counter, RouteProperties props) {
         this.counter = counter;
-        this.facilities = facilities;
         this.props = props;
     }
 
@@ -45,16 +42,17 @@ public class RouteResultAssembler {
      * @param phase      지금 쓰는 기준 (낮 또는 밤). 설명 문장에 쓴다
      * @param start, end 요청한 출발·도착 {경도, 위도}
      * @param snapM      출발·도착에서 가장 가까운 길 노드까지 거리의 합
+     * @param nearby     이 요청에서 읽은 주변 시설 (점수 계산과 같은 목록)
      */
     public RouteResult assemble(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
-            RouteFinder.Found found, double[] start, double[] end, double snapM) {
+            RouteFinder.Found found, double[] start, double[] end, double snapM, Nearby nearby) {
         boolean same = found.safe().sameAs(found.shortest());
         List<double[]> shortLine = found.shortest().lineFrom(start, end);
         List<double[]> safeLine = found.safe().lineFrom(start, end);
         int shortM = (int) Math.round(found.shortest().lengthM() + snapM);
         int safeM = (int) Math.round(found.safe().lengthM() + snapM);
 
-        List<Counts> counts = counter.countAlong(List.of(shortLine, safeLine));
+        List<Counts> counts = counter.countAlong(List.of(shortLine, safeLine), nearby.pois());
         Counts shortCounts = counts.get(0);
         Counts safeCounts = counts.get(1);
 
@@ -75,7 +73,7 @@ public class RouteResultAssembler {
                 routes,
                 new RouteResult.Explanation(text, extraM, extraMin, FacilityGroup.keyed(diff)),
                 marks(same ? null : shortCounts, safeCounts),
-                dataQuality(same ? List.of(found.safe()) : List.of(found.shortest(), found.safe())));
+                dataQuality(same ? List.of(found.safe()) : List.of(found.shortest(), found.safe()), nearby));
     }
 
     private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts) {
@@ -84,21 +82,43 @@ public class RouteResultAssembler {
 
     /** 지도 아이콘. 도움 지점·비상벨·CCTV·등 순서로 최대 개수까지. shortCounts가 null이면 경로가 하나 */
     private List<RouteResult.FacilityMark> marks(Counts shortCounts, Counts safeCounts) {
-        Set<Facility> onShort = shortCounts == null ? Set.of() : new HashSet<>(shortCounts.passed());
-        Set<Facility> onSafe = new HashSet<>(safeCounts.passed());
-        Set<Facility> all = new HashSet<>(onShort);
+        Set<Poi> onShort = shortCounts == null ? Set.of() : new HashSet<>(shortCounts.passed());
+        Set<Poi> onSafe = new HashSet<>(safeCounts.passed());
+        Set<Poi> all = new HashSet<>(onShort);
         all.addAll(onSafe);
         return all.stream()
-                .sorted(Comparator.comparing((Facility f) -> FacilityGroup.of(f.type()).markOrder())
-                        .thenComparing(Facility::id))
+                .sorted(Comparator.comparingInt((Poi p) -> markOrder(p.kind())).thenComparingLong(Poi::id))
                 .limit(props.maxFacilities())
-                .map(f -> new RouteResult.FacilityMark(f.type().name(), f.lat(), f.lon(),
-                        onShort.contains(f) && onSafe.contains(f) ? "both" : onSafe.contains(f) ? "safe" : "shortest"))
+                .map(p -> new RouteResult.FacilityMark(type(p), p.lat(), p.lon(),
+                        onShort.contains(p) && onSafe.contains(p) ? "both" : onSafe.contains(p) ? "safe" : "shortest"))
                 .toList();
     }
 
+    /** 지도 아이콘이 많을 때 먼저 남기는 순서. 등은 너무 많아서 맨 뒤 */
+    static int markOrder(String kind) {
+        return switch (kind) {
+            case "police", "store", "guard_house" -> 0;
+            case "bell" -> 1;
+            case "cctv" -> 2;
+            default -> 3;
+        };
+    }
+
+    /** 응답의 type: 시설 표 이름 (poi 종류에서 바꿈. 등은 poi의 세부 종류로 가로등·보안등을 나눈다) */
+    static String type(Poi p) {
+        return switch (p.kind()) {
+            case "light" -> "가로등".equals(p.sub()) ? "STREETLIGHT" : "SECURITY_LIGHT";
+            case "cctv" -> "CCTV";
+            case "bell" -> "EMERGENCY_BELL";
+            case "police" -> "POLICE";
+            case "store" -> "CONVENIENCE_STORE";
+            case "guard_house" -> "CHILD_SAFETY_HOUSE";
+            default -> p.kind().toUpperCase();
+        };
+    }
+
     /** 데이터가 빈 지역을 지나는 길이 비율로 상태를 정한다. 빈 곳을 안전하다고 하지 않는다 (NFR-04) */
-    private RouteResult.DataQuality dataQuality(List<RoadPath> paths) {
+    private RouteResult.DataQuality dataQuality(List<RoadPath> paths, Nearby nearby) {
         Set<RoadEdge> edges = new HashSet<>();
         paths.forEach(p -> edges.addAll(p.edges()));
         double total = 0;
@@ -110,8 +130,7 @@ public class RouteResultAssembler {
             }
         }
         String status = gap == 0 ? "OK" : gap >= total ? "NO_DATA" : "PARTIAL";
-        LocalDate date = facilities.dataDate();
         return new RouteResult.DataQuality(status, gap == 0 ? null : NO_DATA_MESSAGE,
-                date == null ? null : date.toString());
+                nearby.dataDate() == null ? null : nearby.dataDate().toString());
     }
 }

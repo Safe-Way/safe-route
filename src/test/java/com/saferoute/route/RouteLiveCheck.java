@@ -17,7 +17,6 @@ import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteRequest.Place;
 import com.saferoute.route.api.RouteResult;
-import com.saferoute.route.data.MysqlFacilitySource;
 import com.saferoute.route.data.MysqlPoiSource;
 import com.saferoute.route.data.MysqlRoadGraphSource;
 import com.saferoute.route.engine.explain.RouteResultAssembler;
@@ -48,15 +47,15 @@ class RouteLiveCheck {
         JdbcTemplate db = new JdbcTemplate(new SingleConnectionDataSource(env.get("DB_URL"), env.get("DB_USERNAME"),
                 env.get("DB_PASSWORD"), true));
         RouteProperties props = TestRoutes.props();
-        MysqlFacilitySource facilities = new MysqlFacilitySource(db);
         MysqlRoadGraphSource roads = new MysqlRoadGraphSource(db);
-        RouteScorer scorer = new RouteScorer(new MysqlPoiSource(db), props);
-        RouteResultAssembler assembler = new RouteResultAssembler(new FacilityCounter(facilities, props), facilities, props);
+        MysqlPoiSource pois = new MysqlPoiSource(db);
+        RouteScorer scorer = new RouteScorer(props);
+        RouteResultAssembler assembler = new RouteResultAssembler(new FacilityCounter(props), props);
 
         Out o = new Out("팀 DB 경로 확인 (2026-11-04 수요일)");
         for (int hour : new int[] {12, 21}) {
             ZonedDateTime now = ZonedDateTime.of(2026, 11, 4, hour, 0, 0, 0, ZoneId.of("Asia/Seoul"));
-            RouteService service = new RouteService(roads, new NightJudge(), scorer, assembler, props,
+            RouteService service = new RouteService(roads, pois, new NightJudge(), scorer, assembler, props,
                     Clock.fixed(now.toInstant(), now.getZone()));
             o.line("");
             o.line("■ %d시", hour);

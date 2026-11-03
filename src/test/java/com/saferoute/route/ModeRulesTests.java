@@ -31,7 +31,7 @@ class ModeRulesTests {
     static RouteResult route(RoadGraph g, List<Poi> pois, ZonedDateTime now, String mode, String night,
             String... overrides) {
         RouteProperties p = props(overrides);
-        RouteService s = TestRoutes.service(g, RouteServiceTests.facilities(List.of()), TestRoutes.pois(pois), now, p);
+        RouteService s = TestRoutes.service(g, TestRoutes.pois(pois), now, p);
         return s.route(new RouteRequest(new Place(LAT, 126.93000, "출발"), new Place(LAT, 126.93220, "도착"), night, mode));
     }
 

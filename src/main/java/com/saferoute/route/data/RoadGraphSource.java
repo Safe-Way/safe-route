@@ -4,7 +4,7 @@ import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.graph.RoadGraph;
 
 /**
- * 도로망을 읽는 곳. A파트의 road_node·road_edge·edge_penalty 표가 생기면 MySQL 구현을 붙인다.
+ * 도로망을 읽는 곳. 서버는 A파트의 road_node·road_edge·edge_stat 표를 읽는다 ({@link MysqlRoadGraphSource}).
  */
 public interface RoadGraphSource {
 

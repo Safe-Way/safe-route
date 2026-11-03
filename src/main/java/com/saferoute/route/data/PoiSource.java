@@ -7,7 +7,7 @@ import java.util.Set;
 import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.geo.BBox;
 
-/** 길 점수에 쓰는 시설(poi)과 공휴일을 읽는 곳 */
+/** 경로에 쓰는 시설(poi)과 공휴일을 읽는 곳 */
 public interface PoiSource {
 
     /** 범위 안 시설 중 kinds에 든 종류 */
@@ -15,4 +15,7 @@ public interface PoiSource {
 
     /** 공휴일 (주말처럼 본다) */
     Set<LocalDate> holidays();
+
+    /** 시설 데이터를 마지막으로 적재한 날. 모르면 null */
+    LocalDate dataDate();
 }

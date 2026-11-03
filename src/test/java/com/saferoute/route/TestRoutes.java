@@ -122,15 +122,14 @@ final class TestRoutes {
         return service(graph, facilities, ZonedDateTime.of(2026, 10, 30, hour, 0, 0, 0, ZoneId.of("Asia/Seoul")), props);
     }
 
-    /** 시계를 now로 고정한 RouteService. 경로 점수용 시설(poi)은 facilities를 바꿔 쓴다 */
+    /** 시계를 now로 고정한 RouteService. 시설(poi)은 facilities를 바꿔 쓴다 */
     static RouteService service(RoadGraph graph, FacilitySource facilities, ZonedDateTime now, RouteProperties props) {
-        return service(graph, facilities, pois(facilities), now, props);
+        return service(graph, pois(facilities), now, props);
     }
 
-    static RouteService service(RoadGraph graph, FacilitySource facilities, PoiSource pois, ZonedDateTime now,
-            RouteProperties props) {
-        return new RouteService(new InMemoryRoadGraphSource(graph), new NightJudge(), new RouteScorer(pois, props),
-                new RouteResultAssembler(new FacilityCounter(facilities, props), facilities, props),
+    static RouteService service(RoadGraph graph, PoiSource pois, ZonedDateTime now, RouteProperties props) {
+        return new RouteService(new InMemoryRoadGraphSource(graph), pois, new NightJudge(), new RouteScorer(props),
+                new RouteResultAssembler(new FacilityCounter(props), props),
                 props, Clock.fixed(now.toInstant(), now.getZone()));
     }
 
@@ -151,6 +150,11 @@ final class TestRoutes {
             public Set<LocalDate> holidays() {
                 return Set.of();
             }
+
+            @Override
+            public LocalDate dataDate() {
+                return LocalDate.of(2026, 10, 28);
+            }
         };
     }
 
@@ -170,26 +174,37 @@ final class TestRoutes {
             public Set<LocalDate> holidays() {
                 return Set.of();
             }
+
+            @Override
+            public LocalDate dataDate() {
+                return facilities.dataDate();
+            }
         };
     }
 
     static Poi toPoi(Facility f) {
         return switch (f.type()) {
-            case STREETLIGHT, SECURITY_LIGHT -> Poi.at("light", f.lon(), f.lat());
-            case CCTV -> Poi.at("cctv", f.lon(), f.lat());
-            case CONVENIENCE_STORE -> Poi.at("store", f.lon(), f.lat());
-            case CHILD_SAFETY_HOUSE -> Poi.at("guard_house", f.lon(), f.lat());
+            case STREETLIGHT, SECURITY_LIGHT -> plain("light", f);
+            case CCTV -> plain("cctv", f);
+            case CONVENIENCE_STORE -> plain("store", f);
+            case CHILD_SAFETY_HOUSE -> plain("guard_house", f);
             case EMERGENCY_BELL -> open24("bell", "가로변", 0, f);
             case POLICE -> open24("police", "지구대", null, f);
             case PUBLIC_TOILET -> open24("toilet", "공중화장실", null, f);
             case HEAT_SHELTER, COLD_SHELTER -> new Poi("shelter", "쉼터", null, f.lon(), f.lat(),
-                    null, null, null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null, null, null, f.id(), f.count());
             default -> null;
         };
     }
 
+    static Poi plain(String kind, Facility f) {
+        return new Poi(kind, null, null, f.lon(), f.lat(), null, null, null, null, null, null, null, null, null,
+                f.id(), f.count());
+    }
+
     static Poi open24(String kind, String sub, Integer indoor, Facility f) {
-        return new Poi(kind, sub, indoor, f.lon(), f.lat(), 0, 24 * 60, "매일", null, null, null, null, null, null);
+        return new Poi(kind, sub, indoor, f.lon(), f.lat(), 0, 24 * 60, "매일", null, null, null, null, null, null,
+                f.id(), f.count());
     }
 
     /**

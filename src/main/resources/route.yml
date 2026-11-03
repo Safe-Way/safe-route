@@ -19,8 +19,9 @@
 # 모르는 값(보도턱·신호 등)은 감점하지 않고 "확인 안 됨"으로만 알린다.
 
 route:
-  # 도로망을 어디서 읽을지. none: 도로망 없음(모든 요청 OUT_OF_AREA), mysql: DB의 road_node·road_edge·edge_stat
-  road-source: none
+  # 도로망을 어디서 읽을지. mysql: DB의 road_node·road_edge·edge_stat (A파트 적재, 문화전당 반경 2km)
+  # none: 도로망 없음(모든 요청 OUT_OF_AREA). DB 없이 서버만 띄울 때 실행 인자로 --route.road-source=none
+  road-source: mysql
 
   # 조명·CCTV 커버율 ("길 따라": 시설을 가장 가까운 길 하나에 붙이고, 그곳에서 길을 따라 퍼진다)
   coverage:
@@ -30,6 +31,7 @@ route:
     sample-m: 10         # 길을 이 간격으로 나눠 잰다
 
   # 누가 걷는지에 따라 바뀌는 기준. 요청의 mode로 고른다. 없으면 adult
+  # mode 이름은 adult·child·senior·wheelchair로 통일한다 (2026-11-03 결정. 앱·요구사항 문서도 이 이름으로 맞춘다)
   #   max-detour     안전 경로가 최단 경로의 몇 배까지 돌 수 있는지. 0이면 한도 없음
   #   night-lead-min 일몰 몇 분 전부터 밤으로 볼지
   #   exclude        이 성질이 확인된 길은 아예 뺀다 (stairs 계단, curb 확인된 턱, footbridge 못 지나는 육교)
@@ -81,8 +83,7 @@ route:
     cctv: 50
     bell: 50         # 비상벨
     help: 50         # 경찰·편의점·아동안전지킴이집
-  # 같은 종류 시설이 이 거리 안에 겹치면 하나로 센다 (5.3, 출처가 달라 중복된 등·CCTV)
-  dedupe-m: 10
+  # 시설은 poi(출처 중복을 10m 안에서 이미 합친 표)에서 읽으므로 서버에서 다시 합치지 않는다
   # 지도에 보낼 시설 아이콘 최대 개수
   max-facilities: 300
 

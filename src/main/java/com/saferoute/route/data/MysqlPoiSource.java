@@ -2,6 +2,7 @@ package com.saferoute.route.data;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.HashSet;
@@ -15,14 +16,16 @@ import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.geo.BBox;
 
 /**
- * A파트의 poi 표(광주 정제 시설)와 holiday 표를 읽는다.
+ * A파트의 poi 표(광주 정제 시설), holiday 표, data_source 표를 읽는다.
  * 시각은 TIME_TO_SEC로 분 단위로 읽는다 (24:00은 1440으로 들어온다).
+ * 공휴일과 데이터 기준일은 처음 한 번 읽어 둔다 (적재가 바뀌면 서버를 다시 켠다).
  */
 @Component
 public class MysqlPoiSource implements PoiSource {
 
     private final JdbcTemplate jdbc;
     private volatile Set<LocalDate> holidays;
+    private volatile LocalDate dataDate;
 
     public MysqlPoiSource(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -40,7 +43,7 @@ public class MysqlPoiSource implements PoiSource {
         for (String k : kinds) {
             args[i++] = k;
         }
-        return jdbc.query("SELECT kind, sub, indoor, lon, lat,"
+        return jdbc.query("SELECT id, kind, sub, indoor, lon, lat, cnt,"
                 + " TIME_TO_SEC(open_from) DIV 60 AS open_from, TIME_TO_SEC(open_to) DIV 60 AS open_to, open_days,"
                 + " season_from, season_to,"
                 + " TIME_TO_SEC(biz_from) DIV 60 AS biz_from, TIME_TO_SEC(biz_to) DIV 60 AS biz_to, biz_days, biz_sure"
@@ -50,7 +53,8 @@ public class MysqlPoiSource implements PoiSource {
                         integer(rs, "open_from"), integer(rs, "open_to"), rs.getString("open_days"),
                         rs.getString("season_from"), rs.getString("season_to"),
                         integer(rs, "biz_from"), integer(rs, "biz_to"), rs.getString("biz_days"),
-                        rs.getObject("biz_sure") == null ? null : rs.getInt("biz_sure") == 1),
+                        rs.getObject("biz_sure") == null ? null : rs.getInt("biz_sure") == 1,
+                        rs.getLong("id"), Math.max(1, rs.getInt("cnt"))),
                 args);
     }
 
@@ -62,6 +66,17 @@ public class MysqlPoiSource implements PoiSource {
             holidays = h;
         }
         return h;
+    }
+
+    @Override
+    public LocalDate dataDate() {
+        LocalDate d = dataDate;
+        if (d == null) {
+            Timestamp at = jdbc.queryForObject("SELECT MAX(loaded_at) FROM data_source", Timestamp.class);
+            d = at == null ? null : at.toLocalDateTime().toLocalDate();
+            dataDate = d;
+        }
+        return d;
     }
 
     private static Integer integer(ResultSet rs, String col) throws SQLException {

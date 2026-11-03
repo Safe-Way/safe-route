@@ -28,7 +28,7 @@ import com.saferoute.route.engine.graph.RoadGraph;
  *   <li>데이터 부족: edge_stat.data_gap 비트 중 시설 비트(1 밝기, 2 CCTV, 4 도움 지점, 8 지킴이집, 16 쉼 곳).
  *       감점에는 쓰지 않고 "확인 안 됨" 표시에만 쓴다</li>
  * </ul>
- * route.yml의 route.road-source가 mysql일 때만 쓴다 (기본은 none: {@link NoRoadGraphSource}).
+ * route.yml의 route.road-source가 mysql일 때 쓴다 (기본값). none이면 {@link NoRoadGraphSource}.
  */
 @Component
 @ConditionalOnProperty(name = "route.road-source", havingValue = "mysql")
