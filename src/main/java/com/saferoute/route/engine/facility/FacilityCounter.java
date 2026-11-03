@@ -4,82 +4,50 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.stereotype.Component;
 
-import com.saferoute.ingest.FacilityTable;
-
 import com.saferoute.route.RouteProperties;
-import com.saferoute.route.data.FacilitySource;
-import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.geo.Geo;
 
 /**
  * 경로 선에서 반경 안에 있는 시설을 센다 (요구사항 6.3 차이 설명, 결정 12).
- * 출처가 달라 같은 시설이 두 번 들어 있는 경우가 있어, 같은 종류가 dedupe-m 안에 겹치면 하나로 센다 (5.3).
+ * 시설은 poi(출처 중복을 이미 합친 표)에서 읽은 목록이라 여기서 다시 합치지 않는다.
+ * 지도 아이콘용으로 화장실·쉼터도 도움 지점 반경 안이면 함께 모은다 (세지는 않음, 결정 40).
  */
 @Component
 public class FacilityCounter {
 
-    private final FacilitySource source;
+    /** 세지는 않고 지도 아이콘에만 넣는 종류 */
+    static final Set<String> MARK_ONLY = Set.of("toilet", "shelter");
+
     private final RouteProperties.CountRadius radius;
-    private final double dedupeM;
 
-    public FacilityCounter(FacilitySource source, RouteProperties props) {
-        this.source = source;
+    public FacilityCounter(RouteProperties props) {
         this.radius = props.countRadiusM();
-        this.dedupeM = props.dedupeM();
     }
 
-    /** 여러 경로 선 각각이 지나는 시설 수. 주변 시설은 한 번만 읽고 중복을 합친 뒤 센다 */
-    public List<Counts> countAlong(List<List<double[]>> lines) {
-        double max = maxRadius();
-        List<double[]> all = lines.stream().flatMap(List::stream).toList();
-        List<Facility> near = new ArrayList<>();
-        for (Facility f : source.within(BBox.around(all, max), FacilityGroup.allTables())) {
-            if (lines.stream().anyMatch(line -> Geo.distanceToLine(f.point(), line) <= max)) {
-                near.add(f);
-            }
-        }
-        List<Facility> unique = dedupe(near);
-        return lines.stream().map(line -> count(line, unique)).toList();
+    /** 여러 경로 선 각각이 지나는 시설 수 */
+    public List<Counts> countAlong(List<List<double[]>> lines, List<Poi> pois) {
+        return lines.stream().map(line -> count(line, pois)).toList();
     }
 
-    /** 겹치는 시설을 하나로 합친다. 합칠 때는 개수가 큰 쪽을 남긴다 */
-    List<Facility> dedupe(List<Facility> facilities) {
-        Map<FacilityTable, List<Facility>> kept = new EnumMap<>(FacilityTable.class);
-        for (Facility f : facilities) {
-            List<Facility> same = kept.computeIfAbsent(sameKind(f.type()), k -> new ArrayList<>());
-            int dup = -1;
-            for (int i = 0; i < same.size() && dup < 0; i++) {
-                if (Geo.distance(same.get(i).point(), f.point()) <= dedupeM) {
-                    dup = i;
-                }
-            }
-            if (dup < 0) {
-                same.add(f);
-            } else if (f.count() > same.get(dup).count()) {
-                same.set(dup, f);
-            }
-        }
-        return kept.values().stream().flatMap(List::stream).toList();
-    }
-
-    Counts count(List<double[]> line, List<Facility> facilities) {
+    Counts count(List<double[]> line, List<Poi> pois) {
         Map<FacilityGroup, Integer> byGroup = new EnumMap<>(FacilityGroup.class);
-        List<Facility> passed = new ArrayList<>();
-        for (Facility f : facilities) {
-            FacilityGroup g = FacilityGroup.of(f.type());
-            if (g != null && Geo.distanceToLine(f.point(), line) <= radiusOf(g)) {
-                byGroup.merge(g, f.count(), Integer::sum);
-                passed.add(f);
+        List<Poi> passed = new ArrayList<>();
+        for (Poi p : pois) {
+            FacilityGroup g = FacilityGroup.of(p.kind());
+            double r = g != null ? radiusOf(g) : MARK_ONLY.contains(p.kind()) ? radius.help() : -1;
+            if (r < 0 || Geo.distanceToLine(p.point(), line) > r) {
+                continue;
             }
+            if (g != null) {
+                byGroup.merge(g, p.count(), Integer::sum);
+            }
+            passed.add(p);
         }
         return new Counts(byGroup, passed);
-    }
-
-    private double maxRadius() {
-        return Math.max(Math.max(radius.light(), radius.cctv()), Math.max(radius.bell(), radius.help()));
     }
 
     private double radiusOf(FacilityGroup g) {
@@ -91,13 +59,8 @@ public class FacilityCounter {
         };
     }
 
-    /** 가로등과 보안등은 출처마다 같은 등을 서로 다른 표에 넣기도 해서 같은 종류로 본다 */
-    private static FacilityTable sameKind(FacilityTable t) {
-        return t == FacilityTable.STREETLIGHT ? FacilityTable.SECURITY_LIGHT : t;
-    }
-
-    /** 경로 하나가 지나는 시설 수와, 센 시설 목록 */
-    public record Counts(Map<FacilityGroup, Integer> byGroup, List<Facility> passed) {
+    /** 경로 하나가 지나는 시설 수와, 지도에 보일 시설 목록 */
+    public record Counts(Map<FacilityGroup, Integer> byGroup, List<Poi> passed) {
 
         public int get(FacilityGroup g) {
             return byGroup.getOrDefault(g, 0);

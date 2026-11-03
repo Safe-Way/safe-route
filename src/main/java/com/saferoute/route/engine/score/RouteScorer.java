@@ -1,10 +1,6 @@
 package com.saferoute.route.engine.score;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -15,10 +11,9 @@ import org.springframework.stereotype.Component;
 
 import com.saferoute.route.RouteProperties;
 import com.saferoute.route.RouteProperties.Phase;
-import com.saferoute.route.data.PoiSource;
 import com.saferoute.route.engine.facility.Availability;
+import com.saferoute.route.engine.facility.Nearby;
 import com.saferoute.route.engine.facility.Poi;
-import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadGraph;
 
@@ -40,20 +35,18 @@ public class RouteScorer {
     static final Set<String> HELP_KINDS = Set.of("police", "bell", "store", "guard_house");
     static final Set<String> REST_KINDS = Set.of("shelter", "toilet");
 
-    private final PoiSource pois;
     private final RouteProperties.CoverageSettings settings;
 
-    public RouteScorer(PoiSource pois, RouteProperties props) {
-        this.pois = pois;
+    public RouteScorer(RouteProperties props) {
         this.settings = props.coverage();
     }
 
     /** 이 기준에서 길마다 더할 비용. 기준이 없으면(가장 짧은 길) null */
-    public ToDoubleFunction<RoadEdge> extraCost(RoadGraph graph, Phase phase, boolean night, LocalDateTime at) {
+    public ToDoubleFunction<RoadEdge> extraCost(RoadGraph graph, Phase phase, boolean night, Nearby nearby) {
         if (!phase.hasWeights()) {
             return null;
         }
-        Coverage cov = coverage(graph, phase, night, at);
+        Coverage cov = coverage(graph, phase, night, nearby);
         Map<Criterion, Double> w = phase.weights();
         return e -> {
             double missing = 0;
@@ -64,22 +57,13 @@ public class RouteScorer {
         };
     }
 
-    /** 이 기준에 쓰는 커버율 (설명·시험에서도 쓴다) */
-    public Coverage coverage(RoadGraph graph, Phase phase, boolean night, LocalDateTime at) {
+    /** 이 기준에 쓰는 커버율 */
+    public Coverage coverage(RoadGraph graph, Phase phase, boolean night, Nearby nearby) {
         Set<Criterion> wanted = phase.weights().keySet();
         if (wanted.isEmpty() || graph.isEmpty()) {
             return Coverage.NONE;
         }
-        Set<String> kinds = new HashSet<>();
-        double margin = 0;
-        for (Criterion c : wanted) {
-            kinds.addAll(kindsOf(c));
-            margin = Math.max(margin, radius(c, phase));
-        }
-        BBox box = BBox.around(new ArrayList<>(graph.nodes().values()), margin);
-        List<Poi> all = pois.within(box, kinds);
-        Set<LocalDate> holidays = pois.holidays();
-
+        List<Poi> all = nearby.pois();
         Map<Criterion, Coverage.Layer> layers = new EnumMap<>(Criterion.class);
         for (Criterion c : wanted) {
             Predicate<Poi> keep = switch (c) {
@@ -87,8 +71,8 @@ public class RouteScorer {
                 case CCTV -> p -> p.kind().equals("cctv");
                 case SCHOOL -> p -> p.kind().equals("school_zone");
                 case HELP -> p -> HELP_KINDS.contains(p.kind()) && (!night || nightHelp(p))
-                        && Availability.usable(p, at, holidays);
-                case REST -> p -> REST_KINDS.contains(p.kind()) && Availability.usable(p, at, holidays);
+                        && Availability.usable(p, nearby.at(), nearby.holidays());
+                case REST -> p -> REST_KINDS.contains(p.kind()) && Availability.usable(p, nearby.at(), nearby.holidays());
             };
             List<double[]> points = all.stream().filter(keep).map(Poi::point).toList();
             boolean alongRoad = c == Criterion.LIGHT || c == Criterion.CCTV;
@@ -106,17 +90,7 @@ public class RouteScorer {
         };
     }
 
-    private static Set<String> kindsOf(Criterion c) {
-        return switch (c) {
-            case LIGHT -> Set.of("light");
-            case CCTV -> Set.of("cctv");
-            case SCHOOL -> Set.of("school_zone");
-            case HELP -> HELP_KINDS;
-            case REST -> REST_KINDS;
-        };
-    }
-
-    private double radius(Criterion c, Phase phase) {
+    double radius(Criterion c, Phase phase) {
         return switch (c) {
             case LIGHT -> settings.lightM();
             case CCTV -> settings.cctvM();

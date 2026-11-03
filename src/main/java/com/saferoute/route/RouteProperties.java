@@ -21,7 +21,6 @@ public record RouteProperties(
         Map<String, Profile> profiles,
         CoverageSettings coverage,
         CountRadius countRadiusM,
-        double dedupeM,
         int maxFacilities,
         double searchMarginM,
         double snapMaxM,

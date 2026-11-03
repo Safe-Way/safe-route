@@ -1,11 +1,12 @@
 package com.saferoute.route;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.function.ToDoubleFunction;
 
 import org.slf4j.Logger;
@@ -18,9 +19,11 @@ import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteRequest.Place;
 import com.saferoute.route.api.RouteResult;
+import com.saferoute.route.data.PoiSource;
 import com.saferoute.route.data.RoadGraphSource;
 import com.saferoute.route.engine.condition.Conditions;
 import com.saferoute.route.engine.explain.RouteResultAssembler;
+import com.saferoute.route.engine.facility.Nearby;
 import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.RoadEdge;
@@ -37,6 +40,7 @@ import com.saferoute.situation.NightResult;
  *   <li>요청 검사 (SAME_POINT, TOO_FAR, OUT_OF_AREA)</li>
  *   <li>밤 판단: C파트 {@link NightJudge}. 어린이처럼 일몰 몇 분 전부터 밤으로 보는 모드는 여기서 앞당긴다</li>
  *   <li>주변 도로망 읽기, 출발·도착을 길에 붙이기: {@link RoadGraphSource}</li>
+ *   <li>주변 시설을 한 번 읽기: {@link PoiSource}. 점수·설명·지도 아이콘이 같은 목록을 쓴다</li>
  *   <li>모드·낮밤 기준으로 길마다 더할 비용: {@link RouteScorer} (시설 커버율을 요청 때 계산)</li>
  *   <li>최단·안전 경로: {@link RouteFinder}</li>
  *   <li>시설 세기, 설명, 응답 만들기: {@link RouteResultAssembler}</li>
@@ -53,16 +57,22 @@ public class RouteService {
     private static final Logger log = LoggerFactory.getLogger(RouteService.class);
     private static final ZoneId KOREA = ZoneId.of("Asia/Seoul");
 
+    /** 경로에 쓰는 시설 종류 (점수·설명·지도 아이콘) */
+    static final Set<String> POI_KINDS = Set.of("light", "cctv", "bell", "police", "store", "guard_house",
+            "shelter", "toilet", "school_zone");
+
     private final RoadGraphSource roads;
+    private final PoiSource pois;
     private final NightJudge nightJudge;
     private final RouteScorer scorer;
     private final RouteResultAssembler assembler;
     private final RouteProperties props;
     private final Clock clock;
 
-    public RouteService(RoadGraphSource roads, NightJudge nightJudge, RouteScorer scorer,
+    public RouteService(RoadGraphSource roads, PoiSource pois, NightJudge nightJudge, RouteScorer scorer,
             RouteResultAssembler assembler, RouteProperties props, Clock clock) {
         this.roads = roads;
+        this.pois = pois;
         this.nightJudge = nightJudge;
         this.scorer = scorer;
         this.assembler = assembler;
@@ -100,11 +110,20 @@ public class RouteService {
         RoadGraph.Snap from = snap(graph, start);
         RoadGraph.Snap to = snap(graph, end);
 
-        LocalDateTime at = now.toLocalDateTime();
-        ToDoubleFunction<RoadEdge> extra = scorer.extraCost(graph, phase, cond.night(), at);
+        Nearby nearby = nearby(graph, phase, now);
+        ToDoubleFunction<RoadEdge> extra = scorer.extraCost(graph, phase, cond.night(), nearby);
         RouteFinder.Found found = RouteFinder.find(graph, from.node(), to.node(), extra,
                 profile.maxDetour(), profile::passable, profile.avoidStairs());
-        return assembler.assemble(cond, profile, phase, found, start, end, from.distanceM() + to.distanceM());
+        return assembler.assemble(cond, profile, phase, found, start, end, from.distanceM() + to.distanceM(), nearby);
+    }
+
+    /** 도로망 범위를 가장 큰 반경만큼 넓혀 그 안 시설을 한 번 읽는다 */
+    private Nearby nearby(RoadGraph graph, RouteProperties.Phase phase, ZonedDateTime now) {
+        RouteProperties.CountRadius c = props.countRadiusM();
+        double margin = Math.max(Math.max(Math.max(phase.helpM(), phase.restM()), Math.max(phase.schoolM(),
+                props.coverage().cctvM())), Math.max(Math.max(c.light(), c.cctv()), Math.max(c.bell(), c.help())));
+        BBox box = BBox.around(new ArrayList<>(graph.nodes().values()), margin);
+        return new Nearby(pois.within(box, POI_KINDS), pois.holidays(), now.toLocalDateTime(), pois.dataDate());
     }
 
     /** 일몰 후 ~ 일출 전이 밤. auto일 때 leadMin만큼 일몰 전부터 밤으로 본다 (어린이 60분) */

@@ -2,18 +2,13 @@ package com.saferoute.route;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import com.saferoute.ingest.FacilityTable;
 
 import com.saferoute.route.engine.condition.Conditions;
 import com.saferoute.route.engine.explain.ExplanationBuilder;
-import com.saferoute.route.engine.facility.Facility;
-import com.saferoute.route.engine.facility.FacilityCounter.Counts;
-import com.saferoute.route.engine.facility.FacilityCounter;
 import com.saferoute.route.engine.facility.FacilityGroup;
 
 /** 차이 설명 문장과 시설 세기 (FR-06, 요구사항 6.3) */
@@ -106,27 +101,5 @@ class ExplanationTests {
         assertThat(FacilityGroup.CCTV.gain(3)).isEqualTo("CCTV +3대");
         assertThat(FacilityGroup.BELL.gain(3)).isEqualTo("비상벨 +3개");
         assertThat(FacilityGroup.HELP.gain(3)).isEqualTo("도움 지점 +3곳");
-    }
-
-    @Test
-    void countsWithinRadiusAndMergesDuplicates() {
-        List<Facility> facilities = List.of(
-                // 같은 CCTV가 두 출처에 5m 떨어져 들어 있음 → 카메라 3대 하나로
-                new Facility(FacilityTable.CCTV, 1, 126.93100, 35.14020, 3),
-                new Facility(FacilityTable.CCTV, 2, 126.93105, 35.14020, 2),
-                // 같은 자리 가로등·보안등 → 하나
-                new Facility(FacilityTable.STREETLIGHT, 3, 126.93050, 35.14010, 1),
-                new Facility(FacilityTable.SECURITY_LIGHT, 4, 126.93050, 35.14010, 1),
-                // 길에서 약 45m: 조명 반경(30m) 밖
-                new Facility(FacilityTable.SECURITY_LIGHT, 5, 126.93150, 35.14040, 1),
-                new Facility(FacilityTable.CONVENIENCE_STORE, 6, 126.93200, 35.13990, 1));
-        FacilityCounter counter = new FacilityCounter(RouteServiceTests.facilities(facilities), TestRoutes.props());
-
-        Counts c = counter.countAlong(List.of(List.of(TestRoutes.S_P, TestRoutes.T_P))).get(0);
-
-        assertThat(c.get(FacilityGroup.CCTV)).isEqualTo(3);
-        assertThat(c.get(FacilityGroup.LIGHT)).isEqualTo(1);
-        assertThat(c.get(FacilityGroup.HELP)).isEqualTo(1);
-        assertThat(c.get(FacilityGroup.BELL)).isZero();
     }
 }
