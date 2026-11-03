@@ -1,0 +1,19 @@
+# ERD
+
+학교 DB(`cf_u34_d3`)의 표 32개를 그린 ERD 파일이다. 2026-11-03에 학교 DB의 `information_schema`에서 만들었다.
+표 정의의 원본은 `src/main/resources/db/schema.sql`이고, 이 폴더는 그림용이다.
+
+실제 DB에는 **외래 키가 없다.** 데이터를 갱신할 때 표를 통째로 지우고 다시 넣기 때문이다.
+대신 경로 계산 표들은 칸 값으로 이어진다(`road_edge.from_node` = `road_node.id` 등).
+
+| 파일 | 무엇 | 언제 쓰나 |
+| --- | --- | --- |
+| `route_core_erd.png` | 경로 계산에 쓰는 표 8개의 관계 그림 | 발표·문서 (요구사항 8.2에 같은 그림) |
+| `route_core_erd.mmd` | 위 그림의 mermaid 원본 | 그림을 고칠 때 |
+| `safe_route_erd_nofk.sql` | 표 32개, 외래 키 없음 (실제 DB 그대로) | ERD 도구에 실제 구조를 넣을 때 |
+| `safe_route_erd.sql` | 표 32개 + 그림용 외래 키 6개 | ERD 도구에서 관계선까지 그릴 때. **실제 DB에 실행하지 말 것** |
+| `safe_route_erd_compat.sql`, `safe_route_erd_nofk_compat.sql` | 위 두 파일에서 공간 타입(`POINT` 등)·`json`·`set`을 흔한 타입으로 바꾼 판 | 공간 타입을 모르는 ERD 도구에 넣을 때 (원래 타입은 칸 설명에) |
+| `safe_route_erd.dbml` | DBML (관계 6개 포함) | dbdiagram.io |
+
+그림용 관계 6개: `road_edge.from_node`·`to_node` → `road_node.id`, `edge_stat.edge_id` → `road_edge.id`(1:1),
+`edge_poi.edge_id` → `road_edge.id`, `edge_poi.poi_id` → `poi.id`, `subway_entrance.station_id` → `subway_station.station_id`.
