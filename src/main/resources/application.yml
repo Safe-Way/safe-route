@@ -2,8 +2,11 @@ spring:
   application:
     name: safe-route
   config:
-    # 프로젝트 폴더의 .env 파일을 설정으로 읽는다. 파일이 없어도 오류 없이 넘어간다.
-    import: optional:file:.env[.properties]
+    import:
+      # 프로젝트 폴더의 .env 파일을 설정으로 읽는다. 파일이 없어도 오류 없이 넘어간다.
+      - optional:file:.env[.properties]
+      # 경로 계산 가중치·기준값
+      - classpath:route.yml
   datasource:
     # 값은 모두 .env에 있다 (지금은 로컬 MySQL, 나중에 학교 서버로 옮김)
     url: ${DB_URL}
