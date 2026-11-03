@@ -43,7 +43,7 @@ public class MysqlPoiSource implements PoiSource {
         for (String k : kinds) {
             args[i++] = k;
         }
-        return jdbc.query("SELECT id, kind, sub, indoor, lon, lat, cnt, place_type,"
+        return jdbc.query("SELECT id, kind, sub, indoor, lon, lat, cnt,"
                 + " TIME_TO_SEC(open_from) DIV 60 AS open_from, TIME_TO_SEC(open_to) DIV 60 AS open_to, open_days,"
                 + " season_from, season_to,"
                 + " TIME_TO_SEC(biz_from) DIV 60 AS biz_from, TIME_TO_SEC(biz_to) DIV 60 AS biz_to, biz_days, biz_sure"
@@ -54,7 +54,7 @@ public class MysqlPoiSource implements PoiSource {
                         rs.getString("season_from"), rs.getString("season_to"),
                         integer(rs, "biz_from"), integer(rs, "biz_to"), rs.getString("biz_days"),
                         rs.getObject("biz_sure") == null ? null : rs.getInt("biz_sure") == 1,
-                        rs.getString("place_type"), rs.getLong("id"), Math.max(1, rs.getInt("cnt"))),
+                        rs.getLong("id"), Math.max(1, rs.getInt("cnt"))),
                 args);
     }
 

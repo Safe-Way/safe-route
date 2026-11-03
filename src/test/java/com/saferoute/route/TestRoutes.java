@@ -192,19 +192,19 @@ final class TestRoutes {
             case POLICE -> open24("police", "지구대", null, f);
             case PUBLIC_TOILET -> open24("toilet", "공중화장실", null, f);
             case HEAT_SHELTER, COLD_SHELTER -> new Poi("shelter", "쉼터", null, f.lon(), f.lat(),
-                    null, null, null, null, null, null, null, null, null, null, f.id(), f.count());
+                    null, null, null, null, null, null, null, null, null, f.id(), f.count());
             default -> null;
         };
     }
 
     static Poi plain(String kind, Facility f) {
         return new Poi(kind, null, null, f.lon(), f.lat(), null, null, null, null, null, null, null, null, null,
-                null, f.id(), f.count());
+                f.id(), f.count());
     }
 
     static Poi open24(String kind, String sub, Integer indoor, Facility f) {
         return new Poi(kind, sub, indoor, f.lon(), f.lat(), 0, 24 * 60, "매일", null, null, null, null, null, null,
-                null, f.id(), f.count());
+                f.id(), f.count());
     }
 
     /**

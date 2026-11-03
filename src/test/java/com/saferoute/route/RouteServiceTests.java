@@ -94,11 +94,7 @@ class RouteServiceTests {
 
         assertThat(r.facilities()).isNotEmpty().allMatch(m -> !m.on().equals("shortest"));
         // 아이콘은 비상벨·CCTV가 등보다 앞에 온다
-        assertThat(r.facilities().get(0).type()).isEqualTo("bell");
-        // 비상벨에는 지금 상태와 근거가 붙고, CCTV·등에는 붙지 않는다 (결정 40)
-        assertThat(r.facilities().get(0).nowStatus()).isEqualTo("이용 가능");
-        assertThat(r.facilities().get(0).nowNote()).isEqualTo("24시간");
-        assertThat(r.facilities()).filteredOn(m -> m.type().equals("cctv")).allMatch(m -> m.nowStatus() == null);
+        assertThat(r.facilities().get(0).type()).isEqualTo("EMERGENCY_BELL");
         assertThat(r.dataQuality().status()).isEqualTo("OK");
         assertThat(r.dataQuality().dataDate()).isEqualTo("2026-10-28");
         // 경로 선은 [경도, 위도]이고 요청한 출발점에서 시작한다
@@ -237,7 +233,7 @@ class RouteServiceTests {
 
         RouteResult r = s.route(request("auto"));
 
-        assertThat(r.facilities()).extracting(RouteResult.FacilityMark::type).containsExactly("bell", "cctv");
+        assertThat(r.facilities()).extracting(RouteResult.FacilityMark::type).containsExactly("EMERGENCY_BELL", "CCTV");
     }
 
     @Test

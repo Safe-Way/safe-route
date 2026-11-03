@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 한 요청에서 쓰는 주변 시설. DB(poi)에서 한 번 읽어 경로 점수, 설명의 시설 수, 지도 아이콘이 같이 쓴다.
+ * 한 요청에서 쓰는 주변 시설. DB(poi)에서 한 번 읽어 경로 점수와 설명의 시설 수가 같이 쓴다.
  *
  * @param pois     도로망 범위 안 시설
  * @param holidays 공휴일 (주말처럼 본다)

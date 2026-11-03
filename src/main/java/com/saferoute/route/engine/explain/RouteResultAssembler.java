@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
 import com.saferoute.route.RouteProperties;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.condition.Conditions;
-import com.saferoute.route.engine.facility.Availability;
 import com.saferoute.route.engine.facility.FacilityCounter;
 import com.saferoute.route.engine.facility.FacilityCounter.Counts;
 import com.saferoute.route.engine.facility.FacilityGroup;
@@ -29,9 +28,6 @@ import com.saferoute.route.engine.search.RouteFinder;
 public class RouteResultAssembler {
 
     private static final String NO_DATA_MESSAGE = "이 지역은 안전 데이터가 부족합니다";
-
-    /** 지금 상태(nowStatus)를 붙이는 종류 (결정 40) */
-    static final Set<String> STATUS_KINDS = Set.of("toilet", "shelter", "police", "bell", "guard_house");
 
     private final FacilityCounter counter;
     private final RouteProperties props;
@@ -76,7 +72,7 @@ public class RouteResultAssembler {
                 RouteResult.Conditions.of(cond),
                 routes,
                 new RouteResult.Explanation(text, extraM, extraMin, FacilityGroup.keyed(diff)),
-                marks(same ? null : shortCounts, safeCounts, nearby),
+                marks(same ? null : shortCounts, safeCounts),
                 dataQuality(same ? List.of(found.safe()) : List.of(found.shortest(), found.safe()), nearby));
     }
 
@@ -84,11 +80,8 @@ public class RouteResultAssembler {
         return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()));
     }
 
-    /**
-     * 지도 아이콘. 도움 지점·화장실·쉼터, 비상벨, CCTV, 등 순서로 최대 개수까지.
-     * shortCounts가 null이면 경로가 하나다.
-     */
-    private List<RouteResult.FacilityMark> marks(Counts shortCounts, Counts safeCounts, Nearby nearby) {
+    /** 지도 아이콘. 도움 지점·비상벨·CCTV·등 순서로 최대 개수까지. shortCounts가 null이면 경로가 하나 */
+    private List<RouteResult.FacilityMark> marks(Counts shortCounts, Counts safeCounts) {
         Set<Poi> onShort = shortCounts == null ? Set.of() : new HashSet<>(shortCounts.passed());
         Set<Poi> onSafe = new HashSet<>(safeCounts.passed());
         Set<Poi> all = new HashSet<>(onShort);
@@ -96,23 +89,31 @@ public class RouteResultAssembler {
         return all.stream()
                 .sorted(Comparator.comparingInt((Poi p) -> markOrder(p.kind())).thenComparingLong(Poi::id))
                 .limit(props.maxFacilities())
-                .map(p -> {
-                    String on = onShort.contains(p) && onSafe.contains(p) ? "both" : onSafe.contains(p) ? "safe" : "shortest";
-                    Availability.Judgement j = STATUS_KINDS.contains(p.kind())
-                            ? Availability.judge(p, nearby.at(), nearby.holidays()) : null;
-                    return new RouteResult.FacilityMark(p.kind(), p.lat(), p.lon(), on,
-                            j == null ? null : j.status().label(), j == null ? null : j.note());
-                })
+                .map(p -> new RouteResult.FacilityMark(type(p), p.lat(), p.lon(),
+                        onShort.contains(p) && onSafe.contains(p) ? "both" : onSafe.contains(p) ? "safe" : "shortest"))
                 .toList();
     }
 
     /** 지도 아이콘이 많을 때 먼저 남기는 순서. 등은 너무 많아서 맨 뒤 */
     static int markOrder(String kind) {
         return switch (kind) {
-            case "police", "store", "guard_house", "toilet", "shelter" -> 0;
+            case "police", "store", "guard_house" -> 0;
             case "bell" -> 1;
             case "cctv" -> 2;
             default -> 3;
+        };
+    }
+
+    /** 응답의 type: 시설 표 이름 (poi 종류에서 바꿈. 등은 poi의 세부 종류로 가로등·보안등을 나눈다) */
+    static String type(Poi p) {
+        return switch (p.kind()) {
+            case "light" -> "가로등".equals(p.sub()) ? "STREETLIGHT" : "SECURITY_LIGHT";
+            case "cctv" -> "CCTV";
+            case "bell" -> "EMERGENCY_BELL";
+            case "police" -> "POLICE";
+            case "store" -> "CONVENIENCE_STORE";
+            case "guard_house" -> "CHILD_SAFETY_HOUSE";
+            default -> p.kind().toUpperCase();
         };
     }
 

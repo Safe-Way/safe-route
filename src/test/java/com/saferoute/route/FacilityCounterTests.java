@@ -29,7 +29,7 @@ class FacilityCounterTests {
 
     static Poi at(String kind, long id, double northM, int count) {
         return new Poi(kind, null, null, 126.9311, LAT + northM / 111_195.0, null, null, null, null, null,
-                null, null, null, null, null, id, count);
+                null, null, null, null, id, count);
     }
 
     @Test
@@ -52,18 +52,10 @@ class FacilityCounterTests {
                 at("police", 1, 10, 1),
                 at("store", 2, 20, 1),
                 at("guard_house", 3, 30, 1),
-                at("school_zone", 4, 5, 1))); // 보호구역은 세지도 아이콘에 넣지도 않음
+                at("toilet", 4, 5, 1)));     // 화장실은 1차 설명에 세지 않음
 
         assertThat(c.get(FacilityGroup.HELP)).isEqualTo(3);
         assertThat(c.passed()).hasSize(3);
-    }
-
-    @Test
-    void toiletsAndSheltersAreMarkedButNotCounted() {
-        Counts c = count(List.of(at("toilet", 1, 20, 1), at("shelter", 2, 40, 1), at("toilet", 3, 60, 1)));
-
-        assertThat(c.byGroup()).isEmpty();
-        assertThat(c.passed()).extracting(Poi::id).containsExactlyInAnyOrder(1L, 2L);
     }
 
     @Test
