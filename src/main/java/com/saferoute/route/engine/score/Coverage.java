@@ -286,15 +286,4 @@ public final class Coverage {
     private static long key(long x, long y) {
         return x * 1_000_003L + y;
     }
-
-    /** 시험용: 기준 하나의 값을 직접 넣은 커버율 */
-    public static Coverage of(Map<Long, Map<Criterion, Double>> values) {
-        Map<Long, double[]> out = new HashMap<>();
-        values.forEach((id, m) -> {
-            double[] v = new double[Criterion.values().length];
-            m.forEach((c, x) -> v[c.ordinal()] = x);
-            out.put(id, v);
-        });
-        return new Coverage(out);
-    }
 }
