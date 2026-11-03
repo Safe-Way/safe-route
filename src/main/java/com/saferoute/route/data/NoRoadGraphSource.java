@@ -8,7 +8,7 @@ import com.saferoute.route.engine.graph.RoadGraph;
 
 /**
  * 도로망 표가 아직 없을 때 쓰는 자리. 모든 요청에 OUT_OF_AREA를 준다.
- * route.yml의 route.road-source가 none(기본)일 때 쓴다. A파트 도로망 표가 들어오면 mysql로 바꾼다.
+ * route.road-source가 none일 때 쓴다 (route.yml 기본은 mysql). DB 없이 서버만 띄울 때 --route.road-source=none
  */
 @Component
 @ConditionalOnProperty(name = "route.road-source", havingValue = "none", matchIfMissing = true)
