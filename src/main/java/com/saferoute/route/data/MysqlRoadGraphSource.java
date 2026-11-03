@@ -22,7 +22,8 @@ import com.saferoute.route.engine.graph.RoadGraph;
  * DB의 road_node·road_edge·edge_stat 표(A파트)에서 범위 안 도로망을 읽는다 (요구사항 8.1 3단계).
  * edge_stat은 원값만 두고 감점은 서버가 계산한다. 여기서 읽는 것은 지날 수 있는지에 쓰는 성질뿐이다:
  * <ul>
- *   <li>계단: road_edge.steps</li>
+ *   <li>계단: road_edge.steps. 휠체어 경사로가 있는 계단(road_edge.wheelchair_ramp = 1)은 휠체어로 지날 수 있다
+ *       (2026-11-03 결정). 0이나 모르면(NULL) 못 지난다</li>
  *   <li>보도턱: edge_stat.curb = 1(안 낮춤)이면 확인된 턱. 모르면(NULL) 턱 없음으로 본다 (2026-11-02 결정)</li>
  *   <li>육교: edge_stat.footbridge_ok = 0이면 휠체어로 못 지나는 육교. 모르면 지나갈 수 있다고 본다</li>
  *   <li>데이터 부족: edge_stat.data_gap 비트 중 시설 비트(1 밝기, 2 CCTV, 4 도움 지점, 8 지킴이집, 16 쉼 곳).
@@ -61,7 +62,7 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     @Override
     public RoadGraph load(BBox box) {
         // 1. 범위에 걸치는 길과 성질. edge_stat 줄이 없는 길은 아직 계산 안 된 것이라 데이터 부족으로 본다
-        String sql = "SELECT e.id, e.from_node, e.to_node, e.length_m, e.highway, e.steps, ST_AsText(e.geom) AS wkt,"
+        String sql = "SELECT e.id, e.from_node, e.to_node, e.length_m, e.highway, e.steps, e.wheelchair_ramp, ST_AsText(e.geom) AS wkt,"
                 + " s.edge_id AS has_stat, s.curb, s.footbridge_ok, s.data_gap"
                 + " FROM road_edge e LEFT JOIN edge_stat s ON s.edge_id = e.id"
                 + " WHERE MBRIntersects(ST_GeomFromText(?, 0), e.geom)";
@@ -79,7 +80,7 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             boolean gap = rs.getObject("has_stat") == null || (rs.getInt("data_gap") & FACILITY_GAP_BITS) != 0;
             return new RoadEdge(rs.getLong("id"), rs.getLong("from_node"), rs.getLong("to_node"),
                     rs.getDouble("length_m"), rs.getString("highway"), parseLineString(rs.getString("wkt")),
-                    new EdgePenalty(values, gap));
+                    new EdgePenalty(values, gap, rs.getInt("wheelchair_ramp") == 1));
         }, box.toWkt());
 
         // 2. 그 길들의 양 끝 노드
