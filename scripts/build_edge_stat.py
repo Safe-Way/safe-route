@@ -341,7 +341,8 @@ def main():
         return fmt.format(x) if isinstance(x, float) else str(x)
 
     with open(OUT, "w", encoding="utf-8") as f:
-        f.write("SET NAMES utf8mb4;\nDELETE FROM edge_stat WHERE edge_id IN (SELECT id FROM road_edge);\n")
+        # 모든 길을 다시 계산하므로 전부 지운다 (도로망을 다시 넣으면 길 번호가 바뀌어 옛 번호 줄이 남지 않게)
+        f.write("SET NAMES utf8mb4;\nDELETE FROM edge_stat;\n")
         for k in range(0, len(out_rows), 1000):
             f.write("INSERT INTO edge_stat (edge_id, light_n, light_cover_m, cctv_n, cctv_cover_m, help_m, guard_m, "
                     "rest_m, heat_m, cold_m, help_n_1km, guard_n_1km, rest_n_1km, heat_n_1km, cold_n_1km, xing_signal, xing_nosignal, xing_unknown, curb, "
