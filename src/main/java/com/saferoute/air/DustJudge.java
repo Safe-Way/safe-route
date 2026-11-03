@@ -19,11 +19,25 @@ public class DustJudge {
     private static final Logger log = LoggerFactory.getLogger(DustJudge.class);
 
     private final AirKoreaClient air;
+    private final SidoFinder sidoFinder;
     private final SituationProperties props;
 
-    public DustJudge(AirKoreaClient air, SituationProperties props) {
+    public DustJudge(AirKoreaClient air, SidoFinder sidoFinder, SituationProperties props) {
         this.air = air;
+        this.sidoFinder = sidoFinder;
         this.props = props;
+    }
+
+    /** 위도·경도로 판단한다. 시도를 못 찾으면 "모름" */
+    public DustResult judgeAt(double lat, double lon) {
+        String sido;
+        try {
+            sido = sidoFinder.sidoAt(lat, lon);
+        } catch (AirUnavailableException e) {
+            log.warn("시도를 못 찾았어요: {}", e.getMessage());
+            return DustResult.unavailable(null);
+        }
+        return judge(sido);
     }
 
     public DustResult judge(String sidoName) {
