@@ -1,0 +1,79 @@
+erDiagram
+  road_node ||--o{ road_edge : "from_node / to_node"
+  road_edge ||--|| edge_stat : "edge_id"
+  road_edge ||--o{ edge_poi : "edge_id"
+  poi ||--o{ edge_poi : "poi_id"
+  admin_area ||--o{ edge_stat : "sgg_cd / dong_cd"
+  admin_area ||--o{ region_density : "sgg_cd"
+  holiday }o--o{ poi : "poi_status 뷰가 함께 씀"
+  road_node {
+    bigint id PK "OSM 점 번호"
+    double lon
+    double lat
+    point geom
+    json tags "횡단·신호·보도턱"
+  }
+  road_edge {
+    bigint id PK "자동 번호"
+    bigint way_id "OSM 길 번호"
+    bigint from_node FK
+    bigint to_node FK
+    double length_m
+    varchar highway
+    tinyint steps
+    tinyint covered
+    tinyint wheelchair_ramp "018"
+    linestring geom
+  }
+  edge_stat {
+    bigint edge_id PK
+    double light_cover_m
+    double cctv_cover_m
+    double help_m
+    double help_night_m
+    double guard_m
+    double rest_m
+    double school_zone_m
+    tinyint xing_signal
+    tinyint xing_nosignal
+    tinyint xing_unknown
+    tinyint curb
+    tinyint footbridge_ok
+    varchar road_class
+    smallint data_gap "부족 비트"
+  }
+  edge_poi {
+    bigint edge_id FK
+    int poi_id FK
+    varchar kind
+    double dist_m
+    double pos "길 위 위치 0~1"
+  }
+  poi {
+    int id PK
+    varchar kind "light cctv toilet 등 12종"
+    varchar name
+    point geom
+    time open_from
+    time open_to
+    char season_from
+    time biz_from
+    tinyint biz_sure
+    tinyint wheelchair
+  }
+  holiday {
+    date day PK
+    varchar name
+  }
+  admin_area {
+    varchar level "sido sigungu dong"
+    varchar code
+    varchar name
+    multipolygon geom
+  }
+  region_density {
+    varchar sgg_cd
+    varchar kind
+    double density
+    tinyint gap
+  }

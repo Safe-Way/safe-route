@@ -329,12 +329,15 @@ def build():
         n_osm += 1
     # OSM 계단: 노인·장애인 모드 지도와 "계단 2곳을 피함" 설명용. 길 가운데에 점을 찍는다
     n_steps = 0
-    for eid, lon, lat, length, name in query(
+    # 휠체어 경사로(018 wheelchair_ramp)가 붙은 계단은 wheelchair=1
+    for eid, lon, lat, length, name, ramp in query(
             "SELECT id, ST_X(ST_PointN(geom, CEIL(ST_NumPoints(geom) / 2))), ST_Y(ST_PointN(geom, CEIL(ST_NumPoints(geom) / 2))), "
-            "length_m, IFNULL(name, '') FROM road_edge WHERE steps = 1"):
+            "length_m, IFNULL(name, ''), IFNULL(wheelchair_ramp, 'NULL') FROM road_edge WHERE steps = 1"):
+        ramp = {"1": 1, "0": 0}.get(str(ramp))
+        ramp_text = {1: "휠체어 경사로 있음", 0: "경사로 없음"}.get(ramp, "경사로 모름")
         out.append(poi("stairs", [{"lon": float(lon), "lat": float(lat), "src": f"road_edge:{eid}", "address": None}],
-                       name or "계단", sub="계단", wheelchair=0, modes="senior,wheelchair",
-                       detail=f"계단 · 길이 {float(length):.0f}m (OSM)"))
+                       name or "계단", sub="계단", wheelchair=1 if ramp == 1 else 0, modes="senior,wheelchair",
+                       detail=f"계단 · 길이 {float(length):.0f}m · {ramp_text} (OSM)"))
         n_steps += 1
     print(f"  OSM 횡단보도 {n_osm}곳 (표준데이터와 겹친 것 뺌), 계단 {n_steps}곳")
 
