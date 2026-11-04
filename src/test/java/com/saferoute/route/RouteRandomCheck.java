@@ -72,6 +72,8 @@ class RouteRandomCheck {
 
     /** 경로 없음 사례 (분석용) */
     static final List<String> noRoutes = new ArrayList<>();
+    /** 휠체어가 가장 가까운 길이 아닌 옆 길에 붙은 경우 (계단으로만 드나드는 구역). 서비스 결과 문장으로 센다 */
+    static final List<String> moved = new ArrayList<>();
 
     record Run(String mode, boolean night, long ms, String error, boolean differs, double ratio, boolean capped,
             Extra extra) {
@@ -304,7 +306,11 @@ class RouteRandomCheck {
                     new com.saferoute.route.api.RouteRequest.Place(from[1], from[0], null),
                     new com.saferoute.route.api.RouteRequest.Place(to[1], to[0], null), "auto", mode));
             long ms = (System.nanoTime() - started) / 1_000_000;
-            String how = "찾음(넓힘)";
+            String how = r.explanation().text().contains("휠체어로 이어진 길이 확인되지") ? "찾음(옆 길에 붙임)" : "찾음(넓힘)";
+            if (how.startsWith("찾음(옆")) {
+                moved.add("%s %s (%.6f,%.6f)→(%.6f,%.6f) %s".formatted(mode, night ? "밤" : "낮", from[1], from[0],
+                        to[1], to[0], r.explanation().text().replaceAll(".*\\(주의: ([^)]*휠체어로 이어진[^)]*)\\).*", "$1")));
+            }
             retried.add("%s %s (%.6f,%.6f)→(%.6f,%.6f) %s → %s %dms, 경로 %dm: %s".formatted(mode, night ? "밤" : "낮",
                     from[1], from[0], to[1], to[0], first, how, ms,
                     r.routes().get(r.routes().size() - 1).distanceM(), r.explanation().text()));
@@ -384,6 +390,8 @@ class RouteRandomCheck {
         retried.forEach(x -> o.line("  " + x));
         o.line("경로 없음 %d건%s", noRoutes.size(), noRoutes.isEmpty() ? "" : " (최대 30건 표시)");
         noRoutes.stream().limit(30).forEach(v -> o.line("  " + v));
+        o.line("휠체어가 옆 길에 붙은 경우 %d건", moved.size());
+        moved.stream().limit(30).forEach(v -> o.line("  " + v));
         o.print();
     }
 

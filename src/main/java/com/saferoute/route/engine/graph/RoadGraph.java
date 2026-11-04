@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import java.util.Set;
+import java.util.function.Predicate;
 
 import org.jgrapht.Graph;
 import org.jgrapht.alg.connectivity.ConnectivityInspector;
@@ -63,18 +64,64 @@ public final class RoadGraph {
      */
     public Snap nearest(double lon, double lat) {
         if (main == null) {
-            main = new ConnectivityInspector<>(graph).connectedSets().stream()
-                    .max(java.util.Comparator.comparingInt(Set::size)).orElse(Set.of());
+            main = largest(graph);
         }
+        return nearest(lon, lat, main);
+    }
+
+    /**
+     * 지날 수 있는 길만으로 이은 가장 큰 연결 덩어리. 휠체어는 계단으로만 드나드는 구역(아파트 단지 안 보행로,
+     * 계단 사이 층계참 등)이 덩어리 밖이 되어, {@link #nearest(double, double, Set)}가 그곳에 붙지 않는다
+     */
+    public Set<Long> mainPart(Predicate<RoadEdge> passable) {
+        // 길마다 두 끝을 한 묶음으로 합친다 (MaskSubgraph로 연결 덩어리를 구하면 요청마다 0.3초 넘게 걸렸다)
+        Map<Long, Long> parent = new HashMap<>();
+        for (RoadEdge e : graph.edgeSet()) {
+            if (passable.test(e)) {
+                long a = root(parent, graph.getEdgeSource(e));
+                long b = root(parent, graph.getEdgeTarget(e));
+                if (a != b) {
+                    parent.put(a, b);
+                }
+            }
+        }
+        Map<Long, Set<Long>> parts = new HashMap<>();
+        for (Long v : graph.vertexSet()) {
+            parts.computeIfAbsent(root(parent, v), k -> new java.util.HashSet<>()).add(v);
+        }
+        return parts.values().stream().max(java.util.Comparator.comparingInt(Set::size)).orElse(Set.of());
+    }
+
+    private static long root(Map<Long, Long> parent, long v) {
+        long r = v;
+        while (parent.containsKey(r)) {
+            r = parent.get(r);
+        }
+        // 다음에 빨리 찾도록 지나온 노드를 뿌리에 바로 붙인다
+        while (parent.containsKey(v) && parent.get(v) != r) {
+            long next = parent.get(v);
+            parent.put(v, r);
+            v = next;
+        }
+        return r;
+    }
+
+    /** within 안에서 가장 가까운 노드. 없으면 null */
+    public Snap nearest(double lon, double lat, Set<Long> within) {
         long best = -1;
         double bestM = Double.MAX_VALUE;
         for (Map.Entry<Long, double[]> n : nodes.entrySet()) {
             double m = Geo.distance(lon, lat, n.getValue()[0], n.getValue()[1]);
-            if (m < bestM && main.contains(n.getKey())) {
+            if (m < bestM && within.contains(n.getKey())) {
                 best = n.getKey();
                 bestM = m;
             }
         }
         return best < 0 ? null : new Snap(best, bestM);
+    }
+
+    private static Set<Long> largest(Graph<Long, RoadEdge> g) {
+        return new ConnectivityInspector<>(g).connectedSets().stream()
+                .max(java.util.Comparator.comparingInt(Set::size)).orElse(Set.of());
     }
 }
