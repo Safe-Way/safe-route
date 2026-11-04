@@ -115,13 +115,32 @@ class ModeRulesTests {
     }
 
     @Test
-    void wheelchairTakesShortestPassableRouteWithoutDetourLimit() {
+    void wheelchairDayTakesShortestPassableRoute() {
+        // 지름길에 확인된 턱 → 북쪽 길(약 1.58배)이 지날 수 있는 길 중 최단이라 한도와 관계없이 그 길로
         RoadGraph curb = RouteFinderTests.diamond(0.0011, RouteFinderTests.CURB);
-        RouteResult r = route(curb, List.of(), at(21), "wheelchair", "auto");
+        RouteResult r = route(curb, List.of(), at(12), "wheelchair", "auto");
 
         assertThat(north(r)).isTrue();
         assertThat(r.routes()).hasSize(1);
         assertThat(r.explanation().text()).isEqualTo("휠체어로 지날 수 있는 길 중 가장 짧은 길입니다");
+    }
+
+    @Test
+    void wheelchairNightPrefersLightWithinDetourLimit() {
+        // 북쪽 길에만 등. 밤에는 1.2배 안이면 북쪽, 낮에는 지름길
+        List<Poi> lights = List.of(Poi.at("light", 126.93055, LAT + 0.0002), Poi.at("light", N_NEAR[0], N_NEAR[1]),
+                Poi.at("light", 126.93165, LAT + 0.0002));
+        assertThat(north(route(diamond(0.0004), lights, at(21), "wheelchair", "auto"))).isTrue();
+        assertThat(north(route(diamond(0.0004), lights, at(12), "wheelchair", "auto"))).isFalse();
+        // 북쪽 길이 1.2배를 넘으면 밤에도 지름길
+        assertThat(north(route(diamond(0.0008), lights, at(21), "wheelchair", "auto"))).isFalse();
+    }
+
+    @Test
+    void wheelchairAvoidsConfirmedUnpavedRoad() {
+        RoadGraph dirt = RouteFinderTests.diamond(0.0004, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0), false));
+        assertThat(north(route(dirt, List.of(), at(12), "wheelchair", "auto"))).isTrue();
+        assertThat(north(route(dirt, List.of(), at(12), "adult", "auto"))).isFalse();
     }
 
     @Test

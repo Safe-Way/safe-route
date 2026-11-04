@@ -29,14 +29,19 @@ public record RoadEdge(long id, long from, long to, double lengthM, String highw
      *
      * @param values         성질별 값. 1 = 확실히 해당, 없거나 모르면 0
      * @param dataGap        그 지역에 시설 데이터가 부족한 길인지. 감점에는 쓰지 않고 "확인 안 됨" 표시에만 쓴다 (NFR-04)
-     * @param wheelchairRamp 휠체어 경사로가 있는 계단인지 (road_edge.wheelchair_ramp = 1). 휠체어는 지날 수 있다
+     * @param wheelchairRamp 계단의 휠체어 경사로 (road_edge.wheelchair_ramp). true 있음, false 없음, null 모름
      */
-    public record EdgePenalty(Map<Penalty, Double> values, boolean dataGap, boolean wheelchairRamp) {
+    public record EdgePenalty(Map<Penalty, Double> values, boolean dataGap, Boolean wheelchairRamp) {
 
         public static final EdgePenalty NONE = new EdgePenalty(Map.of(), false);
 
         public EdgePenalty(Map<Penalty, Double> values, boolean dataGap) {
-            this(values, dataGap, false);
+            this(values, dataGap, null);
+        }
+
+        /** 휠체어 경사로가 있다고 확인된 계단 */
+        public boolean hasRamp() {
+            return Boolean.TRUE.equals(wheelchairRamp);
         }
 
         public EdgePenalty {

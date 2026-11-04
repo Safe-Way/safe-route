@@ -66,9 +66,10 @@ class ExplanationTests {
     }
 
     @Test
-    void wheelchairSaysItIsTheShortestPassableRoute() {
+    void wheelchairSaysItIsTheShortestPassableRouteInDaytime() {
         RouteProperties.Profile wheel = TestRoutes.props().profile("wheelchair");
-        assertThat(ExplanationBuilder.text(NIGHT, wheel, wheel.night(), true, false, 0, 0, Map.of()))
+        Conditions day = new Conditions(false, "auto", null);
+        assertThat(ExplanationBuilder.text(day, wheel, wheel.day(), true, false, 0, 0, Map.of()))
                 .isEqualTo("휠체어로 지날 수 있는 길 중 가장 짧은 길입니다");
     }
 
