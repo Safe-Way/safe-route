@@ -129,6 +129,15 @@ out body;
     return {"elements": elements}
 
 
+def excluded_reason(tags):
+    """사람이 걸을 수 없는 자동차전용도로면 이유를 돌려준다 (도로망에서 빼고 road_edge_excluded에 둔다, 020)"""
+    if tags.get("motorroad") == "yes":
+        return "motorroad"
+    if tags.get("expressway") == "yes":
+        return "expressway"
+    return None
+
+
 def walkable(tags):
     """걸어서 지날 수 없는 길을 뺀다 (보행 금지, 사유지, 면으로 그린 광장 테두리)"""
     if tags.get("area") == "yes":
@@ -184,6 +193,14 @@ def build(data):
     return vertices, edges, len(ways)
 
 
+def split_excluded(vertices, edges):
+    """자동차전용도로 구간을 따로 떼어 낸다. 남은 길에 쓰이는 점만 남긴다"""
+    kept = [e for e in edges if not excluded_reason(e["tags"])]
+    dropped = [e for e in edges if excluded_reason(e["tags"])]
+    used = {x for e in kept for x in (e["from"], e["to"])}
+    return [v for v in vertices if v["id"] in used], kept, dropped
+
+
 def q(v):
     """SQL 문자열 값"""
     if v is None:
@@ -209,13 +226,15 @@ def node_row(n):
             f"{q(json.dumps(tags, ensure_ascii=False)) if tags else 'NULL'})")
 
 
-def write_sql(path, vertices, edges, title, total_ways):
-    way_ids = sorted({e["way_id"] for e in edges})
+def write_sql(path, vertices, edges, title, total_ways, dropped=()):
+    way_ids = sorted({e["way_id"] for e in edges} | {e["way_id"] for e in dropped})
     with open(path, "w", encoding="utf-8") as f:
         f.write("SET NAMES utf8mb4;\n")
         # 같은 길을 다시 넣을 때를 위해 먼저 지운다
         for i in range(0, len(way_ids), BATCH):
-            f.write("DELETE FROM road_edge WHERE way_id IN (" + ",".join(map(str, way_ids[i:i + BATCH])) + ");\n")
+            ids = ",".join(map(str, way_ids[i:i + BATCH]))
+            f.write(f"DELETE FROM road_edge WHERE way_id IN ({ids});\n")
+            f.write(f"DELETE FROM road_edge_excluded WHERE way_id IN ({ids});\n")
         for i in range(0, len(vertices), BATCH):
             f.write("INSERT INTO road_node (id, lon, lat, geom, tags) VALUES\n"
                     + ",\n".join(node_row(n) for n in vertices[i:i + BATCH])
@@ -224,6 +243,11 @@ def write_sql(path, vertices, edges, title, total_ways):
             f.write("INSERT INTO road_edge (way_id, seq, from_node, to_node, length_m, highway, name, footway, steps,"
                     " covered, bridge, surface, tags, geom) VALUES\n"
                     + ",\n".join(edge_row(e) for e in edges[i:i + BATCH]) + ";\n")
+        for i in range(0, len(dropped), BATCH):
+            f.write("INSERT INTO road_edge_excluded (way_id, seq, from_node, to_node, length_m, highway, name, footway,"
+                    " steps, covered, bridge, surface, tags, geom, reason) VALUES\n"
+                    + ",\n".join(edge_row(e)[:-1] + f",{q(excluded_reason(e['tags']))})" for e in dropped[i:i + BATCH])
+                    + ";\n")
         for typ, n in (("road_node", len(vertices)), ("road_edge", len(edges))):
             f.write(f"""INSERT INTO data_source (type, source, title, api, license, total_count, loaded_count,
                     skipped_count, complete, loaded_at)
@@ -276,6 +300,10 @@ def main():
         print("받은 원본:", raw)
 
     vertices, edges, total_ways = build(data)
+    vertices, edges, dropped = split_excluded(vertices, edges)
+    if dropped:
+        km = sum(e["length"] for e in dropped) / 1000
+        print(f"자동차전용도로 구간 {len(dropped)}개({km:.1f}km)는 road_edge_excluded로 뺌 (motorroad·expressway=yes)")
     steps = sum(1 for x in edges if x["tags"].get("highway") == "steps")
     crossings = sum(1 for v in vertices if v.get("tags", {}).get("highway") == "crossing")
     print(f"길 {total_ways}개 → 구간 {len(edges)}개, 점 {len(vertices)}개 (계단 구간 {steps}, 횡단보도 점 {crossings})")
@@ -283,7 +311,7 @@ def main():
     title = (f"OpenStreetMap 도로망 ({name}: 행정구역 {area} 전체)" if area
              else f"OpenStreetMap 도로망 ({name}: {lat}, {lon} 둘레 {radius}m)")
     sql = os.path.join(OUT, f"road_network_{name}.sql")
-    write_sql(sql, vertices, edges, title, total_ways)
+    write_sql(sql, vertices, edges, title, total_ways, dropped)
     print("SQL:", sql)
     if not sql_only:
         run_sql(sql)
