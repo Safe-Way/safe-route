@@ -499,6 +499,19 @@ CREATE TABLE IF NOT EXISTS road_edge_excluded (
 CREATE TABLE IF NOT EXISTS edge_stat_excluded LIKE edge_stat;
 ALTER TABLE edge_stat_excluded COMMENT = '도로망에서 뺀 길의 edge_stat 원값 (road_edge_excluded.edge_id로 이어짐)';
 
+-- 뺀 길에만 쓰이던 점 (021). 남은 길이 쓰는 점은 road_node에 그대로 둔다
+CREATE TABLE IF NOT EXISTS road_node_excluded (
+    id          BIGINT      NOT NULL COMMENT 'OSM 노드 번호 (road_node에 있던 id)',
+    lon         DOUBLE      NOT NULL,
+    lat         DOUBLE      NOT NULL,
+    geom        POINT       NOT NULL SRID 0,
+    tags        JSON        NULL COMMENT 'OSM 태그 (표시가 있는 점만)',
+    reason      VARCHAR(20) NOT NULL COMMENT '뺀 이유: excluded_edge (뺀 길에만 쓰이던 점)',
+    excluded_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    SPATIAL INDEX sx_road_node_excluded_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '도로망에서 뺀 점 (뺀 길에만 쓰이던 점)';
+
 
 -- ---------------------------------------------------------------- 시군구별 시설 밀도 (데이터 부족 판정)
 

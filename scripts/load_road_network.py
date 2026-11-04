@@ -194,11 +194,13 @@ def build(data):
 
 
 def split_excluded(vertices, edges):
-    """자동차전용도로 구간을 따로 떼어 낸다. 남은 길에 쓰이는 점만 남긴다"""
+    """자동차전용도로 구간을 따로 떼어 낸다. 남은 길에 쓰이는 점만 남기고, 뺀 길에만 쓰이던 점은 따로 돌려준다 (021)"""
     kept = [e for e in edges if not excluded_reason(e["tags"])]
     dropped = [e for e in edges if excluded_reason(e["tags"])]
     used = {x for e in kept for x in (e["from"], e["to"])}
-    return [v for v in vertices if v["id"] in used], kept, dropped
+    dropped_ids = {x for e in dropped for x in (e["from"], e["to"])} - used
+    return ([v for v in vertices if v["id"] in used], kept, dropped,
+            [v for v in vertices if v["id"] in dropped_ids])
 
 
 def q(v):
@@ -226,7 +228,7 @@ def node_row(n):
             f"{q(json.dumps(tags, ensure_ascii=False)) if tags else 'NULL'})")
 
 
-def write_sql(path, vertices, edges, title, total_ways, dropped=()):
+def write_sql(path, vertices, edges, title, total_ways, dropped=(), dropped_nodes=()):
     way_ids = sorted({e["way_id"] for e in edges} | {e["way_id"] for e in dropped})
     with open(path, "w", encoding="utf-8") as f:
         f.write("SET NAMES utf8mb4;\n")
@@ -248,6 +250,13 @@ def write_sql(path, vertices, edges, title, total_ways, dropped=()):
                     " steps, covered, bridge, surface, tags, geom, reason) VALUES\n"
                     + ",\n".join(edge_row(e)[:-1] + f",{q(excluded_reason(e['tags']))})" for e in dropped[i:i + BATCH])
                     + ";\n")
+        # 뺀 길에만 쓰이던 점: 예전에 road_node에 들어간 것은 지우고 road_node_excluded에 보관 (021)
+        for i in range(0, len(dropped_nodes), BATCH):
+            chunk = dropped_nodes[i:i + BATCH]
+            f.write("DELETE FROM road_node WHERE id IN (" + ",".join(str(n["id"]) for n in chunk) + ");\n")
+            f.write("INSERT INTO road_node_excluded (id, lon, lat, geom, tags, reason) VALUES\n"
+                    + ",\n".join(node_row(n)[:-1] + ",'excluded_edge')" for n in chunk)
+                    + "\nON DUPLICATE KEY UPDATE lon = VALUES(lon), lat = VALUES(lat), geom = VALUES(geom), tags = VALUES(tags);\n")
         for typ, n in (("road_node", len(vertices)), ("road_edge", len(edges))):
             f.write(f"""INSERT INTO data_source (type, source, title, api, license, total_count, loaded_count,
                     skipped_count, complete, loaded_at)
@@ -300,10 +309,11 @@ def main():
         print("받은 원본:", raw)
 
     vertices, edges, total_ways = build(data)
-    vertices, edges, dropped = split_excluded(vertices, edges)
+    vertices, edges, dropped, dropped_nodes = split_excluded(vertices, edges)
     if dropped:
         km = sum(e["length"] for e in dropped) / 1000
-        print(f"자동차전용도로 구간 {len(dropped)}개({km:.1f}km)는 road_edge_excluded로 뺌 (motorroad·expressway=yes)")
+        print(f"자동차전용도로 구간 {len(dropped)}개({km:.1f}km)는 road_edge_excluded로 뺌 (motorroad·expressway=yes), "
+              f"그 길에만 쓰이던 점 {len(dropped_nodes)}개는 road_node_excluded로 뺌")
     steps = sum(1 for x in edges if x["tags"].get("highway") == "steps")
     crossings = sum(1 for v in vertices if v.get("tags", {}).get("highway") == "crossing")
     print(f"길 {total_ways}개 → 구간 {len(edges)}개, 점 {len(vertices)}개 (계단 구간 {steps}, 횡단보도 점 {crossings})")
@@ -311,7 +321,7 @@ def main():
     title = (f"OpenStreetMap 도로망 ({name}: 행정구역 {area} 전체)" if area
              else f"OpenStreetMap 도로망 ({name}: {lat}, {lon} 둘레 {radius}m)")
     sql = os.path.join(OUT, f"road_network_{name}.sql")
-    write_sql(sql, vertices, edges, title, total_ways, dropped)
+    write_sql(sql, vertices, edges, title, total_ways, dropped, dropped_nodes)
     print("SQL:", sql)
     if not sql_only:
         run_sql(sql)
