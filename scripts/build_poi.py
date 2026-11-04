@@ -1,4 +1,4 @@
-"""원본 시설 표 13개를 정제해 poi 표(광주)를 다시 만든다. 서버·앱이 지도 아이콘과 경로 주변 시설을 한 표에서 꺼내게 한다.
+"""원본 시설 표 14개를 정제해 poi 표(광주)를 다시 만든다. 서버·앱이 지도 아이콘과 경로 주변 시설을 한 표에서 꺼내게 한다.
 
 정제하는 것
 - 범위: 광주 시도 경계(admin_area sido 24) 안만. 범위 상자로 고르면 나주·담양 일부가 섞인다.
@@ -16,6 +16,9 @@
 - OSM 횡단보도(road_node crossing)·계단(road_edge steps)도 넣는다 (도로망 범위만). 횡단보도 표준데이터 10m 안이면 뺀다.
 - modes: 지도에 먼저 보일 모드 (FR-48, 결정 35). CCTV·경찰·비상벨·편의점은 모든 모드(common),
   지킴이집·어린이보호구역은 child, 쉼터·화장실은 senior, 육교·횡단보도·장애인 화장실은 wheelchair. 등은 아이콘 대신 밝기로만 쓰므로 비움.
+- 지하철역(subway_station, 광주 1호선 20역): 노인·장애인 모드. 엘리베이터가 있으면 wheelchair = 1(녹동역은 없음).
+  여는 시간은 열차 시간표(subway_timetable 평일)의 그 역 첫차~막차. 엘리베이터가 몇 번 출구에 있는지는 공개 자료가 없다.
+  저상버스는 정류장이 아니라 버스 한 대마다 붙은 정보라 지도 점으로 넣지 않는다 (요청 때 광주 버스 도착 API의 LOW_BUS로 판단).
 - sgg_cd / dong_cd: 점이 드는 시군구·행정동
 
 원본 표를 다시 적재하면 이 스크립트를 다시 돌린다 (표를 비우고 새로 넣음, 1분 안팎).
@@ -348,6 +351,26 @@ def build():
         names = list(dict.fromkeys(x["name"] for x in g if x.get("name")))
         out.append(poi("school_zone", g, "·".join(names)[:200] or "어린이보호구역", sub=p.get("kind"), modes="child",
                        detail=f"{p.get('kind') or ''} 앞 어린이보호구역".strip() + (f" · CCTV {c}대" if c else "")))
+    # 지하철역: 교통약자 편의시설 수(광주교통공사 API, 019_transit)와 열차 시간표의 첫차~막차
+    trains = {name: (frm, to) for name, frm, to in query(
+        "SELECT station_name, TIME_FORMAT(MIN(arrive_time), '%H:%i'), TIME_FORMAT(MAX(arrive_time), '%H:%i') "
+        "FROM subway_timetable WHERE day_type = '평일' GROUP BY station_name")}
+    for sid, name, addr, lon, lat, elev, elev_ok, toilet, charger in query(
+            "SELECT station_id, name, IFNULL(address, ''), lon, lat, elevator_total, elevator_available, "
+            "accessible_toilet_total, wheelchair_charger_total FROM subway_station"):
+        elev, elev_ok, toilet, charger = int(elev), int(elev_ok), int(toilet), int(charger)
+        frm, to = trains.get(name, (None, None))
+        parts = ["지하철역", f"엘리베이터 {elev}대" + (f"(지금 {elev_ok}대 운행)" if elev_ok < elev else "")
+                 if elev else "엘리베이터 없음"]
+        parts += [s for s, ok in ((f"장애인 화장실 {toilet}곳", toilet), (f"전동휠체어 충전기 {charger}대", charger)) if ok]
+        if frm:
+            parts.append(f"열차 {frm}~{to}")
+        out.append(poi("subway", [{"lon": float(lon), "lat": float(lat), "src": f"subway_station:{sid}",
+                                   "address": addr or None}],
+                       f"{name}역", sub="지하철역", wheelchair=1 if elev_ok > 0 else 0, modes="senior,wheelchair",
+                       open_hours=f"열차 {frm}~{to}" if frm else None, open_from=frm, open_to=to,
+                       open_days="매일" if frm else None, detail=" · ".join(parts)))
+
     # 화장실 안 비상벨: 50m 안 가장 가까운 화장실이 열려 있을 때만 쓸 수 있다
     toilets_xy = [t for t in out if t["kind"] == "toilet"]
     for b in out:
@@ -395,7 +418,7 @@ def main():
                     f"AND ST_Contains(a.geom, p.geom) SET p.{col} = a.code;\n")
         f.write("INSERT INTO data_source (type, source, title, api, license, total_count, loaded_count, skipped_count,"
                 " complete, loaded_at)\nVALUES ('poi', 'computed', '정제 시설 광주 (scripts/build_poi.py)', "
-                f"'시설 표 13개', '-', {len(out)}, {len(out)}, 0, 1, NOW())\n"
+                f"'시설 표 14개', '-', {len(out)}, {len(out)}, 0, 1, NOW())\n"
                 "ON DUPLICATE KEY UPDATE total_count = VALUES(total_count), loaded_count = VALUES(loaded_count),"
                 " loaded_at = NOW();\n")
     print("SQL:", OUT)
