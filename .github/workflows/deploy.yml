@@ -1,6 +1,7 @@
 # 학교 서버 배포.
-# main의 CI가 통과하면 도커 이미지를 만들어 ssh로 서버에 올리고 deploy/deploy.sh로 띄운다.
-# Actions 탭 > Deploy > Run workflow로 직접 돌릴 수도 있다.
+# develop에 푸시되면 CI(ci.yml)가 테스트를 돌리고, 통과하면 이 워크플로를 불러 배포한다.
+# 도커 이미지를 만들어 ssh로 서버에 올리고 deploy/deploy.sh로 띄운다.
+# (Actions 탭의 Run workflow 버튼은 이 파일이 기본 브랜치(main)에 들어간 뒤에 보인다)
 #
 # 필요한 Repository secrets (Settings > Secrets and variables > Actions). 값은 저장소에 올리지 않는다:
 #   SSH_ADDRESS, SSH_PORT, SSH_ID, SSH_PASSWORD   서버 접속 정보
@@ -9,16 +10,13 @@
 #   KAKAO_REST_KEY                                장소 검색, 미세먼지용 시·도 찾기
 #   DATA_GO_KR_KEY                                날씨(기상청), 미세먼지(에어코리아)
 #
-# 순서: secrets 확인 → 코드 받기 → jar 빌드 → 도커 이미지 빌드·압축 → 환경변수 파일 만들기
+# 순서: (CI 테스트 통과) → secrets 확인 → 코드 받기 → jar 빌드 → 도커 이미지 빌드·압축 → 환경변수 파일 만들기
 #       → 서버로 올리기(scp) → 서버에서 deploy.sh 실행(앱 두 대 한 대씩 교체)
 name: Deploy
 
 on:
-  # CI 워크플로가 끝나면 이어서 돈다. main 브랜치일 때만. 성공했는지는 아래 job의 if가 본다
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+  # ci.yml이 테스트가 통과한 뒤 부른다 (secrets: inherit 로 레포 secrets를 넘겨받는다)
+  workflow_call:
   # Actions 탭에서 손으로 돌리기
   workflow_dispatch:
 
@@ -26,17 +24,14 @@ on:
 permissions:
   contents: read
 
-# 배포는 한 번에 하나씩. 돌고 있는 배포는 끊지 않고 다음 배포가 기다린다
-concurrency:
-  group: deploy
-  cancel-in-progress: false
-
 jobs:
   deploy:
     name: 학교 서버 배포
-    # CI가 실패한 main은 배포하지 않는다
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    # 배포는 한 번에 하나씩. 돌고 있는 배포는 끊지 않고 다음 배포가 기다린다
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
     timeout-minutes: 30
     # secrets를 환경변수로 꺼내 둔다. 로그에는 *** 로 가려져 찍힌다
     env:
@@ -68,10 +63,8 @@ jobs:
             exit 1
           fi
 
+      # CI가 테스트한 바로 그 커밋을 배포한다
       - uses: actions/checkout@v4
-        with:
-          # CI가 통과한 바로 그 커밋을 배포한다
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-java@v4
         with:
@@ -86,8 +79,7 @@ jobs:
       # Dockerfile로 이미지를 만들고 파일 하나(image.tar.gz)로 묶는다. 태그는 커밋 앞 12자리
       - name: 도커 이미지 빌드
         run: |
-          sha="${{ github.event.workflow_run.head_sha || github.sha }}"
-          tag="safe-route:${sha::12}"
+          tag="safe-route:${GITHUB_SHA::12}"
           docker build -t "$tag" .
           docker save "$tag" | gzip > "$RUNNER_TEMP/image.tar.gz"
           ls -lh "$RUNNER_TEMP/image.tar.gz"
