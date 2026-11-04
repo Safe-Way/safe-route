@@ -26,6 +26,8 @@ import com.saferoute.route.engine.graph.RoadGraph;
  *       (2026-11-03 결정). 0이나 모르면(NULL) 못 지난다</li>
  *   <li>보도턱: edge_stat.curb = 1(안 낮춤)이면 확인된 턱. 모르면(NULL) 턱 없음으로 본다 (2026-11-02 결정)</li>
  *   <li>육교: edge_stat.footbridge_ok = 0이면 휠체어로 못 지나는 육교. 모르면 지나갈 수 있다고 본다</li>
+ *   <li>비포장: road_edge.surface가 {@link #UNPAVED_SURFACES} 중 하나면 확인된 비포장. 모르면(NULL) 포장으로 본다
+ *       (2026-11-04 결정). 다진 흙(compacted)은 휠체어로 대개 지날 수 있어 넣지 않는다</li>
  *   <li>데이터 부족: edge_stat.data_gap 비트 중 시설 비트(1 밝기, 2 CCTV, 4 도움 지점, 8 지킴이집, 16 쉼 곳).
  *       감점에는 쓰지 않고 "확인 안 됨" 표시에만 쓴다</li>
  * </ul>
@@ -38,6 +40,9 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     /** data_gap 중 시설 데이터 비트 (32 횡단 신호, 64 보도턱은 길 성질이라 뺀다) */
     static final int FACILITY_GAP_BITS = 1 | 2 | 4 | 8 | 16;
     private static final int IN_CHUNK = 1000;
+    /** 휠체어가 지나기 어려운 바닥 (OSM surface 값). 흙·자갈·모래·바위와 울퉁불퉁한 돌길 */
+    static final Set<String> UNPAVED_SURFACES = Set.of("unpaved", "dirt", "earth", "ground", "mud", "grass", "sand",
+            "gravel", "fine_gravel", "pebblestone", "rock", "woodchips", "cobblestone");
 
     private final JdbcTemplate jdbc;
     private volatile BBox area;
@@ -62,7 +67,7 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     @Override
     public RoadGraph load(BBox box) {
         // 1. 범위에 걸치는 길과 성질. edge_stat 줄이 없는 길은 아직 계산 안 된 것이라 데이터 부족으로 본다
-        String sql = "SELECT e.id, e.from_node, e.to_node, e.length_m, e.highway, e.steps, e.wheelchair_ramp, ST_AsText(e.geom) AS wkt,"
+        String sql = "SELECT e.id, e.from_node, e.to_node, e.length_m, e.highway, e.steps, e.wheelchair_ramp, e.surface, ST_AsText(e.geom) AS wkt,"
                 + " s.edge_id AS has_stat, s.curb, s.footbridge_ok, s.data_gap"
                 + " FROM road_edge e LEFT JOIN edge_stat s ON s.edge_id = e.id"
                 + " WHERE MBRIntersects(ST_GeomFromText(?, 0), e.geom)";
@@ -77,10 +82,14 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             if (rs.getObject("footbridge_ok") != null && rs.getInt("footbridge_ok") == 0) {
                 values.put(Penalty.FOOTBRIDGE, 1.0);
             }
+            if (isUnpaved(rs.getString("surface"))) {
+                values.put(Penalty.UNPAVED, 1.0);
+            }
             boolean gap = rs.getObject("has_stat") == null || (rs.getInt("data_gap") & FACILITY_GAP_BITS) != 0;
             return new RoadEdge(rs.getLong("id"), rs.getLong("from_node"), rs.getLong("to_node"),
                     rs.getDouble("length_m"), rs.getString("highway"), parseLineString(rs.getString("wkt")),
-                    new EdgePenalty(values, gap, rs.getInt("wheelchair_ramp") == 1));
+                    new EdgePenalty(values, gap,
+                            rs.getObject("wheelchair_ramp") == null ? null : rs.getInt("wheelchair_ramp") == 1));
         }, box.toWkt());
 
         // 2. 그 길들의 양 끝 노드
@@ -100,6 +109,11 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
                     }, chunk.toArray());
         }
         return new RoadGraph(nodes, edges);
+    }
+
+    /** 확인된 비포장인지. 값이 없으면 false (모르는 값은 감점하지 않는다) */
+    static boolean isUnpaved(String surface) {
+        return surface != null && UNPAVED_SURFACES.contains(surface.trim().toLowerCase(java.util.Locale.ROOT));
     }
 
     /** "LINESTRING(126.93 35.14,126.931 35.14)" → [{경도, 위도}, ...] */

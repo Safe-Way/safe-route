@@ -41,10 +41,11 @@ class RoutePropertiesTests {
         assertThat(senior.night().weights()).doesNotContainKey(Criterion.REST);
 
         RouteProperties.Profile wheel = p.profile("wheelchair");
-        assertThat(wheel.maxDetour()).isZero();
-        assertThat(wheel.exclude()).containsExactly(Penalty.STAIRS, Penalty.CURB, Penalty.FOOTBRIDGE);
+        assertThat(wheel.maxDetour()).isEqualTo(1.2);
+        assertThat(wheel.exclude()).containsExactly(Penalty.STAIRS, Penalty.CURB, Penalty.FOOTBRIDGE, Penalty.UNPAVED);
         assertThat(wheel.day().hasWeights()).isFalse();
-        assertThat(wheel.night().hasWeights()).isFalse();
+        assertThat(wheel.night().weights()).containsOnlyKeys(Criterion.LIGHT, Criterion.HELP, Criterion.CCTV);
+        assertThat(wheel.night().helpM()).isEqualTo(120);
 
         assertThat(p.coverage().lightM()).isEqualTo(30);
         assertThat(p.coverage().cctvM()).isEqualTo(50);

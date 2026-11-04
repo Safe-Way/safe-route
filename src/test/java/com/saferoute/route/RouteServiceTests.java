@@ -14,7 +14,6 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 
-import com.saferoute.ingest.FacilityTable;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -23,8 +22,8 @@ import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteRequest.Place;
 import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteResult;
-import com.saferoute.route.data.FacilitySource;
-import com.saferoute.route.engine.facility.Facility;
+import com.saferoute.route.data.PoiSource;
+import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.graph.RoadEdge.EdgePenalty;
 import com.saferoute.route.engine.graph.RoadGraph;
@@ -32,37 +31,27 @@ import com.saferoute.route.engine.graph.RoadGraph;
 /** 요청 → 8.3 응답 모양, 오류 코드 (DB 없이 가짜 도로망·시설로) */
 class RouteServiceTests {
 
-    /** 밝은 길(S–N–T) 위에 등 6개, CCTV 2곳, 비상벨 1개. 어두운 지름길에는 아무것도 없다 */
-    static List<Facility> brightSideFacilities() {
-        List<Facility> f = new ArrayList<>();
+    /** 밝은 길(S–N–T) 위에 등 6개, CCTV 2곳(3대), 비상벨 1개. 어두운 지름길에는 아무것도 없다 */
+    static List<Poi> brightSideFacilities() {
+        List<Poi> f = new ArrayList<>();
         for (int i = 0; i < 6; i++) {
             double t = (i + 1) / 7.0;
             double lon = i < 3 ? 126.93000 + 0.0011 * t * 2 : 126.93220 - 0.0011 * (1 - t) * 2;
             double lat = LAT + 0.0006 * (i < 3 ? t * 2 : (1 - t) * 2);
-            f.add(new Facility(FacilityTable.SECURITY_LIGHT, i, lon, lat, 1));
+            f.add(TestRoutes.plain("light", i, lon, lat, 1));
         }
-        f.add(new Facility(FacilityTable.CCTV, 10, 126.93110, 35.14060, 2));
-        f.add(new Facility(FacilityTable.CCTV, 11, 126.93060, 35.14030, 1));
-        f.add(new Facility(FacilityTable.EMERGENCY_BELL, 20, 126.93160, 35.14030, 1));
+        f.add(TestRoutes.plain("cctv", 10, 126.93110, 35.14060, 2));
+        f.add(TestRoutes.plain("cctv", 11, 126.93060, 35.14030, 1));
+        f.add(TestRoutes.outdoorBell(20, 126.93160, 35.14030));
         return f;
     }
 
-    static FacilitySource facilities(List<Facility> list) {
-        return new FacilitySource() {
-            @Override
-            public List<Facility> within(BBox box, Set<FacilityTable> types) {
-                return list.stream().filter(f -> box.contains(f.lon(), f.lat()) && types.contains(f.type())).toList();
-            }
-
-            @Override
-            public LocalDate dataDate() {
-                return LocalDate.of(2026, 10, 28);
-            }
-        };
+    static PoiSource facilities(List<Poi> list) {
+        return TestRoutes.pois(list);
     }
 
-    static RouteService service(FacilitySource facilities, int hour) {
-        return TestRoutes.service(diamond(0.0006), facilities, hour);
+    static RouteService service(PoiSource pois, int hour) {
+        return TestRoutes.service(diamond(0.0006), pois, hour);
     }
 
     static RouteRequest request(String night) {
@@ -151,10 +140,15 @@ class RouteServiceTests {
         assertError(() -> s.route(new RouteRequest(new Place(LAT, 126.93000, null), new Place(35.15, 126.94, null), null)),
                 RouteError.OUT_OF_AREA);
 
-        FacilitySource broken = new FacilitySource() {
+        PoiSource broken = new PoiSource() {
             @Override
-            public List<Facility> within(BBox box, Set<FacilityTable> types) {
+            public List<Poi> within(BBox box, Set<String> kinds) {
                 throw new DataAccessResourceFailureException("DB 꺼짐");
+            }
+
+            @Override
+            public Set<LocalDate> holidays() {
+                return Set.of();
             }
 
             @Override

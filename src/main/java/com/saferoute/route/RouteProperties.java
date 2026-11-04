@@ -15,6 +15,8 @@ import com.saferoute.route.engine.score.Criterion;
  *
  * @param profiles 모드 이름(adult, child, senior, wheelchair) → 그 사람에 맞춘 기준
  * @param coverage 조명·CCTV 커버율을 잴 때 쓰는 거리
+ * @param searchMarginM 출발·도착 사각형을 넓혀 도로망을 읽는 거리
+ * @param retryMarginM  그 범위에서 경로를 못 찾으면 이만큼 넓혀 한 번 더 찾는다 (강·철도·큰 도로를 돌아가는 길)
  */
 @ConfigurationProperties("route")
 public record RouteProperties(
@@ -23,6 +25,7 @@ public record RouteProperties(
         CountRadius countRadiusM,
         int maxFacilities,
         double searchMarginM,
+        double retryMarginM,
         double snapMaxM,
         double samePointM,
         double tooFarM) {
@@ -79,7 +82,7 @@ public record RouteProperties(
     /**
      * 누가 걷는지에 따라 바뀌는 기준.
      *
-     * @param maxDetour    안전 경로가 최단 경로의 몇 배까지 돌 수 있는지. 0이면 한도 없음 (휠체어)
+     * @param maxDetour    안전 경로가 최단 경로(지날 수 있는 길 중)의 몇 배까지 돌 수 있는지. 0이면 한도 없음
      * @param nightLeadMin 일몰 몇 분 전부터 밤으로 볼지 (어린이 60)
      * @param exclude      이 성질이 1(확실히 못 지남)인 길은 아예 뺀다 (휠체어: 계단, 확인된 턱, 못 지나는 육교)
      * @param avoidStairs  계단 조건부 제외: 계단 없는 길이 우회 한도 안에 있으면 계단 길을 뺀다 (노인)
@@ -99,8 +102,19 @@ public record RouteProperties(
 
         /** 이 사람이 지날 수 있는 길인지. 제외 성질 중 하나라도 1이면 못 지난다. 휠체어 경사로가 있는 계단은 지난다 */
         public boolean passable(RoadEdge e) {
+            return passable(e, Relax.NONE);
+        }
+
+        /**
+         * 제외를 일부 풀었을 때 지날 수 있는지. 경로가 끊겼을 때 비포장만 푼다 (2026-11-04 결정).
+         * 계단(경사로 모름 포함), 확인된 턱, 못 지나는 육교는 풀지 않는다.
+         */
+        public boolean passable(RoadEdge e, Relax relax) {
             for (Penalty p : exclude) {
-                if (p == Penalty.STAIRS && e.penalty().wheelchairRamp()) {
+                if (p == Penalty.STAIRS && e.penalty().hasRamp()) {
+                    continue;
+                }
+                if (p == Penalty.UNPAVED && relax.unpaved()) {
                     continue;
                 }
                 if (e.penalty().get(p) >= 1.0) {
@@ -114,6 +128,18 @@ public record RouteProperties(
         public int minutes(double meters) {
             return (int) Math.round(meters / walkSpeedMPerMin);
         }
+    }
+
+    /**
+     * 휠체어 경로가 끊겼을 때 푸는 제외. 비포장만 푼다 (계단·턱·육교는 지날 수 없을 수 있어 풀지 않는다).
+     *
+     * @param unpaved 확인된 비포장을 지나게 한다
+     */
+    public record Relax(boolean unpaved) {
+
+        public static final Relax NONE = new Relax(false);
+        /** 푸는 순서 */
+        public static final List<Relax> ORDER = List.of(new Relax(true));
     }
 
     /** 모드 이름으로 값을 찾는다. 비어 있으면 기본 모드, 모르는 이름이면 IllegalArgumentException */

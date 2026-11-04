@@ -34,7 +34,7 @@ route:
   # mode 이름은 adult·child·senior·wheelchair로 통일한다 (2026-11-03 결정. 앱·요구사항 문서도 이 이름으로 맞춘다)
   #   max-detour     안전 경로가 최단 경로의 몇 배까지 돌 수 있는지. 0이면 한도 없음
   #   night-lead-min 일몰 몇 분 전부터 밤으로 볼지
-  #   exclude        이 성질이 확인된 길은 아예 뺀다 (stairs 계단, curb 확인된 턱, footbridge 못 지나는 육교)
+  #   exclude        이 성질이 확인된 길은 아예 뺀다 (stairs 계단, curb 확인된 턱, footbridge 못 지나는 육교, unpaved 비포장)
   #   avoid-stairs   계단 조건부 제외: 계단 없는 길이 우회 한도 안에 있으면 계단 길을 뺀다
   #   day / night    그때의 기준. weights가 비면 가장 짧은 길
   #   *-m            반경은 "걸어서 약 2분" (어린이 분당 70m, 노인 60m, 어른 80m). 보호구역은 법 기준 300m
@@ -71,11 +71,15 @@ route:
       night:
         weights: { light: 9, help: 3, cctv: 1 }   # 공중화장실은 경로 계산에 넣지 않는다
         help-m: 120
-    wheelchair:            # 휠체어: 지날 수 있는 길 중 가장 짧은 길 (낮·밤 같음)
-      max-detour: 0
+    wheelchair:            # 휠체어: 계단·확인된 턱·못 지나는 육교를 뺀 길 중에서 고른다
+      max-detour: 1.2      # 지날 수 있는 길 중 최단의 1.2배까지 (2026-11-04 결정. 이동이 힘들어 노인과 같은 값)
       walk-speed-m-per-min: 50
       night-lead-min: 0
-      exclude: [stairs, curb, footbridge]
+      exclude: [stairs, curb, footbridge, unpaved]   # 비포장은 2026-11-04 추가 (확인된 흙·자갈 길만)
+      # 낮: 가장 짧은 길
+      night:
+        weights: { light: 9, help: 3, cctv: 1 }   # 어두우면 턱·패인 곳이 안 보여 밝기를 먼저 (2026-11-04 결정)
+        help-m: 120                               # 노인과 같은 120m
 
   # 경로에서 이 거리 안에 있는 시설을 "지나는 시설"로 센다 (설명 문장·지도 아이콘용, 결정 12)
   count-radius-m:
@@ -89,6 +93,8 @@ route:
 
   # 출발·도착을 감싼 사각형을 사방으로 넓혀 그 안의 길만 읽는다 (8.1)
   search-margin-m: 500
+  # 그 범위에서 경로를 못 찾으면 이만큼 넓혀 한 번 더 찾는다. 강·철도·큰 도로를 다리·육교로 돌아가는 길 (2026-11-04)
+  retry-margin-m: 1500
   # 출발·도착에서 가장 가까운 길까지 이보다 멀면 경로를 찾지 않는다
   snap-max-m: 300
   # 출발·도착이 이보다 가까우면 SAME_POINT, 직선거리가 이보다 멀면 TOO_FAR (8.3)

@@ -93,6 +93,21 @@ class RouteFinderTests {
     }
 
     @Test
+    void seniorDoesNotFollowPreferenceOntoStairsWhenShortestHasNone() {
+        // 지름길은 계단 없고 어두움, 밝은 북쪽 길에 계단. 계단 없는 길(지름길)이 있으니 북쪽으로 가지 않는다
+        // (운영 테스트 시드 20261104에서 찾은 경우)
+        double[] nP = {126.93110, LAT + 0.0004};
+        RoadGraph g = new RoadGraph(Map.of(S, S_P, M, M_P, T, T_P, N, nP), List.of(
+                edge(10, S, M, S_P, M_P, EdgePenalty.NONE), edge(11, M, T, M_P, T_P, EdgePenalty.NONE),
+                edge(12, S, N, S_P, nP, STAIRS), edge(13, T, N, T_P, nP, EdgePenalty.NONE)));
+        RouteFinder.Found f = RouteFinder.find(g, S, T, DIRECT_IS_DARK, 1.2, e -> true, true);
+        assertThat(f.safe().edges()).noneMatch(RouteFinder::isStairs);
+
+        // 어른(계단 조건부 제외 없음)은 밝은 북쪽 길로 간다
+        assertThat(goesNorth(RouteFinder.find(g, S, T, DIRECT_IS_DARK, 1.2, e -> true, false))).isTrue();
+    }
+
+    @Test
     void wheelchairHasNoDetourLimit() {
         // 지름길에 확인된 턱 → 북쪽 길(약 1.58배)이라도 그 길로
         RouteFinder.Found f = RouteFinder.find(diamond(0.0011, CURB), S, T, null, 0,
