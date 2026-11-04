@@ -2,6 +2,7 @@ package com.saferoute.air;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -15,7 +16,8 @@ class DustJudgeTests {
 
     private final AirKoreaClient air = mock(AirKoreaClient.class);
     private final SituationProperties props = new SituationProperties(33, -10, 81, 36);
-    private final DustJudge judge = new DustJudge(air, props);
+    private final SidoFinder sidoFinder = mock(SidoFinder.class);
+    private final DustJudge judge = new DustJudge(air, sidoFinder, props);
 
     @Test
     void averagesStationsAndJudgesBad() {
@@ -57,5 +59,26 @@ class DustJudgeTests {
 
         assertThat(r.available()).isFalse();
         assertThat(r.dustBad()).isFalse();
+    }
+
+    @Test
+    void judgeAtFindsSidoFirst() {
+        when(sidoFinder.sidoAt(35.1401, 126.9336)).thenReturn("광주");
+        when(air.sido("광주")).thenReturn(List.of(new StationAir("서석동", 40, 20, "2026-11-02 14:00")));
+
+        DustResult r = judge.judgeAt(35.1401, 126.9336);
+
+        assertThat(r.sido()).isEqualTo("광주");
+        assertThat(r.pm10()).isEqualTo(40);
+    }
+
+    @Test
+    void judgeAtUnavailableWhenSidoUnknown() {
+        when(sidoFinder.sidoAt(0, 0)).thenThrow(new AirUnavailableException("시도를 알 수 없어요", null));
+
+        DustResult r = judge.judgeAt(0, 0);
+
+        assertThat(r.available()).isFalse();
+        verifyNoInteractions(air);
     }
 }
