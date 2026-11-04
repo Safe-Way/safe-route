@@ -18,6 +18,7 @@ import com.saferoute.route.engine.search.RouteFinder;
  * @param coverage 조명·CCTV 커버율을 잴 때 쓰는 거리
  * @param searchMarginM 출발·도착 사각형을 넓혀 도로망을 읽는 거리
  * @param retryMarginM  그 범위에서 경로를 못 찾으면 이만큼 넓혀 한 번 더 찾는다 (강·철도·큰 도로를 돌아가는 길)
+ * @param passableSnapExtraM 휠체어가 지날 수 있는 길에 붙일 때, 모든 길 기준보다 이만큼 넘게 멀어지면 붙이지 않는다
  */
 @ConfigurationProperties("route")
 public record RouteProperties(
@@ -28,6 +29,7 @@ public record RouteProperties(
         double searchMarginM,
         double retryMarginM,
         double snapMaxM,
+        double passableSnapExtraM,
         double samePointM,
         double tooFarM) {
 

@@ -154,4 +154,41 @@ class RetryAndRelaxTests {
         assertThat(r.routes().get(0).distanceM()).isBetween(360, 370);
         assertThat(r.explanation().text()).doesNotContain("비포장");
     }
+
+    /**
+     * 큰길 S–T와, T 북쪽에 계단으로만 드나드는 구역(아파트 단지 안 보행로 같은 곳).
+     * T –계단 5m– P –보행로– D. 도착점은 D (운영 테스트 시드 7319 쌍 38을 줄임)
+     */
+    static RoadGraph pocket(double dNorthM) {
+        double[] p = north(T, 5);
+        double[] d = north(T, dNorthM);
+        return new RoadGraph(Map.of(1L, S, 2L, T, 3L, p, 4L, d), List.of(
+                edge(1, 1, 2, S, T, EdgePenalty.NONE),
+                edge(2, 2, 3, T, p, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), false)),
+                edge(3, 3, 4, p, d, EdgePenalty.NONE)));
+    }
+
+    static RouteRequest toward(double[] d, String mode) {
+        return new RouteRequest(new Place(S[1], S[0], null), new Place(d[1], d[0], null), "auto", mode);
+    }
+
+    @Test
+    void wheelchairStopsAtNearestReachableRoadWhenDestinationIsBehindStairs() {
+        RouteService s = service(new InMemoryRoadGraphSource(pocket(20)));
+
+        RouteResult w = s.route(toward(north(T, 20), "wheelchair"));
+        RouteResult adult = s.route(toward(north(T, 20), "adult"));
+
+        // 휠체어는 계단 아래 T까지 안내하고 남은 거리를 알린다. 어른은 계단을 지나 D까지
+        assertThat(w.explanation().text()).endsWith("(주의: 도착점 근처 약 20m는 휠체어로 이어진 길이 확인되지 않았습니다)");
+        assertThat(adult.explanation().text()).doesNotContain("휠체어로 이어진 길");
+    }
+
+    @Test
+    void wheelchairGivesNoRouteWhenReachableRoadIsMoreThan50mFurther() {
+        RouteService s = service(new InMemoryRoadGraphSource(pocket(70)));
+
+        assertThatThrownBy(() -> s.route(toward(north(T, 70), "wheelchair")))
+                .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
+    }
 }

@@ -40,7 +40,7 @@ import com.saferoute.situation.NightResult;
  * <ol>
  *   <li>요청 검사 (SAME_POINT, TOO_FAR, OUT_OF_AREA)</li>
  *   <li>밤 판단: C파트 {@link NightJudge}. 어린이처럼 일몰 몇 분 전부터 밤으로 보는 모드는 여기서 앞당긴다</li>
- *   <li>주변 도로망 읽기, 출발·도착을 길에 붙이기: {@link RoadGraphSource}</li>
+ *   <li>주변 도로망 읽기, 출발·도착을 길에 붙이기: {@link RoadGraphSource}. 휠체어는 지날 수 있는 길로 이어진 곳에 붙인다</li>
  *   <li>주변 시설을 한 번 읽기: {@link PoiSource}. 점수·설명·지도 아이콘이 같은 목록을 쓴다</li>
  *   <li>모드·낮밤 기준으로 길마다 더할 비용: {@link RouteScorer} (시설 커버율을 요청 때 계산)</li>
  *   <li>최단·안전 경로: {@link RouteFinder}. 못 찾으면 범위를 넓혀 한 번 더 찾는다.
@@ -119,11 +119,18 @@ public class RouteService {
             throw new RouteException(RouteError.NO_ROUTE);
         }
         RouteResult result = assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(), a.nearby());
-        return profile.avoidUnpaved() ? withSurfaceNote(result, a.found(), profile) : result;
+        if (profile.avoidUnpaved()) {
+            result = withSurfaceNote(result, a.found(), profile);
+        }
+        return withNote(result, a.snapNote());
     }
 
-    /** 한 도로망에서 찾은 결과 */
-    private record Attempt(RouteFinder.Found found, double snapM, Nearby nearby) {
+    /** 한 도로망에서 찾은 결과. snapNote: 휠체어가 가장 가까운 길이 아닌 곳에 붙었을 때 알림 (없으면 "") */
+    private record Attempt(RouteFinder.Found found, double snapM, Nearby nearby, String snapNote) {
+    }
+
+    /** 길에 붙인 곳. moved: 모든 길 기준으로 가장 가까운 곳이 아닌 곳에 붙였는지 (휠체어) */
+    private record Placed(RoadGraph.Snap snap, boolean moved) {
     }
 
     /** 이 도로망에서 경로를 찾는다. 길에 붙이지 못하거나 이어지지 않으면 null */
@@ -140,9 +147,26 @@ public class RouteService {
         Nearby nearby = nearby(graph, phase, now);
         ToDoubleFunction<RoadEdge> extra = scorer.extraCost(graph, phase, cond.night(), nearby);
         try {
-            RouteFinder.Found found = RouteFinder.find(graph, from.node(), to.node(), extra,
+            return new Attempt(RouteFinder.find(graph, from.node(), to.node(), extra, profile.maxDetour(),
+                    profile::passable, profile.avoid()), from.distanceM() + to.distanceM(), nearby, "");
+        } catch (RouteException e) {
+            if (profile.exclude().isEmpty()) {
+                return null;
+            }
+        }
+        // 휠체어: 붙인 곳이 계단으로만 드나드는 구역일 수 있다. 지날 수 있는 길로 이어진 곳에 다시 붙여 한 번 더 찾는다.
+        // 대부분의 요청은 위에서 찾으므로 연결 덩어리 계산은 못 찾았을 때만 한다
+        Set<Long> part = graph.mainPart(profile::passable);
+        try {
+            Placed f = place(graph, start, from, part);
+            Placed t = place(graph, end, to, part);
+            if (!f.moved() && !t.moved()) {
+                return null;
+            }
+            RouteFinder.Found found = RouteFinder.find(graph, f.snap().node(), t.snap().node(), extra,
                     profile.maxDetour(), profile::passable, profile.avoid());
-            return new Attempt(found, from.distanceM() + to.distanceM(), nearby);
+            return new Attempt(found, f.snap().distanceM() + t.snap().distanceM(), nearby,
+                    placeNote("출발점", f) + placeNote("도착점", t));
         } catch (RouteException e) {
             return null;
         }
@@ -174,6 +198,11 @@ public class RouteService {
         if (unknown > 0) {
             note.append(" (확인 안 됨: 바닥 재질을 모르는 산길 약 %dm를 지납니다)".formatted(Math.round(unknown)));
         }
+        return withNote(r, note.toString());
+    }
+
+    /** 설명 문장 끝에 알림을 붙인다 */
+    private static RouteResult withNote(RouteResult r, String note) {
         if (note.isEmpty()) {
             return r;
         }
@@ -228,6 +257,28 @@ public class RouteService {
             throw new RouteException(RouteError.NO_ROUTE);
         }
         return s;
+    }
+
+    /**
+     * 지날 수 있는 길로 이어진 덩어리(part) 안에 다시 붙인다 (휠체어).
+     * 가장 가까운 길이 계단으로만 드나드는 구역이면 옆 길에 붙는데, 모든 길 기준보다
+     * passable-snap-extra-m(50m) 넘게 멀어지면 붙이지 않는다 (2026-11-04)
+     */
+    private Placed place(RoadGraph graph, double[] p, RoadGraph.Snap any, Set<Long> part) {
+        if (part.contains(any.node())) {
+            return new Placed(any, false);
+        }
+        RoadGraph.Snap s = graph.nearest(p[0], p[1], part);
+        if (s == null || s.distanceM() - any.distanceM() > props.passableSnapExtraM()) {
+            throw new RouteException(RouteError.NO_ROUTE);
+        }
+        return new Placed(s, true);
+    }
+
+    /** 옆 길에 붙였으면 남은 거리를 알린다. 계단으로만 드나드는 곳이라 휠체어 길이 확인되지 않은 구간이다 */
+    private static String placeNote(String which, Placed p) {
+        return p.moved() ? " (주의: %s 근처 약 %dm는 휠체어로 이어진 길이 확인되지 않았습니다)".formatted(which,
+                Math.round(p.snap().distanceM())) : "";
     }
 
     /** {경도, 위도} */

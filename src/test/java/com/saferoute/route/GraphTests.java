@@ -45,6 +45,19 @@ class GraphTests {
     }
 
     @Test
+    void mainPartLeavesOutAreaReachableOnlyByStairs() {
+        // S–M 보통 길, M–T 계단. 계단을 빼면 T는 큰 덩어리 밖
+        RoadGraph g = new RoadGraph(Map.of(S, S_P, M, M_P, T, T_P), List.of(edge(1, S, M, S_P, M_P, EdgePenalty.NONE),
+                edge(2, M, T, M_P, T_P, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), false))));
+
+        var part = g.mainPart(e -> !RouteFinder.isStairs(e));
+
+        assertThat(part).containsExactlyInAnyOrder(S, M);
+        assertThat(g.nearest(T_P[0], T_P[1], part).node()).isEqualTo(M);
+        assertThat(g.nearest(T_P[0], T_P[1]).node()).isEqualTo(T);
+    }
+
+    @Test
     void nearestOnEmptyGraphIsNull() {
         assertThat(new RoadGraph(Map.of(), List.of()).nearest(126.93, LAT)).isNull();
         assertThat(new RoadGraph(Map.of(), List.of()).isEmpty()).isTrue();
