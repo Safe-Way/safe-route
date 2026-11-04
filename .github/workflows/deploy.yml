@@ -1,0 +1,135 @@
+# 학교 서버 배포.
+# main의 CI가 통과하면 도커 이미지를 만들어 ssh로 서버에 올리고 deploy/deploy.sh로 띄운다.
+# Actions 탭 > Deploy > Run workflow로 직접 돌릴 수도 있다.
+#
+# 필요한 Repository secrets (Settings > Secrets and variables > Actions). 값은 저장소에 올리지 않는다:
+#   SSH_ADDRESS, SSH_PORT, SSH_ID, SSH_PASSWORD   서버 접속 정보
+#   APP_PORT                                      받은 포트번호(8321). 학교 nginx가 이 포트로 넘겨준다
+#   DB_ADDRESS, DB_PORT, DB_NAME, DB_USERNAME, DB_PASSWORD   학교 MySQL 접속 정보 (서버 안에서 닿는 주소)
+#   KAKAO_REST_KEY                                장소 검색, 미세먼지용 시·도 찾기
+#   DATA_GO_KR_KEY                                날씨(기상청), 미세먼지(에어코리아)
+#
+# 순서: secrets 확인 → 코드 받기 → jar 빌드 → 도커 이미지 빌드·압축 → 환경변수 파일 만들기
+#       → 서버로 올리기(scp) → 서버에서 deploy.sh 실행(앱 두 대 한 대씩 교체)
+name: Deploy
+
+on:
+  # CI 워크플로가 끝나면 이어서 돈다. main 브랜치일 때만. 성공했는지는 아래 job의 if가 본다
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Actions 탭에서 손으로 돌리기
+  workflow_dispatch:
+
+# 이 워크플로가 GitHub에 할 수 있는 일: 코드 읽기만
+permissions:
+  contents: read
+
+# 배포는 한 번에 하나씩. 돌고 있는 배포는 끊지 않고 다음 배포가 기다린다
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 학교 서버 배포
+    # CI가 실패한 main은 배포하지 않는다
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # secrets를 환경변수로 꺼내 둔다. 로그에는 *** 로 가려져 찍힌다
+    env:
+      SSH_ADDRESS: ${{ secrets.SSH_ADDRESS }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_ID: ${{ secrets.SSH_ID }}
+      SSHPASS: ${{ secrets.SSH_PASSWORD }}   # sshpass -e가 이 이름의 환경변수에서 비밀번호를 읽는다
+      APP_PORT: ${{ secrets.APP_PORT }}
+      DB_ADDRESS: ${{ secrets.DB_ADDRESS }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USERNAME: ${{ secrets.DB_USERNAME }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+      DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+    steps:
+      # 꼭 필요한 secret이 하나라도 비어 있으면 이름을 알려 주고 멈춘다(서버에 반쯤 올라가는 것을 막는다)
+      - name: secrets 확인
+        run: |
+          missing=""
+          for name in SSH_ADDRESS SSH_PORT SSH_ID SSHPASS APP_PORT DB_ADDRESS DB_PORT DB_NAME \
+                      DB_USERNAME DB_PASSWORD KAKAO_REST_KEY DATA_GO_KR_KEY; do
+            if [ -z "${!name}" ]; then
+              missing="$missing ${name/SSHPASS/SSH_PASSWORD}"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Repository secrets가 비어 있어요:$missing"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          # CI가 통과한 바로 그 커밋을 배포한다
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # 테스트는 CI가 이미 돌렸다
+      - name: jar 빌드
+        run: ./mvnw -B -ntp -DskipTests package
+
+      # Dockerfile로 이미지를 만들고 파일 하나(image.tar.gz)로 묶는다. 태그는 커밋 앞 12자리
+      - name: 도커 이미지 빌드
+        run: |
+          sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+          tag="safe-route:${sha::12}"
+          docker build -t "$tag" .
+          docker save "$tag" | gzip > "$RUNNER_TEMP/image.tar.gz"
+          ls -lh "$RUNNER_TEMP/image.tar.gz"
+
+      # 서버의 앱이 읽을 환경변수 파일(app.env)을 만든다. KEY=값 한 줄씩.
+      # umask 077: 이 파일을 runner 계정만 읽게. 값에 줄바꿈이 있으면 파일이 깨지므로 멈춘다
+      - name: 환경변수 파일 만들기
+        run: |
+          umask 077
+          f="$RUNNER_TEMP/app.env"
+          : > "$f"
+          put() {
+            case "$2" in *$'\n'*) echo "::error::$1 값에 줄바꿈이 있어요"; exit 1;; esac
+            printf '%s=%s\n' "$1" "$2" >> "$f"
+          }
+          put DB_URL "jdbc:mysql://${DB_ADDRESS}:${DB_PORT}/${DB_NAME}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+          put DB_USERNAME "$DB_USERNAME"
+          put DB_PASSWORD "$DB_PASSWORD"
+          put KAKAO_REST_KEY "$KAKAO_REST_KEY"
+          put DATA_GO_KR_KEY "$DATA_GO_KR_KEY"
+          # 서버 코드가 쓰지 않는 키(데이터 적재 스크립트용). application.yml이 이름을 가리키고 있어 빈 값으로 둔다
+          for name in SAFEMAP_KEY SAFETYDATA_POLICE_KEY SAFETYDATA_SECURITYLIGHT_KEY SAFETYDATA_COLDSHELTER_KEY \
+                      SAFETYDATA_STREETLIGHT_KEY ODSAY_API_KEY TMAP_APP_KEY; do
+            put "$name" ""
+          done
+
+      # 서버에 ~/safe-route 폴더를 만들고 이미지·환경변수·deploy.sh를 올린다.
+      # 서버가 비밀번호 로그인이라 sshpass를 쓴다. StrictHostKeyChecking=accept-new: 처음 보는 서버 키는 받아 두고, 바뀌면 멈춘다
+      - name: 서버로 올리기
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass > /dev/null
+          opts=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=30)
+          # 공용 서버라 폴더와 환경변수 파일은 본인만 읽게 둔다. scp -p로 runner의 600 권한을 그대로 옮긴다
+          sshpass -e ssh "${opts[@]}" -p "$SSH_PORT" "$SSH_ID@$SSH_ADDRESS" \
+            'mkdir -p ~/safe-route && chmod 700 ~/safe-route'
+          sshpass -e scp -p "${opts[@]}" -P "$SSH_PORT" \
+            "$RUNNER_TEMP/image.tar.gz" "$RUNNER_TEMP/app.env" deploy/deploy.sh \
+            "$SSH_ID@$SSH_ADDRESS:safe-route/"
+
+      # 서버에서 deploy.sh를 실행한다. 앱 두 대를 한 대씩 바꾸고, 다 되면 "배포 완료"를 찍는다.
+      # 실패하면 deploy.sh가 원인 로그를 찍고 0이 아닌 값으로 끝나서 이 단계가 빨갛게 된다
+      - name: 서버에서 띄우기
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -p "$SSH_PORT" "$SSH_ID@$SSH_ADDRESS" \
+            "bash ~/safe-route/deploy.sh '$APP_PORT'"
