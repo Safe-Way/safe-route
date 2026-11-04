@@ -22,7 +22,7 @@ import com.saferoute.route.engine.graph.RoadGraph;
  * 최단 경로와 안전 경로를 찾는다 (FR-04·05).
  * <ol>
  *   <li>지날 수 없는 길(휠체어의 계단 등)은 처음부터 뺀다. 최단 경로와 우회율도 "지날 수 있는 길 중에서" 잰다</li>
- *   <li>계단 조건부 제외(노인): 계단 없는 길이 우회 한도 안에 있으면 계단 길을 뺀다. 없으면 계단을 허용한다</li>
+ *   <li>조건부 제외(노인 계단, 휠체어 비포장): 피할 길이 없는 경로가 우회 한도 안에 있으면 그 길을 뺀다. 없으면 허용한다</li>
  *   <li>선호(밝은 길, 도움 시설 등): 길 비용 = 길이 + λ × 추가 비용. 우회 한도를 넘지 않는 가장 큰 λ(0~1)를 이분 탐색으로 찾는다.
  *       예전처럼 가중치를 반씩 줄이면 계단 회피까지 같이 약해져 계단 길이 다시 나왔다</li>
  * </ol>
@@ -34,8 +34,14 @@ public final class RouteFinder {
 
     /**
      * @param detourCapped 더 안전한 길이 우회 한도를 넘어서, 기준에 맞춘 길을 줄 수 없었는지
+     * @param avoidFree    조건부 제외에서 피할 길이 없는 가장 짧은 경로. 그런 경로가 없으면 null
+     *                     (조건부 제외가 없거나 최단에 피할 길이 없으면 최단과 같다)
      */
-    public record Found(RoadPath shortest, RoadPath safe, boolean detourCapped) {
+    public record Found(RoadPath shortest, RoadPath safe, boolean detourCapped, RoadPath avoidFree) {
+
+        public Found(RoadPath shortest, RoadPath safe, boolean detourCapped) {
+            this(shortest, safe, detourCapped, shortest);
+        }
     }
 
     private RouteFinder() {
@@ -49,6 +55,14 @@ public final class RouteFinder {
      */
     public static Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
             double maxDetour, Predicate<RoadEdge> passable, boolean avoidStairs) {
+        return find(graph, from, to, extra, maxDetour, passable, avoidStairs ? RouteFinder::isStairs : null);
+    }
+
+    /**
+     * @param avoid 조건부 제외할 길 (노인 계단, 휠체어 비포장). null이면 없음
+     */
+    public static Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
+            double maxDetour, Predicate<RoadEdge> passable, Predicate<RoadEdge> avoid) {
         Graph<Long, RoadEdge> usable = mask(graph, passable);
         RoadPath shortest = search(graph, usable, from, to, RoadEdge::lengthM);
         if (shortest == null) {
@@ -58,18 +72,19 @@ public final class RouteFinder {
 
         Graph<Long, RoadEdge> pool = usable;
         RoadPath base = shortest;
-        if (avoidStairs) {
-            // 최단 경로에 계단이 없어도 계단 길은 뺀다. 빼지 않으면 선호(쉼 곳·밝은 길)를 따라가다 계단 길로 갈 수 있다
-            Graph<Long, RoadEdge> noStairs = mask(graph, passable.and(e -> !isStairs(e)));
-            RoadPath free = shortest.edges().stream().anyMatch(RouteFinder::isStairs)
-                    ? search(graph, noStairs, from, to, RoadEdge::lengthM) : shortest;
+        RoadPath free = shortest;
+        if (avoid != null) {
+            // 최단 경로에 피할 길이 없어도 피할 길은 뺀다. 빼지 않으면 선호(쉼 곳·밝은 길)를 따라가다 그 길로 갈 수 있다
+            Graph<Long, RoadEdge> without = mask(graph, passable.and(avoid.negate()));
+            free = shortest.edges().stream().anyMatch(avoid)
+                    ? search(graph, without, from, to, RoadEdge::lengthM) : shortest;
             if (free != null && free.lengthM() <= limit) {
-                pool = noStairs;
+                pool = without;
                 base = free;
             }
         }
         if (extra == null) {
-            return new Found(shortest, base, false);
+            return new Found(shortest, base, false, free);
         }
 
         Graph<Long, RoadEdge> g = pool;
@@ -77,7 +92,7 @@ public final class RouteFinder {
                 e -> e.lengthM() + lambda * extra.applyAsDouble(e));
         RoadPath full = at.apply(1);
         if (full.lengthM() <= limit) {
-            return new Found(shortest, full, false);
+            return new Found(shortest, full, false, free);
         }
         double lo = 0;
         double hi = 1;
@@ -92,11 +107,16 @@ public final class RouteFinder {
                 hi = mid;
             }
         }
-        return new Found(shortest, best, best.sameAs(base));
+        return new Found(shortest, best, best.sameAs(base), free);
     }
 
     public static boolean isStairs(RoadEdge e) {
         return e.penalty().get(Penalty.STAIRS) >= 1;
+    }
+
+    /** 확인된 비포장 */
+    public static boolean isUnpaved(RoadEdge e) {
+        return e.penalty().get(Penalty.UNPAVED) >= 1;
     }
 
     private static Graph<Long, RoadEdge> mask(RoadGraph graph, Predicate<RoadEdge> passable) {

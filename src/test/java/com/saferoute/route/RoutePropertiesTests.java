@@ -18,8 +18,8 @@ class RoutePropertiesTests {
 
         RouteProperties.Profile adult = p.profile("adult");
         assertThat(adult.day().hasWeights()).isFalse();
-        assertThat(adult.night().weights()).containsEntry(Criterion.LIGHT, 9.0)
-                .containsEntry(Criterion.HELP, 3.0).containsEntry(Criterion.CCTV, 1.0);
+        assertThat(adult.night().weights()).containsEntry(Criterion.LIGHT, 5.0)
+                .containsEntry(Criterion.HELP, 2.0).containsEntry(Criterion.CCTV, 1.0);
         assertThat(adult.night().helpM()).isEqualTo(160);
         assertThat(adult.maxDetour()).isEqualTo(1.3);
         assertThat(adult.walkSpeedMPerMin()).isEqualTo(80);
@@ -42,7 +42,9 @@ class RoutePropertiesTests {
 
         RouteProperties.Profile wheel = p.profile("wheelchair");
         assertThat(wheel.maxDetour()).isEqualTo(1.2);
-        assertThat(wheel.exclude()).containsExactly(Penalty.STAIRS, Penalty.CURB, Penalty.FOOTBRIDGE, Penalty.UNPAVED);
+        assertThat(wheel.exclude()).containsExactly(Penalty.STAIRS, Penalty.CURB, Penalty.FOOTBRIDGE, Penalty.TRAIL, Penalty.FORD);
+        assertThat(wheel.avoidUnpaved()).isTrue();
+        assertThat(p.profile("senior").avoidUnpaved()).isFalse();
         assertThat(wheel.day().hasWeights()).isFalse();
         assertThat(wheel.night().weights()).containsOnlyKeys(Criterion.LIGHT, Criterion.HELP, Criterion.CCTV);
         assertThat(wheel.night().helpM()).isEqualTo(120);

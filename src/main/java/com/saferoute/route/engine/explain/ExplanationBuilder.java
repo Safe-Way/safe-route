@@ -41,11 +41,12 @@ public final class ExplanationBuilder {
      */
     public static String text(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
             boolean same, boolean capped, int extraM, int extraMin, Map<FacilityGroup, Integer> diff) {
-        boolean rules = phase.hasWeights() || profile.avoidStairs();
+        boolean rules = phase.hasWeights() || profile.avoidStairs() || profile.avoidUnpaved();
+        // 휠체어 낮: 기준(가중치)은 없고 제외·비포장 조건부 제외만 있다. 최단 그대로면 "지날 수 있는 길 중 가장 짧은 길"
+        if (!profile.exclude().isEmpty() && !phase.hasWeights() && (same || !rules)) {
+            return WHEELCHAIR;
+        }
         if (!rules) {
-            if (!profile.exclude().isEmpty()) {
-                return WHEELCHAIR;
-            }
             if (!cond.night()) {
                 // 사용자가 직접 끈 것(manual)과 실제로 낮인 것(auto)을 구분해 말한다
                 return "manual".equals(cond.nightSource()) ? NIGHT_OFF : DAY;

@@ -43,8 +43,8 @@ import com.saferoute.situation.NightResult;
  *   <li>주변 도로망 읽기, 출발·도착을 길에 붙이기: {@link RoadGraphSource}</li>
  *   <li>주변 시설을 한 번 읽기: {@link PoiSource}. 점수·설명·지도 아이콘이 같은 목록을 쓴다</li>
  *   <li>모드·낮밤 기준으로 길마다 더할 비용: {@link RouteScorer} (시설 커버율을 요청 때 계산)</li>
- *   <li>최단·안전 경로: {@link RouteFinder}. 못 찾으면 범위를 넓혀 한 번 더, 그래도 휠체어가 끊기면
- *       비포장 제외만 풀어 찾고 설명에 알린다</li>
+ *   <li>최단·안전 경로: {@link RouteFinder}. 못 찾으면 범위를 넓혀 한 번 더 찾는다.
+ *       휠체어가 비포장을 지나면 피할 때 얼마나 더 걸리는지 설명에 알린다</li>
  *   <li>시설 세기, 설명, 응답 만들기: {@link RouteResultAssembler}</li>
  * </ol>
  * 사용: {@code RouteResult r = routeService.route(request);}
@@ -109,29 +109,26 @@ public class RouteService {
         RouteProperties.Phase phase = profile.phase(cond.night());
 
         Attempt a = attempt(roads.load(BBox.around(List.of(start, end), props.searchMarginM())),
-                start, end, cond, profile, phase, now, false);
+                start, end, cond, profile, phase, now);
         if (a == null && props.retryMarginM() > props.searchMarginM()) {
             // 강·철도·큰 도로를 범위 밖 다리로 돌아가야 하는 길. 넓혀 한 번 더 찾는다 (우회 한도 등 규칙은 같다)
             a = attempt(roads.load(BBox.around(List.of(start, end), props.retryMarginM())),
-                    start, end, cond, profile, phase, now, true);
+                    start, end, cond, profile, phase, now);
         }
         if (a == null) {
             throw new RouteException(RouteError.NO_ROUTE);
         }
         RouteResult result = assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(), a.nearby());
-        return a.relax() == RouteProperties.Relax.NONE ? result : withWarning(result, a.found());
+        return profile.avoidUnpaved() ? withSurfaceNote(result, a.found(), profile) : result;
     }
 
-    /** 한 도로망에서 찾은 결과. relax는 경로가 끊겨 풀어야 했던 제외 */
-    private record Attempt(RouteFinder.Found found, double snapM, Nearby nearby, RouteProperties.Relax relax) {
+    /** 한 도로망에서 찾은 결과 */
+    private record Attempt(RouteFinder.Found found, double snapM, Nearby nearby) {
     }
 
-    /**
-     * 이 도로망에서 경로를 찾는다. 못 찾으면 null.
-     * relaxAllowed면 제외 때문에 끊겼을 때 비포장 제외를 풀어 다시 찾는다 (휠체어, 2026-11-04 결정).
-     */
+    /** 이 도로망에서 경로를 찾는다. 길에 붙이지 못하거나 이어지지 않으면 null */
     private Attempt attempt(RoadGraph graph, double[] start, double[] end, Conditions cond,
-            RouteProperties.Profile profile, RouteProperties.Phase phase, ZonedDateTime now, boolean relaxAllowed) {
+            RouteProperties.Profile profile, RouteProperties.Phase phase, ZonedDateTime now) {
         RoadGraph.Snap from;
         RoadGraph.Snap to;
         try {
@@ -142,37 +139,53 @@ public class RouteService {
         }
         Nearby nearby = nearby(graph, phase, now);
         ToDoubleFunction<RoadEdge> extra = scorer.extraCost(graph, phase, cond.night(), nearby);
-        List<RouteProperties.Relax> tries = new ArrayList<>(List.of(RouteProperties.Relax.NONE));
-        if (relaxAllowed && !profile.exclude().isEmpty()) {
-            tries.addAll(RouteProperties.Relax.ORDER);
+        try {
+            RouteFinder.Found found = RouteFinder.find(graph, from.node(), to.node(), extra,
+                    profile.maxDetour(), profile::passable, profile.avoid());
+            return new Attempt(found, from.distanceM() + to.distanceM(), nearby);
+        } catch (RouteException e) {
+            return null;
         }
-        for (RouteProperties.Relax relax : tries) {
-            try {
-                RouteFinder.Found found = RouteFinder.find(graph, from.node(), to.node(), extra,
-                        profile.maxDetour(), e -> profile.passable(e, relax), profile.avoidStairs());
-                return new Attempt(found, from.distanceM() + to.distanceM(), nearby, relax);
-            } catch (RouteException e) {
-                // 이어지지 않음. 다음 단계로
-            }
-        }
-        return null;
     }
 
-    /** 제외를 풀어 찾은 경로라면, 무엇을 지나는지 설명 문장 뒤에 알린다. 휠체어로 실제로 못 지날 수 있다 */
-    static RouteResult withWarning(RouteResult r, RouteFinder.Found found) {
-        java.util.Set<RoadEdge> edges = new java.util.HashSet<>(found.shortest().edges());
-        edges.addAll(found.safe().edges());
-        double unpaved = edges.stream().filter(e -> e.penalty().get(Penalty.UNPAVED) >= 1)
-                .mapToDouble(RoadEdge::lengthM).sum();
-        if (unpaved <= 0) {
+    /**
+     * 안내하는 경로의 바닥을 설명 문장 뒤에 알린다 (휠체어, 2026-11-04 결정).
+     * <ul>
+     *   <li>비포장을 지나면: 피하면 얼마나 더 걸리는지, 비포장 없이는 이어지지 않으면 피하는 길이 없다고</li>
+     *   <li>재질을 모르는 산길을 지나면: "확인 안 됨"</li>
+     * </ul>
+     */
+    static RouteResult withSurfaceNote(RouteResult r, RouteFinder.Found found, RouteProperties.Profile profile) {
+        double unpaved = lengthOf(found.safe(), RouteFinder::isUnpaved);
+        double unknown = lengthOf(found.safe(), e -> e.penalty().get(Penalty.SURFACE_UNKNOWN) >= 1);
+        StringBuilder note = new StringBuilder();
+        if (unpaved > 0) {
+            String avoid;
+            if (found.avoidFree() == null) {
+                avoid = "비포장을 피하는 길은 없습니다";
+            } else {
+                long extraM = Math.round(found.avoidFree().lengthM() - found.safe().lengthM());
+                int extraMin = profile.minutes(found.avoidFree().lengthM()) - profile.minutes(found.safe().lengthM());
+                avoid = extraMin > 0 ? "비포장을 피하면 %dm(%d분) 더 걸립니다".formatted(extraM, extraMin)
+                        : "비포장을 피하면 %dm 더 걸립니다".formatted(extraM);
+            }
+            note.append(" (주의: 비포장길 약 %dm를 지납니다. %s)".formatted(Math.round(unpaved), avoid));
+        }
+        if (unknown > 0) {
+            note.append(" (확인 안 됨: 바닥 재질을 모르는 산길 약 %dm를 지납니다)".formatted(Math.round(unknown)));
+        }
+        if (note.isEmpty()) {
             return r;
         }
-        String note = " (주의: 다른 길이 없어 비포장길 약 %dm를 지납니다. 지날 수 있는지 확인이 필요합니다)"
-                .formatted(Math.round(unpaved));
         RouteResult.Explanation e = r.explanation();
         return new RouteResult(r.conditions(), r.routes(),
                 new RouteResult.Explanation(e.text() + note, e.extraM(), e.extraMin(), e.diff()),
                 r.facilities(), r.dataQuality());
+    }
+
+    private static double lengthOf(com.saferoute.route.engine.search.RoadPath p,
+            java.util.function.Predicate<RoadEdge> which) {
+        return p.edges().stream().filter(which).mapToDouble(RoadEdge::lengthM).sum();
     }
 
     /** 도로망 범위를 가장 큰 반경만큼 넓혀 그 안 시설을 한 번 읽는다 */

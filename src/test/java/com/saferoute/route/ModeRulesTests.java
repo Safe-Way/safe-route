@@ -141,6 +141,11 @@ class ModeRulesTests {
         RoadGraph dirt = RouteFinderTests.diamond(0.0004, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0), false));
         assertThat(north(route(dirt, List.of(), at(12), "wheelchair", "auto"))).isTrue();
         assertThat(north(route(dirt, List.of(), at(12), "adult", "auto"))).isFalse();
+        // 비포장 없는 북쪽 길이 1.2배를 넘으면 비포장 지름길로 가고 알린다
+        RoadGraph far = RouteFinderTests.diamond(0.0008, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0), false));
+        RouteResult r = route(far, List.of(), at(12), "wheelchair", "auto");
+        assertThat(north(r)).isFalse();
+        assertThat(r.explanation().text()).contains("비포장을 피하면");
     }
 
     @Test
