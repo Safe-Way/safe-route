@@ -185,7 +185,7 @@ class RouteRandomCheck {
         RouteFinder.Found f;
         try {
             f = RouteFinder.find(graph, a.node(), b.node(), extra, profile.maxDetour(), profile::passable,
-                    profile.avoidStairs());
+                    profile.avoid());
         } catch (RouteException e) {
             // 지날 수 있는 길로 두 점이 이어지지 않음. 읽은 범위(사각형 + 500m) 안에서만 찾으므로 범위 탓인지도 본다
             boolean anyRoad = dijkstra(graph, x -> true, a.node(), b.node()) < Double.MAX_VALUE;
@@ -234,6 +234,13 @@ class RouteRandomCheck {
             double free = dijkstra(graph, passable.and(e -> !RouteFinder.isStairs(e)), a.node(), b.node());
             if (free <= f.shortest().lengthM() * profile.maxDetour()) {
                 violations.add(tag + "계단 없는 길 %.1fm가 한도 안인데 계단을 지남".formatted(free));
+            }
+        }
+        // 4-1. 휠체어: 한도 안에 비포장 없는 길이 있으면 비포장을 안 지남
+        if (profile.avoidUnpaved() && f.safe().edges().stream().anyMatch(RouteFinder::isUnpaved)) {
+            double free = dijkstra(graph, passable.and(e -> !RouteFinder.isUnpaved(e)), a.node(), b.node());
+            if (free <= f.shortest().lengthM() * profile.maxDetour()) {
+                violations.add(tag + "비포장 없는 길 %.1fm가 한도 안인데 비포장을 지남".formatted(free));
             }
         }
         // 5. 설명 문장과 경로 수
@@ -287,8 +294,8 @@ class RouteRandomCheck {
     }
 
     /**
-     * 처음 범위에서 못 찾은 경우: 실제 서비스가 범위를 넓혀 다시 찾거나 휠체어 제외를 풀어 찾는지 본다.
-     * 찾으면 "찾음(넓힘)" 또는 "찾음(제외 풂)", 못 찾으면 처음 원인 그대로.
+     * 처음 범위에서 못 찾은 경우: 실제 서비스가 범위를 넓혀 다시 찾는지 본다.
+     * 찾으면 "찾음(넓힘)", 못 찾으면 처음 원인 그대로.
      */
     static Run viaService(RouteService service, double[] from, double[] to, String mode, boolean night, String first) {
         long started = System.nanoTime();
@@ -297,7 +304,7 @@ class RouteRandomCheck {
                     new com.saferoute.route.api.RouteRequest.Place(from[1], from[0], null),
                     new com.saferoute.route.api.RouteRequest.Place(to[1], to[0], null), "auto", mode));
             long ms = (System.nanoTime() - started) / 1_000_000;
-            String how = r.explanation().text().contains("(주의:") ? "찾음(제외 풂)" : "찾음(넓힘)";
+            String how = "찾음(넓힘)";
             retried.add("%s %s (%.6f,%.6f)→(%.6f,%.6f) %s → %s %dms, 경로 %dm: %s".formatted(mode, night ? "밤" : "낮",
                     from[1], from[0], to[1], to[0], first, how, ms,
                     r.routes().get(r.routes().size() - 1).distanceM(), r.explanation().text()));
@@ -350,15 +357,14 @@ class RouteRandomCheck {
             }
             List<Run> ok = list.stream().filter(r -> r.error() == null).toList();
             List<Long> ms = new ArrayList<>(ok.stream().map(Run::ms).toList());
+            // 다시 찾아 성공한 요청도 응답 시간에 넣는다 (전체 요약에도)
+            list.stream().filter(r -> r.error() != null && r.error().startsWith("찾음")).forEach(r -> ms.add(r.ms()));
             Collections.sort(ms);
             allMs.addAll(ms);
             List<Run> diff = ok.stream().filter(Run::differs).toList();
             Map<String, Long> errors = new TreeMap<>();
             list.stream().filter(r -> r.error() != null).forEach(r -> errors.merge(r.error(), 1L, Long::sum));
             long noRoute = list.stream().filter(r -> r.error() != null && r.error().startsWith("NO_ROUTE")).count();
-            // 다시 찾아 성공한 요청도 응답 시간에 넣는다
-            list.stream().filter(r -> r.error() != null && r.error().startsWith("찾음")).forEach(r -> ms.add(r.ms()));
-            Collections.sort(ms);
             String[] mn = g.getKey().split(" ");
             o.line("%-11s %-2s %5d %6.0f%% %6.2f배 %6.0f%% %6.1f%% %6d %6d %6d %s", mn[0], mn[1], list.size(),
                     ok.isEmpty() ? 0 : 100.0 * diff.size() / ok.size(),

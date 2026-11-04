@@ -31,7 +31,7 @@ import com.saferoute.route.engine.score.RouteScorer;
 import com.saferoute.situation.NightJudge;
 
 /**
- * 경로를 못 찾았을 때: 범위를 넓혀 다시 찾기, 휠체어는 비포장 제외만 풀기 (2026-11-04 결정).
+ * 경로를 못 찾았을 때 범위를 넓혀 다시 찾기, 휠체어 비포장 조건부 제외와 알림 (2026-11-04 결정).
  * 운영 테스트(RouteRandomCheck) 시드 20261104에서 찾은 경우를 작게 줄였다.
  */
 class RetryAndRelaxTests {
@@ -111,24 +111,47 @@ class RetryAndRelaxTests {
     }
 
     @Test
-    void wheelchairUsesUnpavedOnlyWhenNothingElseAndSaysSo() {
+    void wheelchairUnpavedWithNoWayAroundSaysSo() {
         RouteResult r = service(new InMemoryRoadGraphSource(oneEdge(
                 new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0), false)))).route(request("wheelchair"));
 
-        assertThat(r.explanation().text()).contains("비포장길 약");
+        assertThat(r.explanation().text()).contains("비포장길 약 364m를 지납니다").contains("비포장을 피하는 길은 없습니다");
+    }
+
+    /** 비포장 지름길 S–T와, 북쪽 northM으로 돌아가는 포장길 S–N–T */
+    static RoadGraph unpavedOrAround(double northM) {
+        double[] n = north(new double[] {126.932, LAT}, northM);
+        return new RoadGraph(Map.of(1L, S, 2L, T, 3L, n), List.of(
+                edge(1, 1, 2, S, T, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0), false)),
+                edge(2, 1, 3, S, n, EdgePenalty.NONE), edge(3, 3, 2, n, T, EdgePenalty.NONE)));
     }
 
     @Test
-    void relaxedRouteIsNotUsedWhenAPassableOneExists() {
-        // 비포장 지름길과 돌아가는 포장길이 있으면 포장길, 경고 없음
-        double[] n = north(new double[] {126.932, LAT}, 300);
-        RoadGraph g = new RoadGraph(Map.of(1L, S, 2L, T, 3L, n), List.of(
-                edge(1, 1, 2, S, T, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0), false)),
-                edge(2, 1, 3, S, n, EdgePenalty.NONE), edge(3, 3, 2, n, T, EdgePenalty.NONE)));
+    void wheelchairAvoidsUnpavedWhenWayAroundIsWithinLimit() {
+        // 돌아가는 길 약 1.1배 ≤ 1.2 → 포장길, 알림 없음
+        RouteResult r = service(new InMemoryRoadGraphSource(unpavedOrAround(80))).route(request("wheelchair"));
 
-        RouteResult r = service(new InMemoryRoadGraphSource(g)).route(request("wheelchair"));
+        // 최단(비포장)과 안전(포장 우회) 두 경로를 주고, 안전 경로는 비포장을 지나지 않는다
+        assertThat(r.routes()).extracting(RouteResult.Route::kind).containsExactly("shortest", "safe");
+        assertThat(r.routes().get(1).distanceM()).isGreaterThan(390);
+        assertThat(r.explanation().text()).isEqualTo("33m(1분) 더 돌지만 비포장을 피하는 길로 갑니다");
+    }
 
-        assertThat(r.explanation().text()).doesNotContain("주의");
-        assertThat(r.routes().get(0).distanceM()).isGreaterThan(400);
+    @Test
+    void wheelchairTakesUnpavedWhenWayAroundIsTooLongAndSaysHowMuchLonger() {
+        // 돌아가는 길 약 1.9배 > 1.2 → 비포장 지름길, 피하면 얼마나 더 걸리는지 알림
+        RouteResult r = service(new InMemoryRoadGraphSource(unpavedOrAround(300))).route(request("wheelchair"));
+
+        assertThat(r.routes()).hasSize(1);
+        assertThat(r.routes().get(0).distanceM()).isBetween(360, 370);
+        assertThat(r.explanation().text()).contains("비포장길 약 364m를 지납니다").containsPattern("비포장을 피하면 \\d+m\\(\\d+분\\) 더 걸립니다");
+    }
+
+    @Test
+    void otherModesIgnoreUnpaved() {
+        RouteResult r = service(new InMemoryRoadGraphSource(unpavedOrAround(80))).route(request("adult"));
+
+        assertThat(r.routes().get(0).distanceM()).isBetween(360, 370);
+        assertThat(r.explanation().text()).doesNotContain("비포장");
     }
 }

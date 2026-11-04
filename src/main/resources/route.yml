@@ -34,8 +34,9 @@ route:
   # mode 이름은 adult·child·senior·wheelchair로 통일한다 (2026-11-03 결정. 앱·요구사항 문서도 이 이름으로 맞춘다)
   #   max-detour     안전 경로가 최단 경로의 몇 배까지 돌 수 있는지. 0이면 한도 없음
   #   night-lead-min 일몰 몇 분 전부터 밤으로 볼지
-  #   exclude        이 성질이 확인된 길은 아예 뺀다 (stairs 계단, curb 확인된 턱, footbridge 못 지나는 육교, unpaved 비포장)
+  #   exclude        이 성질이 확인된 길은 아예 뺀다 (stairs 경사로가 확인되지 않은 계단, curb 확인된 턱, footbridge 못 지나는 육교, trail 산행 길, ford 징검다리)
   #   avoid-stairs   계단 조건부 제외: 계단 없는 길이 우회 한도 안에 있으면 계단 길을 뺀다
+  #   avoid-unpaved  비포장 조건부 제외: 비포장 없는 길이 우회 한도 안에 있으면 비포장 길을 뺀다
   #   day / night    그때의 기준. weights가 비면 가장 짧은 길
   #   *-m            반경은 "걸어서 약 2분" (어린이 분당 70m, 노인 60m, 어른 80m). 보호구역은 법 기준 300m
   #   note           낮에 다른 길을 고른 이유로 보여 줄 문장
@@ -45,7 +46,7 @@ route:
       walk-speed-m-per-min: 80
       night-lead-min: 0
       night:
-        weights: { light: 9, help: 3, cctv: 1 }   # 밝기 > 도움 시설 > CCTV
+        weights: { light: 5, help: 2, cctv: 1 }   # 밝기 > 도움 시설 > CCTV. 9:3:1에서 바꿈 (2026-11-04, 밝기 같고 덜 돎)
         help-m: 160
     child:                 # 어린이·청소년
       max-detour: 1.3
@@ -57,7 +58,7 @@ route:
         help-m: 150
         note: 어린이보호구역과 도움을 청할 곳이 가까운 길로 갑니다
       night:
-        weights: { light: 9, help: 3, cctv: 1 }   # 밤에는 보호구역을 쓰지 않는다
+        weights: { light: 5, help: 2, cctv: 1 }   # 밤에는 보호구역을 쓰지 않는다
         help-m: 150
     senior:                # 노인
       max-detour: 1.2
@@ -69,16 +70,18 @@ route:
         rest-m: 120
         note: 계단을 피하고 쉴 곳이 가까운 길로 갑니다
       night:
-        weights: { light: 9, help: 3, cctv: 1 }   # 공중화장실은 경로 계산에 넣지 않는다
+        weights: { light: 5, help: 2, cctv: 1 }   # 공중화장실은 경로 계산에 넣지 않는다
         help-m: 120
     wheelchair:            # 휠체어: 계단·확인된 턱·못 지나는 육교를 뺀 길 중에서 고른다
       max-detour: 1.2      # 지날 수 있는 길 중 최단의 1.2배까지 (2026-11-04 결정. 이동이 힘들어 노인과 같은 값)
       walk-speed-m-per-min: 50
       night-lead-min: 0
-      exclude: [stairs, curb, footbridge, unpaved]   # 비포장은 2026-11-04 추가 (확인된 흙·자갈 길만)
-      # 낮: 가장 짧은 길
+      exclude: [stairs, curb, footbridge, trail, ford]   # trail 등산 난이도가 붙은 산길, ford 징검다리 (2026-11-04)
+      avoid-unpaved: true  # 비포장 조건부 제외: 비포장 없는 길이 1.2배 안이면 그 길로, 아니면 비포장 길 + 알림 (2026-11-04)
+      day:                 # 낮: 가장 짧은 길. 비포장을 피해 다른 길을 고르면 그 이유를 note로 말한다
+        note: 비포장을 피하는 길로 갑니다
       night:
-        weights: { light: 9, help: 3, cctv: 1 }   # 어두우면 턱·패인 곳이 안 보여 밝기를 먼저 (2026-11-04 결정)
+        weights: { light: 5, help: 2, cctv: 1 }   # 어두우면 턱·패인 곳이 안 보여 밝기를 먼저 (2026-11-04 결정)
         help-m: 120                               # 노인과 같은 120m
 
   # 경로에서 이 거리 안에 있는 시설을 "지나는 시설"로 센다 (설명 문장·지도 아이콘용, 결정 12)

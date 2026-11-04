@@ -26,8 +26,11 @@ import com.saferoute.route.engine.graph.RoadGraph;
  *       (2026-11-03 결정). 0이나 모르면(NULL) 못 지난다</li>
  *   <li>보도턱: edge_stat.curb = 1(안 낮춤)이면 확인된 턱. 모르면(NULL) 턱 없음으로 본다 (2026-11-02 결정)</li>
  *   <li>육교: edge_stat.footbridge_ok = 0이면 휠체어로 못 지나는 육교. 모르면 지나갈 수 있다고 본다</li>
- *   <li>비포장: road_edge.surface가 {@link #UNPAVED_SURFACES} 중 하나면 확인된 비포장. 모르면(NULL) 포장으로 본다
- *       (2026-11-04 결정). 다진 흙(compacted)은 휠체어로 대개 지날 수 있어 넣지 않는다</li>
+ *   <li>징검다리: tags.ford가 있으면(stepping_stones 등, no 제외) 휠체어로 못 건넌다 (2026-11-04)</li>
+ *   <li>바닥 ({@link #classify}, 2026-11-04 결정): 재질(surface)이 있으면 그것으로, 없으면 길 종류로 정한다.
+ *       비포장 값은 {@link #UNPAVED_SURFACES}. 다진 흙(compacted)은 휠체어로 대개 지날 수 있어 넣지 않는다.
+ *       재질을 모르면 인도·골목·차도·일반 길은 포장, 농로는 tracktype grade1만 포장(grade2~5·없음은 비포장),
+ *       산길은 등산 난이도(sac_scale)가 있으면 산행 길(휠체어 제외), 없으면 포장으로 보되 "확인 안 됨"</li>
  *   <li>데이터 부족: edge_stat.data_gap 비트 중 시설 비트(1 밝기, 2 CCTV, 4 도움 지점, 8 지킴이집, 16 쉼 곳).
  *       감점에는 쓰지 않고 "확인 안 됨" 표시에만 쓴다</li>
  * </ul>
@@ -67,7 +70,10 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     @Override
     public RoadGraph load(BBox box) {
         // 1. 범위에 걸치는 길과 성질. edge_stat 줄이 없는 길은 아직 계산 안 된 것이라 데이터 부족으로 본다
-        String sql = "SELECT e.id, e.from_node, e.to_node, e.length_m, e.highway, e.steps, e.wheelchair_ramp, e.surface, ST_AsText(e.geom) AS wkt,"
+        String sql = "SELECT e.id, e.from_node, e.to_node, e.length_m, e.highway, e.steps, e.wheelchair_ramp, e.surface,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.tracktype')) AS tracktype,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.sac_scale')) AS sac_scale,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.ford')) AS ford, ST_AsText(e.geom) AS wkt,"
                 + " s.edge_id AS has_stat, s.curb, s.footbridge_ok, s.data_gap"
                 + " FROM road_edge e LEFT JOIN edge_stat s ON s.edge_id = e.id"
                 + " WHERE MBRIntersects(ST_GeomFromText(?, 0), e.geom)";
@@ -82,8 +88,15 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             if (rs.getObject("footbridge_ok") != null && rs.getInt("footbridge_ok") == 0) {
                 values.put(Penalty.FOOTBRIDGE, 1.0);
             }
-            if (isUnpaved(rs.getString("surface"))) {
-                values.put(Penalty.UNPAVED, 1.0);
+            if (isFord(rs.getString("ford"))) {
+                values.put(Penalty.FORD, 1.0);
+            }
+            switch (classify(rs.getString("surface"), rs.getString("highway"), rs.getString("tracktype"),
+                    rs.getString("sac_scale"))) {
+                case UNPAVED -> values.put(Penalty.UNPAVED, 1.0);
+                case TRAIL -> values.put(Penalty.TRAIL, 1.0);
+                case UNCONFIRMED -> values.put(Penalty.SURFACE_UNKNOWN, 1.0);
+                case PAVED -> { }
             }
             boolean gap = rs.getObject("has_stat") == null || (rs.getInt("data_gap") & FACILITY_GAP_BITS) != 0;
             return new RoadEdge(rs.getLong("id"), rs.getLong("from_node"), rs.getLong("to_node"),
@@ -111,7 +124,34 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
         return new RoadGraph(nodes, edges);
     }
 
-    /** 확인된 비포장인지. 값이 없으면 false (모르는 값은 감점하지 않는다) */
+    /** 길 바닥 구분 */
+    enum Surface { PAVED, UNPAVED, TRAIL, UNCONFIRMED }
+
+    /**
+     * 바닥 구분. 산길의 등산 난이도가 가장 먼저, 그다음 재질, 재질이 없으면 길 종류로 정한다.
+     *
+     * @param tracktype 농로 단단함 (OSM tracktype: grade1 포장 ~ grade5 흙)
+     * @param sacScale  산길 등산 난이도 (OSM sac_scale)
+     */
+    static Surface classify(String surface, String highway, String tracktype, String sacScale) {
+        if ("path".equals(highway) && sacScale != null && !sacScale.isBlank()) {
+            return Surface.TRAIL;
+        }
+        if (surface != null && !surface.isBlank()) {
+            return isUnpaved(surface) ? Surface.UNPAVED : Surface.PAVED;
+        }
+        if ("track".equals(highway)) {
+            return "grade1".equals(tracktype) ? Surface.PAVED : Surface.UNPAVED;
+        }
+        return "path".equals(highway) ? Surface.UNCONFIRMED : Surface.PAVED;
+    }
+
+    /** 징검다리·물을 건너는 길인지 (OSM ford). no면 아님 */
+    static boolean isFord(String ford) {
+        return ford != null && !ford.isBlank() && !"no".equalsIgnoreCase(ford.trim());
+    }
+
+    /** 확인된 비포장 재질인지. 값이 없으면 false */
     static boolean isUnpaved(String surface) {
         return surface != null && UNPAVED_SURFACES.contains(surface.trim().toLowerCase(java.util.Locale.ROOT));
     }

@@ -9,6 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.score.Criterion;
+import com.saferoute.route.engine.search.RouteFinder;
 
 /**
  * route.yml 값. 설명은 route.yml 주석과 결정 문서 「경로 엔진 결정 사항 정리」에 있다.
@@ -48,7 +49,7 @@ public record RouteProperties(
     /**
      * 낮 또는 밤의 기준.
      *
-     * @param weights 기준별 비중. 비중이 클수록 먼저 챙긴다 (밤 밝기 9 : 도움 시설 3 : CCTV 1). 비면 가장 짧은 길
+     * @param weights 기준별 비중. 비중이 클수록 먼저 챙긴다 (밤 밝기 5 : 도움 시설 2 : CCTV 1). 비면 가장 짧은 길
      * @param helpM   도움 시설 반경 (걸어서 약 2분)
      * @param restM   쉼 곳 반경
      * @param schoolM 어린이보호구역 반경 (법 기준 300m)
@@ -86,9 +87,10 @@ public record RouteProperties(
      * @param nightLeadMin 일몰 몇 분 전부터 밤으로 볼지 (어린이 60)
      * @param exclude      이 성질이 1(확실히 못 지남)인 길은 아예 뺀다 (휠체어: 계단, 확인된 턱, 못 지나는 육교)
      * @param avoidStairs  계단 조건부 제외: 계단 없는 길이 우회 한도 안에 있으면 계단 길을 뺀다 (노인)
+     * @param avoidUnpaved 비포장 조건부 제외: 비포장 없는 길이 우회 한도 안에 있으면 비포장 길을 뺀다 (휠체어, 2026-11-04)
      */
     public record Profile(double maxDetour, double walkSpeedMPerMin, int nightLeadMin, List<Penalty> exclude,
-            boolean avoidStairs, Phase day, Phase night) {
+            boolean avoidStairs, boolean avoidUnpaved, Phase day, Phase night) {
 
         public Profile {
             exclude = exclude == null ? List.of() : List.copyOf(exclude);
@@ -100,21 +102,13 @@ public record RouteProperties(
             return isNight ? night : day;
         }
 
-        /** 이 사람이 지날 수 있는 길인지. 제외 성질 중 하나라도 1이면 못 지난다. 휠체어 경사로가 있는 계단은 지난다 */
-        public boolean passable(RoadEdge e) {
-            return passable(e, Relax.NONE);
-        }
-
         /**
-         * 제외를 일부 풀었을 때 지날 수 있는지. 경로가 끊겼을 때 비포장만 푼다 (2026-11-04 결정).
-         * 계단(경사로 모름 포함), 확인된 턱, 못 지나는 육교는 풀지 않는다.
+         * 이 사람이 지날 수 있는 길인지. 제외 성질 중 하나라도 1이면 못 지난다.
+         * 휠체어 경사로가 있다고 확인된 계단은 지난다 (경사로 없음·모름은 못 지남).
          */
-        public boolean passable(RoadEdge e, Relax relax) {
+        public boolean passable(RoadEdge e) {
             for (Penalty p : exclude) {
                 if (p == Penalty.STAIRS && e.penalty().hasRamp()) {
-                    continue;
-                }
-                if (p == Penalty.UNPAVED && relax.unpaved()) {
                     continue;
                 }
                 if (e.penalty().get(p) >= 1.0) {
@@ -124,22 +118,18 @@ public record RouteProperties(
             return true;
         }
 
+        /** 조건부 제외할 길 (노인 계단, 휠체어 비포장). 없으면 null */
+        public java.util.function.Predicate<RoadEdge> avoid() {
+            if (avoidStairs && avoidUnpaved) {
+                return e -> RouteFinder.isStairs(e) || RouteFinder.isUnpaved(e);
+            }
+            return avoidStairs ? RouteFinder::isStairs : avoidUnpaved ? RouteFinder::isUnpaved : null;
+        }
+
         /** 걸리는 시간(분), 이 사람의 보행 속도로 환산 */
         public int minutes(double meters) {
             return (int) Math.round(meters / walkSpeedMPerMin);
         }
-    }
-
-    /**
-     * 휠체어 경로가 끊겼을 때 푸는 제외. 비포장만 푼다 (계단·턱·육교는 지날 수 없을 수 있어 풀지 않는다).
-     *
-     * @param unpaved 확인된 비포장을 지나게 한다
-     */
-    public record Relax(boolean unpaved) {
-
-        public static final Relax NONE = new Relax(false);
-        /** 푸는 순서 */
-        public static final List<Relax> ORDER = List.of(new Relax(true));
     }
 
     /** 모드 이름으로 값을 찾는다. 비어 있으면 기본 모드, 모르는 이름이면 IllegalArgumentException */
