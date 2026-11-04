@@ -5,39 +5,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.function.ToDoubleFunction;
 
-import org.jgrapht.Graph;
-import org.jgrapht.GraphPath;
-import org.jgrapht.alg.shortestpath.AStarShortestPath;
-import org.jgrapht.graph.AsWeightedGraph;
-
-import com.saferoute.route.engine.geo.Geo;
-import com.saferoute.route.engine.graph.RoadEdge;
-import com.saferoute.route.engine.graph.RoadGraph;
-
-/** 여러 테스트가 같이 쓰는 도우미: 결과 출력, .env 읽기, 비용을 바꿔 끼운 경로 탐색 */
+/** 팀 DB를 쓰는 확인용 테스트의 도우미: 결과 출력, .env 읽기 */
 final class TestSupport {
 
     private TestSupport() {
-    }
-
-    /** 시험 지역: 이름과 OSM 파일 */
-    record Region(String name, Path osm) {
-    }
-
-    /** 찾은 경로: 지나는 길과 길이(m) */
-    record Route(List<RoadEdge> edges, double length) {
-    }
-
-    /** cost로 A* 탐색. 길이 아래로 내려가지 않는 비용만 넣는다 */
-    static Route search(RoadGraph g, Graph<Long, RoadEdge> usable, long a, long b, ToDoubleFunction<RoadEdge> cost) {
-        var weighted = new AsWeightedGraph<>(usable, cost::applyAsDouble, false, false);
-        GraphPath<Long, RoadEdge> p = new AStarShortestPath<>(weighted,
-                (x, y) -> 0.99 * Geo.distance(g.point(x), g.point(y))).getPath(a, b);
-        return p == null ? null : new Route(p.getEdgeList(), p.getEdgeList().stream().mapToDouble(RoadEdge::lengthM).sum());
     }
 
     /** 프로젝트 폴더의 .env (없으면 빈 값) */

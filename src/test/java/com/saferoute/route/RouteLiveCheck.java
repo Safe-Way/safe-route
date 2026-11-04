@@ -25,7 +25,7 @@ import com.saferoute.route.engine.score.RouteScorer;
 import com.saferoute.situation.NightJudge;
 
 /**
- * 팀 DB(문화전당 반경 2km 도로망 + poi)로 모드·시각별 경로를 실제로 계산해 본다. 속도도 잰다.
+ * 팀 DB(광주 전체 도로망 + poi)에서 고정 경로 3개를 모드·시각별로 실제로 계산해 본다. 임의 경로 검사는 RouteRandomCheck.
  * 실행: ./mvnw test -Dtest=RouteLiveCheck -Dlive
  */
 class RouteLiveCheck {
