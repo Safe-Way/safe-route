@@ -471,6 +471,35 @@ CREATE TABLE IF NOT EXISTS edge_stat (
     KEY idx_edge_stat_dong (dong_cd)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '길별 감점 원값';
 
+-- 도로망에서 뺀 자동차전용도로 (020)
+CREATE TABLE IF NOT EXISTS road_edge_excluded (
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    edge_id     BIGINT       NULL COMMENT 'road_edge에 있던 때의 id (적재 스크립트가 바로 넣으면 NULL)',
+    way_id      BIGINT       NOT NULL COMMENT 'OSM 길 번호',
+    seq         INT          NOT NULL COMMENT '그 길 안에서 몇 번째 구간인지 (0부터)',
+    from_node   BIGINT       NOT NULL,
+    to_node     BIGINT       NOT NULL,
+    length_m    DOUBLE       NOT NULL,
+    highway     VARCHAR(30)  NOT NULL,
+    name        VARCHAR(200) NULL,
+    footway     VARCHAR(30)  NULL,
+    steps       TINYINT      NOT NULL DEFAULT 0,
+    covered     TINYINT      NOT NULL DEFAULT 0,
+    bridge      TINYINT      NOT NULL DEFAULT 0,
+    surface     VARCHAR(30)  NULL,
+    tags        JSON         NULL COMMENT '그 밖의 OSM 태그',
+    geom        LINESTRING   NOT NULL SRID 0,
+    reason      VARCHAR(20)  NOT NULL COMMENT '뺀 이유: motorroad(자동차전용도로), expressway(고속화도로)',
+    excluded_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_road_edge_excluded_way_seq (way_id, seq),
+    KEY idx_road_edge_excluded_reason (reason)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '도로망에서 뺀 길 (사람이 걸을 수 없는 자동차전용도로)';
+
+CREATE TABLE IF NOT EXISTS edge_stat_excluded LIKE edge_stat;
+ALTER TABLE edge_stat_excluded COMMENT = '도로망에서 뺀 길의 edge_stat 원값 (road_edge_excluded.edge_id로 이어짐)';
+
+
 -- ---------------------------------------------------------------- 시군구별 시설 밀도 (데이터 부족 판정)
 
 CREATE TABLE IF NOT EXISTS region_density (
