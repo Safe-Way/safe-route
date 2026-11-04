@@ -1,11 +1,11 @@
 erDiagram
-  road_node ||--o{ road_edge : "from_node / to_node"
-  road_edge ||--|| edge_stat : "edge_id"
-  road_edge ||--o{ edge_poi : "edge_id"
-  poi ||--o{ edge_poi : "poi_id"
-  admin_area ||--o{ edge_stat : "sgg_cd / dong_cd"
-  admin_area ||--o{ region_density : "sgg_cd"
-  holiday }o--o{ poi : "poi_status 뷰가 함께 씀"
+  road_node ||--o{ road_edge : "① 길의 양 끝점"
+  road_edge ||--|| edge_stat : "② 길마다 원값"
+  road_edge ||--o{ edge_poi : "③ 길 옆 시설"
+  poi ||--o{ edge_poi : "④ 시설 정보"
+  holiday }o--o{ poi : "⑦ 공휴일 휴무"
+  admin_area ||--o{ edge_stat : "⑤ 길이 속한 구·동"
+  admin_area ||--o{ region_density : "⑥ 구별 시설 밀도"
   road_node {
     bigint id PK "OSM 점 번호"
     double lon
@@ -41,6 +41,8 @@ erDiagram
     tinyint footbridge_ok
     varchar road_class
     smallint data_gap "부족 비트"
+    varchar sgg_cd FK "시군구"
+    varchar dong_cd FK "행정동"
   }
   edge_poi {
     bigint edge_id FK
@@ -67,12 +69,12 @@ erDiagram
   }
   admin_area {
     varchar level "sido sigungu dong"
-    varchar code
+    varchar code PK "SGIS 코드"
     varchar name
     multipolygon geom
   }
   region_density {
-    varchar sgg_cd
+    varchar sgg_cd FK
     varchar kind
     double density
     tinyint gap
