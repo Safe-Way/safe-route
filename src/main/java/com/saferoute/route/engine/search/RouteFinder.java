@@ -58,9 +58,11 @@ public final class RouteFinder {
 
         Graph<Long, RoadEdge> pool = usable;
         RoadPath base = shortest;
-        if (avoidStairs && shortest.edges().stream().anyMatch(RouteFinder::isStairs)) {
+        if (avoidStairs) {
+            // 최단 경로에 계단이 없어도 계단 길은 뺀다. 빼지 않으면 선호(쉼 곳·밝은 길)를 따라가다 계단 길로 갈 수 있다
             Graph<Long, RoadEdge> noStairs = mask(graph, passable.and(e -> !isStairs(e)));
-            RoadPath free = search(graph, noStairs, from, to, RoadEdge::lengthM);
+            RoadPath free = shortest.edges().stream().anyMatch(RouteFinder::isStairs)
+                    ? search(graph, noStairs, from, to, RoadEdge::lengthM) : shortest;
             if (free != null && free.lengthM() <= limit) {
                 pool = noStairs;
                 base = free;
