@@ -32,7 +32,7 @@ public class FacilityController {
             "bell", "store", "subway");
     /** 지도에 띄울 수 있는 종류. 등(light)은 8만 개가 넘어 점으로 보내지 않는다 (밝기는 경로 계산에만) */
     static final Set<String> MAP_KINDS = Set.of("cctv", "police", "bell", "store", "guard_house", "school_zone",
-            "shelter", "toilet", "footbridge", "crosswalk", "stairs", "subway");
+            "shelter", "toilet", "footbridge", "crosswalk", "stairs", "subway", "subway_entrance");
     static final Set<String> MODES = Set.of("adult", "child", "senior", "wheelchair");
     /** 장애인 모드에서 휠체어로 쓸 수 있는 것만 고를 종류 (장애인 화장실, 엘리베이터 있는 역) */
     static final Set<String> WHEELCHAIR_FILTERED = Set.of("toilet", "subway");

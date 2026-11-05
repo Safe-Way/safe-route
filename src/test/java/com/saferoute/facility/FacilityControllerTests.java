@@ -123,6 +123,16 @@ class FacilityControllerTests {
     }
 
     @Test
+    void poisAcceptsSubwayEntrances() {
+        when(repo.within(anyDouble(), anyDouble(), anyDouble(), anyDouble(), eq(Set.of("subway", "subway_entrance")),
+                anyInt())).thenReturn(List.of());
+
+        ResponseEntity<?> res = controller.pois("126.91,35.14,126.93,35.15", "subway,subway_entrance", null);
+
+        assertThat(res.getStatusCode().value()).isEqualTo(200);
+    }
+
+    @Test
     void poisMarksTruncated() {
         when(repo.within(anyDouble(), anyDouble(), anyDouble(), anyDouble(), eq(Set.of("cctv")), anyInt()))
                 .thenReturn(List.of(toilet(1, 0, null), toilet(2, 0, null), toilet(3, 0, null)));
