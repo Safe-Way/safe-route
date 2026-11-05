@@ -25,7 +25,7 @@ public final class Coverage {
     private static final double EDGE_CELL_M = 50;
 
     private final Map<Long, double[]> byEdge;
-    /** 길 따라 기준(조명·CCTV)의 표본별 결과. 어두운 구간 안내(FR-31)에 쓴다 */
+    /** 조명의 표본별 결과. 어두운 구간 안내(FR-31)에만 쓰므로 조명만 남긴다 */
     private final Map<Criterion, Map<Long, Sampled>> sampled;
 
     private Coverage(Map<Long, double[]> byEdge, Map<Criterion, Map<Long, Sampled>> sampled) {
@@ -45,7 +45,7 @@ public final class Coverage {
     public record Sampled(double[] offsetM, boolean[] inside) {
     }
 
-    /** 길 따라 기준의 표본별 결과. 계산하지 않은 기준이나 길이면 null */
+    /** 표본별 결과 (조명만). 계산하지 않은 기준이나 길이면 null */
     public Sampled sampled(RoadEdge e, Criterion c) {
         Map<Long, Sampled> m = sampled.get(c);
         return m == null ? null : m.get(e.id());
@@ -93,9 +93,11 @@ public final class Coverage {
                 if (index == null) {
                     index = new EdgeIndex(g, pr);
                 }
-                Map<Long, Sampled> flags = new HashMap<>();
+                Map<Long, Sampled> flags = c.getKey() == Criterion.LIGHT ? new HashMap<>() : null;
                 alongRoad(g, index, pr, layer, snapM, samples, out, k, flags);
-                sampled.put(c.getKey(), flags);
+                if (flags != null) {
+                    sampled.put(c.getKey(), flags);
+                }
             } else {
                 PointGrid grid = new PointGrid(layer.points(), pr, layer.radiusM());
                 for (RoadEdge e : g.graph().edgeSet()) {
@@ -162,7 +164,9 @@ public final class Coverage {
                 inside[si] = d <= radius;
                 in += inside[si] ? 1 : 0;
             }
-            flags.put(e.id(), new Sampled(offsets, inside));
+            if (flags != null) {
+                flags.put(e.id(), new Sampled(offsets, inside));
+            }
             out.get(e.id())[k] = ss.isEmpty() ? 0 : (double) in / ss.size();
         }
     }

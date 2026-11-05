@@ -26,6 +26,7 @@ import com.saferoute.route.engine.search.RouteFinder;
 
 /**
  * 찾은 두 경로로 응답(요구사항 8.3)을 만든다: 거리·시간, 지나는 시설 수, 차이 설명, 지도 아이콘, 데이터 상태.
+ * 걷는 동안 안내(2차)에 쓰는 시설 자리(FR-30)·어두운 구간(FR-31)·꺾는 곳(FR-34)·횡단보도 구간도 여기서 붙인다.
  */
 @Component
 public class RouteResultAssembler {
@@ -47,11 +48,6 @@ public class RouteResultAssembler {
      * @param snapM      출발·도착에서 가장 가까운 길 노드까지 거리의 합
      * @param nearby     이 요청에서 읽은 주변 시설 (점수 계산과 같은 목록)
      */
-    public RouteResult assemble(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
-            RouteFinder.Found found, double[] start, double[] end, double snapM, Nearby nearby) {
-        return assemble(cond, profile, phase, found, start, end, snapM, nearby, Coverage.NONE);
-    }
-
     /** @param cov 경로를 고를 때 쓴 커버율. 밤이면 고른 경로의 어두운 구간(FR-31)을 여기서 꺼낸다 */
     public RouteResult assemble(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
             RouteFinder.Found found, double[] start, double[] end, double snapM, Nearby nearby, Coverage cov) {
@@ -68,10 +64,12 @@ public class RouteResultAssembler {
         List<RouteResult.Route> routes = new ArrayList<>();
         if (!same) {
             routes.add(route("shortest", shortM, profile.minutes(shortM), shortLine, shortCounts,
-                    dark(cond, found.shortest(), start, cov)));
+                    dark(cond, found.shortest(), start, cov), turns(found.shortest(), start),
+                    crossings(found.shortest(), start)));
         }
         routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts,
-                dark(cond, found.safe(), start, cov)));
+                dark(cond, found.safe(), start, cov), turns(found.safe(), start),
+                crossings(found.safe(), start)));
 
         int extraM = same ? 0 : safeM - shortM;
         // 반올림을 따로 하면 "22분 / 24분"인데 "(1분) 더"가 나올 수 있어, 두 경로 시간의 차로 구한다
@@ -88,8 +86,26 @@ public class RouteResultAssembler {
     }
 
     private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts,
-            List<RouteResult.Stretch> dark) {
-        return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()), dark);
+            List<RouteResult.Stretch> dark, List<RouteResult.Turn> turns, List<RouteResult.Stretch> crossings) {
+        return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()), dark, turns,
+                crossings);
+    }
+
+    private static List<RouteResult.Stretch> crossings(RoadPath path, double[] start) {
+        double startM = Geo.distance(start, path.line().get(0));
+        return Turns.crossings(path, startM).stream()
+                .map(c -> new RouteResult.Stretch((int) Math.round(c[0]), (int) Math.round(c[1])))
+                .toList();
+    }
+
+    private List<RouteResult.Turn> turns(RoadPath path, double[] start) {
+        RouteProperties.Turn t = props.turn();
+        double startM = Geo.distance(start, path.line().get(0));
+        return Turns.along(path, startM, t.minAngle(), t.lookM(), t.linkM()).stream()
+                .map(x -> new RouteResult.Turn((int) Math.round(x.atM()), x.left() ? "left" : "right",
+                        (int) Math.round(x.angle()), x.crossing(),
+                        x.thenM() == null ? null : (int) Math.round(x.thenM())))
+                .toList();
     }
 
     /** 밤에만. 시작 거리는 요청한 출발점부터 재서 시설 along.atM과 같은 기준으로 맞춘다 */

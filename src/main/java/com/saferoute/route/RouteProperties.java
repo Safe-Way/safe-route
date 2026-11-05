@@ -20,6 +20,7 @@ import com.saferoute.route.engine.search.RouteFinder;
  * @param retryMarginM  그 범위에서 경로를 못 찾으면 이만큼 넓혀 한 번 더 찾는다 (강·철도·큰 도로를 돌아가는 길)
  * @param passableSnapExtraM 휠체어가 지날 수 있는 길에 붙일 때, 모든 길 기준보다 이만큼 넘게 멀어지면 붙이지 않는다
  * @param darkStretch 걷는 동안 "앞으로 ○m는 조명이 적습니다" 안내에 쓸 어두운 구간 기준 (FR-31)
+ * @param turn        걷는 동안 "80m 앞 왼쪽" 안내에 쓸 꺾는 곳 기준 (FR-34)
  */
 @ConfigurationProperties("route")
 public record RouteProperties(
@@ -33,7 +34,16 @@ public record RouteProperties(
         double passableSnapExtraM,
         double samePointM,
         double tooFarM,
-        DarkStretch darkStretch) {
+        DarkStretch darkStretch,
+        Turn turn) {
+
+    /**
+     * @param minAngle 경로 선에서 방향이 이 각도(도)보다 크게 바뀌면 꺾는 곳 (FR-34)
+     * @param lookM    방향을 잴 때 꺾임점 앞뒤로 보는 거리. 짧은 지그재그를 무시한다
+     * @param linkM    다음 꺾는 곳이 이 거리 안에 이어지면 그 거리를 붙여 앱이 한 번에 말하게 한다 (횡단보도 건너기 등)
+     */
+    public record Turn(double minAngle, double lookM, double linkM) {
+    }
 
     /**
      * @param mergeGapM 어두운 표본 사이 밝은 틈이 이 길이 이하면 하나의 구간으로 잇는다

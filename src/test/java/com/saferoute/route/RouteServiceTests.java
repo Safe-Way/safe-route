@@ -97,6 +97,12 @@ class RouteServiceTests {
         });
         assertThat(safe.dark().stream().mapToInt(d -> d.toM() - d.fromM()).sum())
                 .isLessThan(shortest.dark().stream().mapToInt(d -> d.toM() - d.fromM()).sum());
+        // 꺾는 곳은 경로 길이 안에 있고 방향은 left·right (FR-34)
+        assertThat(r.routes()).allSatisfy(rt -> assertThat(rt.turns()).allSatisfy(t -> {
+            assertThat(t.atM()).isBetween(0, rt.distanceM());
+            assertThat(t.direction()).isIn("left", "right");
+            assertThat(t.angle()).isGreaterThan(45);
+        }));
         // 비상벨(126.93160, 35.14030)은 북쪽으로 돌아가는 안전 경로의 동쪽 끝 근처, 경로 아래(오른쪽)에 있다
         RouteResult.Along bell = r.facilities().get(0).along().get("safe");
         assertThat(bell.atM()).isGreaterThan(safe.distanceM() / 2);

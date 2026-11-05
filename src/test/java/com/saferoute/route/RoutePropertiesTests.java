@@ -57,6 +57,9 @@ class RoutePropertiesTests {
         assertThat(p.passableSnapExtraM()).isEqualTo(50);
         assertThat(p.darkStretch().mergeGapM()).isEqualTo(10);
         assertThat(p.darkStretch().minM()).isEqualTo(50);
+        assertThat(p.turn().minAngle()).isEqualTo(45);
+        assertThat(p.turn().lookM()).isEqualTo(15);
+        assertThat(p.turn().linkM()).isEqualTo(20);
         assertThat(p.tooFarM()).isEqualTo(5000);
         assertThatThrownBy(() -> p.profile("elder")).isInstanceOf(IllegalArgumentException.class);
     }

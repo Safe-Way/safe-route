@@ -3,7 +3,6 @@ package com.saferoute.route.engine.explain;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.score.Coverage;
 import com.saferoute.route.engine.score.Criterion;
@@ -35,18 +34,15 @@ final class DarkStretches {
         }
         List<Double> pos = new ArrayList<>();
         List<Boolean> dark = new ArrayList<>();
-        RoadEdge first = path.edges().get(0);
-        // 첫 길을 어느 쪽에서 들어가는지: 경로 선의 첫 점이 그 길 선의 처음과 끝 중 어디에 가까운지
-        long at = Geo.distance(path.line().get(0), first.geometry().get(0))
-                <= Geo.distance(path.line().get(0), first.geometry().get(first.geometry().size() - 1))
-                ? first.from() : first.to();
+        boolean[] fwd = path.forward();
         double base = startM;
-        for (RoadEdge e : path.edges()) {
+        for (int ei = 0; ei < path.edges().size(); ei++) {
+            RoadEdge e = path.edges().get(ei);
             Coverage.Sampled s = cov.sampled(e, Criterion.LIGHT);
             if (s == null) {
                 return List.of();
             }
-            boolean forward = e.from() == at;
+            boolean forward = fwd[ei];
             int n = s.offsetM().length;
             for (int i = 0; i < n; i++) {
                 int k = forward ? i : n - 1 - i;
@@ -54,7 +50,6 @@ final class DarkStretches {
                 dark.add(!s.inside()[k]);
             }
             base += e.lengthM();
-            at = forward ? e.to() : e.from();
         }
         double[] p = pos.stream().mapToDouble(Double::doubleValue).toArray();
         boolean[] d = new boolean[dark.size()];
