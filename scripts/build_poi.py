@@ -22,6 +22,7 @@
   여는 시간은 열차 시간표(subway_timetable 평일)의 그 역 첫차~막차.
 - 지하철 출입구(subway_entrance, OSM 92곳): 모든 모드(common). wheelchair = 그 출구 쪽 지상 엘리베이터
   (subway_entrance.elevator, 없으면 OSM wheelchair yes/no, 그것도 없으면 NULL = 확인 안 됨).
+  출구 안내(subway_entrance.note, 024. 예: 양동시장 3번 휠체어리프트)는 출구·역 설명에만 붙이고 판단에는 쓰지 않는다.
   저상버스는 정류장이 아니라 버스 한 대마다 붙은 정보라 지도 점으로 넣지 않는다 (요청 때 광주 버스 도착 API의 LOW_BUS로 판단).
 - sgg_cd / dong_cd: 점이 드는 시군구·행정동
 
@@ -29,7 +30,9 @@
 먼저 할 일: src/main/resources/db/migration/012_poi.sql
 
 실행: python3 scripts/build_poi.py [--sql-only] [--only 종류,종류]
-  --only subway,subway_entrance : 그 종류만 지우고 다시 넣는다. 다른 시설의 poi id(edge_poi가 가리킴)는 그대로 둔다
+  --only subway,subway_entrance : 그 종류만 지우고 다시 넣는다. 다른 시설의 poi id(edge_poi가 가리킴)는 그대로 둔다.
+      다시 넣은 종류는 id가 바뀌고 edge_poi에도 들어 있으므로, 끝나면 python3 scripts/build_edge_poi.py를 꼭 돌린다
+      (2026-11-05 역·출구만 다시 넣었더니 edge_poi 1,309줄이 없는 시설을 가리킴)
 """
 import json
 import math
@@ -363,9 +366,12 @@ def build():
     # 역의 휠체어 판단은 출구 기준 (결정 51): 지상에서 엘리베이터로 들어갈 수 있는 출구가 하나라도 있으면 1,
     # 출구가 모두 '없음'으로 확인됐으면 0, 모르는 출구가 남아 있으면 NULL. 역 안(대합실↔승강장) 엘리베이터만 있는 역은 0
     exits = defaultdict(list)
-    for sid, exit_no, elev in query("SELECT station_id, IFNULL(exit_no, ''), IFNULL(elevator, '') FROM subway_entrance "
-                                    "WHERE station_id IS NOT NULL"):
+    notes = defaultdict(list)  # 출구 안내(024 note): 역 설명에도 "3번 출구 계단 휠체어리프트 있음"처럼 붙인다
+    for sid, exit_no, elev, note in query("SELECT station_id, IFNULL(exit_no, ''), IFNULL(elevator, ''), IFNULL(note, '')"
+                                          " FROM subway_entrance WHERE station_id IS NOT NULL"):
         exits[int(sid)].append((exit_no, None if elev == "" else int(elev)))
+        if note:
+            notes[int(sid)].append(f"{exit_no}번 출구 {note}" if exit_no else note)
     for sid, name, addr, lon, lat, elev, elev_ok, toilet, charger in query(
             "SELECT station_id, name, IFNULL(address, ''), lon, lat, elevator_total, elevator_available, "
             "accessible_toilet_total, wheelchair_charger_total FROM subway_station"):
@@ -385,7 +391,7 @@ def build():
             gate = "지상에서 내려가는 엘리베이터 없음" + (f"(역 안 엘리베이터 {elev}대)" if elev else "")
         else:
             gate = "출구 엘리베이터 확인 안 됨"
-        parts = ["지하철역", gate]
+        parts = ["지하철역", gate] + notes.get(int(sid), [])
         parts += [s for s, ok in ((f"장애인 화장실 {toilet}곳", toilet), (f"전동휠체어 충전기 {charger}대", charger)) if ok]
         if frm:
             parts.append(f"열차 {frm}~{to}")
@@ -395,14 +401,14 @@ def build():
                        open_hours=f"열차 {frm}~{to}" if frm else None, open_from=frm, open_to=to,
                        open_days="매일" if frm else None, detail=" · ".join(parts)))
     # 지하철 출입구: 출구 쪽 지상 엘리베이터 (elevator는 손으로 채운 값, 없으면 OSM wheelchair 표시)
-    for oid, exit_no, station, elev, osm_wc, lon, lat in query(
+    for oid, exit_no, station, elev, osm_wc, lon, lat, note in query(
             "SELECT e.osm_id, IFNULL(e.exit_no, ''), IFNULL(s.name, ''), IFNULL(e.elevator, ''), IFNULL(e.wheelchair, ''),"
-            " e.lon, e.lat FROM subway_entrance e LEFT JOIN subway_station s ON s.station_id = e.station_id"):
+            " e.lon, e.lat, IFNULL(e.note, '') FROM subway_entrance e LEFT JOIN subway_station s ON s.station_id = e.station_id"):
         wc = int(elev) if elev != "" else (1 if osm_wc == "yes" else 0 if osm_wc == "no" else None)
         name = (f"{station}역 " if station else "지하철 ") + (f"{exit_no}번 출구" if exit_no else "출구")
         state = {1: "엘리베이터 있음", 0: "엘리베이터 없음"}.get(wc, "엘리베이터 확인 안 됨")
         out.append(poi("subway_entrance", [{"lon": float(lon), "lat": float(lat), "src": f"subway_entrance:{oid}"}],
-                       name, sub="지하철 출입구", wheelchair=wc, modes="common", detail=f"지하철 출입구 · {state}"))
+                       name, sub="지하철 출입구", wheelchair=wc, modes="common", detail=f"지하철 출입구 · {state}" + (f" · {note}" if note else "")))
 
     # 화장실 안 비상벨: 50m 안 가장 가까운 화장실이 열려 있을 때만 쓸 수 있다
     toilets_xy = [t for t in out if t["kind"] == "toilet"]

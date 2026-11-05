@@ -751,6 +751,7 @@ CREATE TABLE IF NOT EXISTS subway_entrance (
     wheelchair        VARCHAR(10) NULL COMMENT 'OSM wheelchair 표시 (대부분 비어 있음)',
     elevator          TINYINT     NULL COMMENT '이 출구 쪽 지상 엘리베이터: 1 있음, 0 없음, NULL 모름 (022, 손으로 확인)',
     elevator_source   VARCHAR(300) NULL COMMENT 'elevator 값의 근거',
+    note              VARCHAR(200) NULL COMMENT '설명에 덧붙일 출구 안내 (024, 예: 휠체어리프트 있음). 엘리베이터 판단에는 쓰지 않음',
     lon               DOUBLE      NOT NULL,
     lat               DOUBLE      NOT NULL,
     geom              POINT       NOT NULL SRID 0,
