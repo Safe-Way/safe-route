@@ -29,7 +29,6 @@ import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadGraph;
-import com.saferoute.route.engine.score.Coverage;
 import com.saferoute.route.engine.score.RouteScorer;
 import com.saferoute.route.engine.search.RouteFinder;
 import com.saferoute.situation.NightJudge;
@@ -119,8 +118,7 @@ public class RouteService {
         if (a == null) {
             throw new RouteException(RouteError.NO_ROUTE);
         }
-        RouteResult result = assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(), a.nearby(),
-                a.coverage());
+        RouteResult result = assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(), a.nearby());
         if (profile.avoidUnpaved()) {
             result = withSurfaceNote(result, a.found(), profile);
         }
@@ -128,7 +126,7 @@ public class RouteService {
     }
 
     /** 한 도로망에서 찾은 결과. snapNote: 휠체어가 가장 가까운 길이 아닌 곳에 붙었을 때 알림 (없으면 "") */
-    private record Attempt(RouteFinder.Found found, double snapM, Nearby nearby, String snapNote, Coverage coverage) {
+    private record Attempt(RouteFinder.Found found, double snapM, Nearby nearby, String snapNote) {
     }
 
     /** 길에 붙인 곳. moved: 모든 길 기준으로 가장 가까운 곳이 아닌 곳에 붙였는지 (휠체어) */
@@ -147,12 +145,10 @@ public class RouteService {
             return null;
         }
         Nearby nearby = nearby(graph, phase, now);
-        // 커버율은 한 번만 계산해 경로 고르기와 어두운 구간 안내(FR-31)에 같이 쓴다
-        Coverage cov = scorer.coverage(graph, phase, cond.night(), nearby);
-        ToDoubleFunction<RoadEdge> extra = scorer.extraCost(cov, phase);
+        ToDoubleFunction<RoadEdge> extra = scorer.extraCost(graph, phase, cond.night(), nearby);
         try {
             return new Attempt(RouteFinder.find(graph, from.node(), to.node(), extra, profile.maxDetour(),
-                    profile::passable, profile.avoid()), from.distanceM() + to.distanceM(), nearby, "", cov);
+                    profile::passable, profile.avoid()), from.distanceM() + to.distanceM(), nearby, "");
         } catch (RouteException e) {
             if (profile.exclude().isEmpty()) {
                 return null;
@@ -170,7 +166,7 @@ public class RouteService {
             RouteFinder.Found found = RouteFinder.find(graph, f.snap().node(), t.snap().node(), extra,
                     profile.maxDetour(), profile::passable, profile.avoid());
             return new Attempt(found, f.snap().distanceM() + t.snap().distanceM(), nearby,
-                    placeNote("출발점", f) + placeNote("도착점", t), cov);
+                    placeNote("출발점", f) + placeNote("도착점", t));
         } catch (RouteException e) {
             return null;
         }
