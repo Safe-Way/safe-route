@@ -1,0 +1,179 @@
+package com.saferoute.transit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import com.saferoute.bus.BusArrival;
+import com.saferoute.bus.BusNearbyResponse;
+import com.saferoute.bus.BusService;
+import com.saferoute.bus.StopArrivals;
+import com.saferoute.route.RouteService;
+import com.saferoute.route.api.RouteError;
+import com.saferoute.route.api.RouteException;
+import com.saferoute.route.api.RouteRequest;
+import com.saferoute.route.api.RouteResult;
+import com.saferoute.subway.StationTrains;
+import com.saferoute.subway.SubwayNearbyResponse;
+import com.saferoute.subway.SubwayService;
+import com.saferoute.subway.SubwayTrain;
+
+class TransitServiceTests {
+
+    private final OdsayClient odsay = mock(OdsayClient.class);
+    private final RouteService route = mock(RouteService.class);
+    private final BusService bus = mock(BusService.class);
+    private final SubwayService subway = mock(SubwayService.class);
+    private final Clock clock = Clock.fixed(Instant.parse("2026-11-05T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+    private final TransitService service = new TransitService(odsay, route, bus, subway, clock);
+
+    private static final RouteRequest.Place HOME = new RouteRequest.Place(35.1440, 126.9320, "집");
+    private static final RouteRequest.Place GOAL = new RouteRequest.Place(35.1380, 126.9310, "병원");
+
+    /** 걷기 4분 → 버스 12분 → 걷기 2분 → 지하철 11분 → 걷기 4분 = ODsay 38분 (기다리는 시간 5분 포함) */
+    private static List<OdsayPath> busThenSubway(String subwayStart) {
+        return List.of(new OdsayPath(38, 1250, List.of(
+                new OdsayPath.Seg(3, 250, 4, null, null, List.of(), null, 0),
+                new OdsayPath.Seg(2, 3100, 12, new OdsayPath.Place("조선대학교", 35.1420, 126.9301),
+                        new OdsayPath.Place("문화전당역", 35.1470, 126.9190), List.of("첨단09"), null, 6),
+                new OdsayPath.Seg(3, 120, 2, null, null, List.of(), null, 0),
+                new OdsayPath.Seg(1, 5200, 11, new OdsayPath.Place(subwayStart, 35.1465, 126.9195),
+                        new OdsayPath.Place("남광주", 35.1390, 126.9300), List.of("광주 1호선"), "녹동", 5),
+                new OdsayPath.Seg(3, 250, 4, null, null, List.of(), null, 0))));
+    }
+
+    private static RouteResult walkResult(int meters, int minutes) {
+        return new RouteResult(null, List.of(
+                new RouteResult.Route("shortest", meters - 20, minutes, List.of(), Map.of(), List.of()),
+                new RouteResult.Route("safe", meters, minutes, List.of(new double[] {35.1, 126.9}), Map.of(), List.of())),
+                null, List.of(), null);
+    }
+
+    private static StationTrains station(String name, Boolean wheelchair) {
+        return new StationTrains(1, name, 35.1465, 126.9195, 10, null, null, null, null,
+                List.of(new SubwayTrain("평동행", "평동", "12:05", 5, null, 2),
+                        new SubwayTrain("녹동행", "녹동", "12:03", 3, null, 1),
+                        new SubwayTrain("녹동행", "소태", "12:13", 13, null, 4)),
+                new StationTrains.ElevatorExits(wheelchair == Boolean.FALSE ? 0 : 2, null, 0, 4, wheelchair));
+    }
+
+    private void stubLive(Boolean wheelchair) {
+        when(route.route(any())).thenReturn(walkResult(300, 5));
+        when(bus.nearby(anyDouble(), anyDouble())).thenReturn(new BusNearbyResponse(List.of(
+                new StopArrivals(10, "조선대학교", "남광주", 35.1421, 126.9302, 30, true,
+                        List.of(new BusArrival(1, "봉선37", 2, 1, false, "x", "y"))),
+                new StopArrivals(11, "조선대학교", "산수", 35.1420, 126.9301, 5, true,
+                        List.of(new BusArrival(2, "첨단09", 7, 3, true, "첨단", "a"),
+                                new BusArrival(3, "봉선37", 1, 1, false, "x", "y"),
+                                new BusArrival(2, "첨단09", 20, 9, false, "첨단", "b"))))));
+        when(subway.nearby(anyDouble(), anyDouble()))
+                .thenReturn(new SubwayNearbyResponse("timetable", "평일", List.of(station("문화전당", wheelchair))));
+    }
+
+    @Test
+    void buildsLegsWithSafeWalkBusArrivalsAndTrains() {
+        when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("문화전당"));
+        stubLive(true);
+
+        TransitResult r = service.search(new RouteRequest(HOME, GOAL, null, "senior"));
+
+        assertThat(r.paths()).hasSize(1);
+        TransitResult.TransitPath p = r.paths().get(0);
+        assertThat(p.legs()).extracting(TransitResult.Leg::type)
+                .containsExactly("walk", "bus", "walk", "subway", "walk");
+        // ODsay 걷기 10분을 우리 걷기 5분 × 3 = 15분으로 바꿈: 38 - 10 + 15
+        assertThat(p.totalMin()).isEqualTo(43);
+        assertThat(p.walkM()).isEqualTo(900);
+        assertThat(p.transfers()).isEqualTo(1);
+        assertThat(p.fare()).isEqualTo(1250);
+
+        TransitResult.Leg firstWalk = p.legs().get(0);
+        assertThat(firstWalk.safeWalk()).isTrue();
+        assertThat(firstWalk.from().name()).isEqualTo("집");
+        assertThat(firstWalk.to().name()).isEqualTo("조선대학교");
+
+        TransitResult.Leg busLeg = p.legs().get(1);
+        assertThat(busLeg.liveAvailable()).isTrue();
+        // 첨단09가 오는 정류장(길 건너 아닌 쪽)을 골라 그 버스만, 빨리 오는 순
+        assertThat(busLeg.buses()).extracting(BusArrival::remainMin).containsExactly(7, 20);
+
+        TransitResult.Leg subwayLeg = p.legs().get(3);
+        assertThat(subwayLeg.trains()).extracting(SubwayTrain::direction).containsOnly("녹동행");
+        assertThat(subwayLeg.way()).isEqualTo("녹동");
+        assertThat(r.hiddenForWheelchair()).isZero();
+    }
+
+    @Test
+    void walkFallsBackToOdsayWhenRouteFails() {
+        when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("문화전당"));
+        stubLive(true);
+        when(route.route(any())).thenThrow(new RouteException(RouteError.SAME_POINT));
+
+        TransitResult.TransitPath p = service.search(new RouteRequest(HOME, GOAL, null, null)).paths().get(0);
+
+        assertThat(p.legs().get(0).safeWalk()).isFalse();
+        assertThat(p.legs().get(0).distanceM()).isEqualTo(250);
+        assertThat(p.totalMin()).isEqualTo(38);
+    }
+
+    @Test
+    void wheelchairHidesPathThroughStationWithoutElevatorExit() {
+        when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("양동시장"));
+        stubLive(false);
+
+        TransitResult r = service.search(new RouteRequest(HOME, GOAL, null, "wheelchair"));
+
+        assertThat(r.paths()).isEmpty();
+        assertThat(r.hiddenForWheelchair()).isEqualTo(1);
+        assertThat(r.note()).contains("엘리베이터");
+    }
+
+    @Test
+    void otherModesKeepThatPath() {
+        when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("양동시장"));
+        stubLive(false);
+        assertThat(service.search(new RouteRequest(HOME, GOAL, null, "senior")).paths()).hasSize(1);
+    }
+
+    @Test
+    void sameTripUsesRememberedOdsayAnswer() {
+        when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("문화전당"));
+        stubLive(true);
+
+        service.search(new RouteRequest(HOME, GOAL, null, null));
+        service.search(new RouteRequest(new RouteRequest.Place(35.14402, 126.93203, "집"), GOAL, null, null));
+
+        verify(odsay, times(1)).search(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+    }
+
+    @Test
+    void liveInfoFailureStillGivesPath() {
+        when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("문화전당"));
+        when(route.route(any())).thenReturn(walkResult(300, 5));
+        when(bus.nearby(anyDouble(), anyDouble())).thenThrow(new RuntimeException("bis down"));
+        when(subway.nearby(anyDouble(), anyDouble())).thenThrow(new RuntimeException("db down"));
+
+        TransitResult.TransitPath p = service.search(new RouteRequest(HOME, GOAL, null, null)).paths().get(0);
+
+        assertThat(p.legs().get(1).liveAvailable()).isFalse();
+        assertThat(p.legs().get(1).buses()).isEmpty();
+        assertThat(p.legs().get(3).liveAvailable()).isFalse();
+    }
+
+    @Test
+    void namesMatchWithoutStationSuffix() {
+        assertThat(TransitService.norm("문화전당역")).isEqualTo(TransitService.norm("문화 전당"));
+    }
+}

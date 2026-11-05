@@ -48,6 +48,7 @@ jobs:
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
       DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+      ODSAY_API_KEY: ${{ secrets.ODSAY_API_KEY }}
     steps:
       # 꼭 필요한 secret이 하나라도 비어 있으면 이름을 알려 주고 멈춘다(서버에 반쯤 올라가는 것을 막는다)
       - name: secrets 확인
@@ -101,9 +102,10 @@ jobs:
           put DB_PASSWORD "$DB_PASSWORD"
           put KAKAO_REST_KEY "$KAKAO_REST_KEY"
           put DATA_GO_KR_KEY "$DATA_GO_KR_KEY"
+          put ODSAY_API_KEY "$ODSAY_API_KEY"
           # 서버 코드가 쓰지 않는 키(데이터 적재 스크립트용). application.yml이 이름을 가리키고 있어 빈 값으로 둔다
           for name in SAFEMAP_KEY SAFETYDATA_POLICE_KEY SAFETYDATA_SECURITYLIGHT_KEY SAFETYDATA_COLDSHELTER_KEY \
-                      SAFETYDATA_STREETLIGHT_KEY ODSAY_API_KEY TMAP_APP_KEY; do
+                      SAFETYDATA_STREETLIGHT_KEY TMAP_APP_KEY; do
             put "$name" ""
           done
 
