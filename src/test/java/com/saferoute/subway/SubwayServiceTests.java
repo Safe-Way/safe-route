@@ -193,4 +193,29 @@ class SubwayServiceTests {
         assertThat(SubwayService.stationName(104)).isEqualTo("문화전당");
         assertThat(SubwayService.stationName(119)).isEqualTo("평동");
     }
+
+    @Test
+    void elevatorExitsComeWithStation() {
+        SubwayStation culture = new SubwayStation(16, "문화전당", 35.1464, 126.9205, 120,
+                5, 5, null, 1, 1, 2, 2, 6, 3, 1, "1,2,6");
+        when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(culture));
+        when(repo.timetable("평일")).thenReturn(WEEKDAY);
+
+        StationTrains s = at("2026-11-05T10:05").nearby(35.1464, 126.9205).stations().get(0);
+
+        assertThat(s.elevator()).isEqualTo(new StationTrains.Facility(5, 5));
+        assertThat(s.elevatorExits())
+                .isEqualTo(new StationTrains.ElevatorExits(3, "1,2,6", 1, 6, true));
+    }
+
+    @Test
+    void wheelchairEntryIsFalseOnlyWhenEveryExitChecked() {
+        // 양동시장처럼 모든 출구를 확인했는데 엘리베이터 출구가 0곳 → 휠체어로 못 들어감
+        assertThat(StationTrains.ElevatorExits.of(0, null, 0, 4).wheelchairEntry()).isFalse();
+        // 확인 안 된 출구가 남았으면 "모름"
+        assertThat(StationTrains.ElevatorExits.of(0, null, 1, 4).wheelchairEntry()).isNull();
+        // 출구 자료가 아예 없어도 "모름"
+        assertThat(StationTrains.ElevatorExits.of(0, null, 0, 0).wheelchairEntry()).isNull();
+        assertThat(StationTrains.ElevatorExits.of(1, "3", 2, 4).wheelchairEntry()).isTrue();
+    }
 }

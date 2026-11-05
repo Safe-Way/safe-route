@@ -31,7 +31,8 @@ class SubwayControllerTests {
                 new StationTrains(16, "문화전당", 35.1464, 126.9205, 120,
                         new StationTrains.Facility(3, 2), new StationTrains.Facility(1, 1),
                         new StationTrains.Facility(2, 2), "5",
-                        List.of(new SubwayTrain("평동행", "평동", "10:08", 3, "학동증심사입구", 2))))));
+                        List.of(new SubwayTrain("평동행", "평동", "10:08", 3, "학동증심사입구", 2)),
+                        new StationTrains.ElevatorExits(3, "1,2,6", 1, 6, true)))));
 
         mvc.perform(get("/api/subway/nearby").param("lat", "35.1464").param("lon", "126.9205"))
                 .andExpect(status().isOk())
@@ -39,6 +40,9 @@ class SubwayControllerTests {
                 .andExpect(jsonPath("$.dayType").value("평일"))
                 .andExpect(jsonPath("$.stations[0].name").value("문화전당"))
                 .andExpect(jsonPath("$.stations[0].elevator.available").value(2))
+                .andExpect(jsonPath("$.stations[0].elevatorExits.count").value(3))
+                .andExpect(jsonPath("$.stations[0].elevatorExits.exitNos").value("1,2,6"))
+                .andExpect(jsonPath("$.stations[0].elevatorExits.wheelchairEntry").value(true))
                 .andExpect(jsonPath("$.stations[0].trains[0].direction").value("평동행"))
                 .andExpect(jsonPath("$.stations[0].trains[0].inMin").value(3))
                 .andExpect(jsonPath("$.stations[0].trains[0].nowNear").value("학동증심사입구"))

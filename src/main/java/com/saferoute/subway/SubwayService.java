@@ -76,7 +76,9 @@ public class SubwayService {
                     new StationTrains.Facility(s.elevatorTotal(), s.elevatorAvailable()),
                     new StationTrains.Facility(s.liftTotal(), s.liftAvailable()),
                     new StationTrains.Facility(s.toiletTotal(), s.toiletAvailable()),
-                    s.elevatorBrokenGates(), List.copyOf(trains)));
+                    s.elevatorBrokenGates(), List.copyOf(trains),
+                    StationTrains.ElevatorExits.of(s.elevatorExitCount(), s.elevatorExitNos(),
+                            s.elevatorExitUnknown(), s.exitTotal())));
         }
         return new SubwayNearbyResponse("timetable", table.dayType == null ? dayType : table.dayType, out);
     }

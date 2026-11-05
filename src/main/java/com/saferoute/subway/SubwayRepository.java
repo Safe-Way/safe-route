@@ -30,17 +30,30 @@ public class SubwayRepository {
         String box = String.format(Locale.ROOT, "POLYGON((%.7f %.7f,%.7f %.7f,%.7f %.7f,%.7f %.7f,%.7f %.7f))",
                 lon - dLon, lat - dLat, lon + dLon, lat - dLat, lon + dLon, lat + dLat, lon - dLon, lat + dLat,
                 lon - dLon, lat - dLat);
-        String sql = "SELECT station_id, name, lat, lon, elevator_total, elevator_available, elevator_disabled_gates,"
-                + " wheelchair_lift_total, wheelchair_lift_available, accessible_toilet_total, accessible_toilet_available,"
-                + " ST_Distance_Sphere(geom, ST_SRID(POINT(?, ?), 0)) AS dist"
-                + " FROM subway_station WHERE MBRContains(ST_GeomFromText(?, 0), geom)"
+        // 출입구(subway_entrance, A파트 022)는 역마다 묶어서 센다: elevator 1 있음, 0 없음, NULL 확인 안 됨
+        String sql = "SELECT s.station_id, s.name, s.lat, s.lon, s.elevator_total, s.elevator_available,"
+                + " s.elevator_disabled_gates, s.wheelchair_lift_total, s.wheelchair_lift_available,"
+                + " s.accessible_toilet_total, s.accessible_toilet_available,"
+                + " COALESCE(x.exit_total, 0) AS exit_total, COALESCE(x.ev_count, 0) AS ev_count,"
+                + " COALESCE(x.ev_unknown, 0) AS ev_unknown, x.ev_nos,"
+                + " ST_Distance_Sphere(s.geom, ST_SRID(POINT(?, ?), 0)) AS dist"
+                + " FROM subway_station s LEFT JOIN ("
+                + "   SELECT station_id, COUNT(*) AS exit_total, SUM(elevator = 1) AS ev_count,"
+                + "   SUM(elevator IS NULL) AS ev_unknown,"
+                + "   GROUP_CONCAT(CASE WHEN elevator = 1 THEN exit_no END ORDER BY CAST(exit_no AS UNSIGNED), exit_no"
+                + "     SEPARATOR ',') AS ev_nos"
+                + "   FROM subway_entrance WHERE station_id IS NOT NULL GROUP BY station_id"
+                + " ) x ON x.station_id = s.station_id"
+                + " WHERE MBRContains(ST_GeomFromText(?, 0), s.geom)"
                 + " HAVING dist <= ? ORDER BY dist LIMIT ?";
         return jdbc.query(sql, (rs, n) -> new SubwayStation(rs.getInt("station_id"), rs.getString("name"),
                         rs.getDouble("lat"), rs.getDouble("lon"), (int) Math.round(rs.getDouble("dist")),
                         rs.getInt("elevator_total"), rs.getInt("elevator_available"),
                         rs.getString("elevator_disabled_gates"),
                         rs.getInt("wheelchair_lift_total"), rs.getInt("wheelchair_lift_available"),
-                        rs.getInt("accessible_toilet_total"), rs.getInt("accessible_toilet_available")),
+                        rs.getInt("accessible_toilet_total"), rs.getInt("accessible_toilet_available"),
+                        rs.getInt("exit_total"), rs.getInt("ev_count"), rs.getInt("ev_unknown"),
+                        rs.getString("ev_nos")),
                 lon, lat, box, radiusM, limit);
     }
 
