@@ -69,10 +69,13 @@ public class FacilityRepository {
     private static Facility row(ResultSet rs, Integer distanceM) throws SQLException {
         Object wc = rs.getObject("wheelchair");
         String modes = rs.getString("modes");
-        return new Facility(rs.getLong("id"), rs.getString("kind"), rs.getString("sub"), rs.getString("name"),
+        String kind = rs.getString("kind");
+        // 지하철역 cnt는 엘리베이터 출구 수라 0도 뜻이 있다. 다른 시설은 한 점에 최소 1개
+        int count = "subway".equals(kind) ? rs.getInt("cnt") : Math.max(1, rs.getInt("cnt"));
+        return new Facility(rs.getLong("id"), kind, rs.getString("sub"), rs.getString("name"),
                 rs.getString("address"), rs.getDouble("lat"), rs.getDouble("lon"), distanceM,
                 rs.getString("now_status"), rs.getString("now_note"),
-                wc == null ? null : ((Number) wc).intValue() == 1, Math.max(1, rs.getInt("cnt")),
+                wc == null ? null : ((Number) wc).intValue() == 1, count,
                 modes == null || modes.isBlank() ? List.of() : Arrays.asList(modes.split(",")),
                 rs.getString("detail"));
     }
