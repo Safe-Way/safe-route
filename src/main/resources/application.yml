@@ -16,6 +16,11 @@ spring:
       data-source-properties:
         # 여러 줄 INSERT를 한 번에 보내서 대량 적재를 빠르게
         rewriteBatchedStatements: true
+  servlet:
+    multipart:
+      # 불편 신고 사진 (POST /api/reports): 한 장 5MB, 사진 3장 + 글 합쳐 16MB까지
+      max-file-size: 5MB
+      max-request-size: 16MB
 
 # 인증키는 .env에만 넣고, 여기서는 이름으로만 가리킨다.
 api-keys:
