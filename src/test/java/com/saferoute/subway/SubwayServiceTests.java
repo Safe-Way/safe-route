@@ -100,8 +100,9 @@ class SubwayServiceTests {
         // (예전 방식은 "소태 뒤 문화전당에 처음 오는 열차"를 13:18 앞 열차로 착각해 null을 줬다)
         SubwayNearbyResponse r = at("2026-11-05T13:18").nearby(35.1464, 126.9205);
 
-        assertThat(r.stations().get(0).trains().get(0))
-                .isEqualTo(new SubwayTrain("평동행", "평동", "13:23", 5, "소태", 3));
+        assertThat(r.stations().get(0).trains()).containsExactly(
+                new SubwayTrain("평동행", "평동", "13:18", 0, "남광주", 1),
+                new SubwayTrain("평동행", "평동", "13:23", 5, "소태", 3));
     }
 
     @Test
