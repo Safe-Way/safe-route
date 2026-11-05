@@ -22,7 +22,7 @@ import com.saferoute.route.engine.search.RoadPath;
 import com.saferoute.route.engine.search.RouteFinder;
 
 /**
- * 찾은 두 경로로 응답(요구사항 8.3)을 만든다: 거리·시간, 지나는 시설 수, 차이 설명, 지도 아이콘, 데이터 상태.
+ * 찾은 두 경로로 응답(요구사항 8.3)을 만든다: 거리·시간, 지나는 시설 수, 인도 쪽, 차이 설명, 지도 아이콘, 데이터 상태.
  */
 @Component
 public class RouteResultAssembler {
@@ -58,9 +58,11 @@ public class RouteResultAssembler {
 
         List<RouteResult.Route> routes = new ArrayList<>();
         if (!same) {
-            routes.add(route("shortest", shortM, profile.minutes(shortM), shortLine, shortCounts));
+            routes.add(route("shortest", shortM, profile.minutes(shortM), shortLine, shortCounts,
+                    Sidewalks.along(found.shortest(), found.shortest().startOffset(start))));
         }
-        routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts));
+        routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts,
+                Sidewalks.along(found.safe(), found.safe().startOffset(start))));
 
         int extraM = same ? 0 : safeM - shortM;
         // 반올림을 따로 하면 "22분 / 24분"인데 "(1분) 더"가 나올 수 있어, 두 경로 시간의 차로 구한다
@@ -76,8 +78,9 @@ public class RouteResultAssembler {
                 dataQuality(same ? List.of(found.safe()) : List.of(found.shortest(), found.safe()), nearby));
     }
 
-    private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts) {
-        return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()));
+    private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts,
+            List<RouteResult.Sidewalk> sidewalks) {
+        return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()), sidewalks);
     }
 
     /** 지도 아이콘. 도움 지점·비상벨·CCTV·등 순서로 최대 개수까지. shortCounts가 null이면 경로가 하나 */

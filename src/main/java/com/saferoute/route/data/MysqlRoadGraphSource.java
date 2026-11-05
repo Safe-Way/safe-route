@@ -31,6 +31,8 @@ import com.saferoute.route.engine.graph.RoadGraph;
  *       비포장 값은 {@link #UNPAVED_SURFACES}. 다진 흙(compacted)은 휠체어로 대개 지날 수 있어 넣지 않는다.
  *       재질을 모르면 인도·골목·차도·일반 길은 포장, 농로는 tracktype grade1만 포장(grade2~5·없음은 비포장),
  *       산길은 등산 난이도(sac_scale)가 있으면 산행 길(휠체어 제외), 없으면 포장으로 보되 "확인 안 됨"</li>
+ *   <li>인도 쪽 ({@link #sidewalk}): tags.sidewalk(both·left·right·no), 없으면 sidewalk:both·left·right.
+ *       경로 응답의 안내용이고 비용에는 쓰지 않는다</li>
  *   <li>데이터 부족: edge_stat.data_gap 비트 중 시설 비트(1 밝기, 2 CCTV, 4 도움 지점, 8 지킴이집, 16 쉼 곳).
  *       감점에는 쓰지 않고 "확인 안 됨" 표시에만 쓴다</li>
  * </ul>
@@ -73,7 +75,12 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
         String sql = "SELECT e.id, e.from_node, e.to_node, e.length_m, e.highway, e.steps, e.wheelchair_ramp, e.surface,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.tracktype')) AS tracktype,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.sac_scale')) AS sac_scale,"
-                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.ford')) AS ford, ST_AsText(e.geom) AS wkt,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.ford')) AS ford,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.sidewalk')) AS sw,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.\"sidewalk:both\"')) AS sw_both,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.\"sidewalk:left\"')) AS sw_left,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.\"sidewalk:right\"')) AS sw_right,"
+                + " ST_AsText(e.geom) AS wkt,"
                 + " s.edge_id AS has_stat, s.curb, s.footbridge_ok, s.data_gap"
                 + " FROM road_edge e LEFT JOIN edge_stat s ON s.edge_id = e.id"
                 + " WHERE MBRIntersects(ST_GeomFromText(?, 0), e.geom)";
@@ -102,7 +109,9 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             return new RoadEdge(rs.getLong("id"), rs.getLong("from_node"), rs.getLong("to_node"),
                     rs.getDouble("length_m"), rs.getString("highway"), parseLineString(rs.getString("wkt")),
                     new EdgePenalty(values, gap,
-                            rs.getObject("wheelchair_ramp") == null ? null : rs.getInt("wheelchair_ramp") == 1));
+                            rs.getObject("wheelchair_ramp") == null ? null : rs.getInt("wheelchair_ramp") == 1),
+                    sidewalk(rs.getString("sw"), rs.getString("sw_both"), rs.getString("sw_left"),
+                            rs.getString("sw_right")));
         }, box.toWkt());
 
         // 2. 그 길들의 양 끝 노드
@@ -149,6 +158,46 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     /** 징검다리·물을 건너는 길인지 (OSM ford). no면 아님 */
     static boolean isFord(String ford) {
         return ford != null && !ford.isBlank() && !"no".equalsIgnoreCase(ford.trim());
+    }
+
+    /**
+     * 인도가 길의 어느 쪽에 있는지 (길을 그린 방향 기준): left, right, both, no. 모르면 null.
+     * sidewalk 값이 먼저이고, 없으면 sidewalk:both·left·right(yes·separate = 있음, no = 없음)로 정한다.
+     * separate는 인도를 따로 그렸다는 뜻이라 그쪽에 인도가 있다고 본다.
+     */
+    static String sidewalk(String sidewalk, String both, String left, String right) {
+        String v = sidewalk == null ? "" : sidewalk.trim().toLowerCase(java.util.Locale.ROOT);
+        switch (v) {
+            case "both", "left", "right", "no" -> {
+                return v;
+            }
+            case "none" -> {
+                return "no";
+            }
+            default -> { }
+        }
+        Boolean b = present(both);
+        Boolean l = b != null ? b : present(left);
+        Boolean r = b != null ? b : present(right);
+        if (Boolean.TRUE.equals(l)) {
+            return Boolean.TRUE.equals(r) ? "both" : Boolean.FALSE.equals(r) ? "left" : null;
+        }
+        if (Boolean.TRUE.equals(r)) {
+            return Boolean.FALSE.equals(l) ? "right" : null;
+        }
+        return Boolean.FALSE.equals(l) && Boolean.FALSE.equals(r) ? "no" : null;
+    }
+
+    /** sidewalk:* 값 하나: yes·separate → 있음, no → 없음, 그 밖·없음 → 모름(null) */
+    private static Boolean present(String v) {
+        if (v == null) {
+            return null;
+        }
+        return switch (v.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "yes", "separate" -> true;
+            case "no" -> false;
+            default -> null;
+        };
     }
 
     /** 확인된 비포장 재질인지. 값이 없으면 false */

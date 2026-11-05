@@ -74,6 +74,8 @@ class RouteServiceTests {
         assertThat(safe.counts()).containsEntry("light", 6).containsEntry("cctv", 3).containsEntry("bell", 1);
         // 출발·도착 가까이의 등 2개, CCTV 1곳, 비상벨은 지름길에서도 반경 안이다
         assertThat(shortest.counts()).containsEntry("light", 2).containsEntry("cctv", 1).containsEntry("bell", 1);
+        // 시험 도로망은 모두 인도(footway)라 인도 쪽 구간이 없다
+        assertThat(safe.sidewalks()).isEmpty();
 
         assertThat(r.explanation().extraM()).isEqualTo(safe.distanceM() - shortest.distanceM());
         assertThat(r.explanation().diff()).containsEntry("light", 4).containsEntry("cctv", 2).containsEntry("bell", 0);

@@ -39,10 +39,33 @@ public record RoadPath(List<RoadEdge> edges, List<double[]> line, double lengthM
         return edges.equals(other.edges);
     }
 
+    /** 길마다 걸어가는 방향이 from→to인지 (edges와 같은 순서) */
+    public boolean[] forward() {
+        boolean[] out = new boolean[edges.size()];
+        if (edges.isEmpty()) {
+            return out;
+        }
+        RoadEdge first = edges.get(0);
+        List<double[]> g = first.geometry();
+        long at = Geo.distance(line.get(0), g.get(0)) <= Geo.distance(line.get(0), g.get(g.size() - 1))
+                ? first.from() : first.to();
+        for (int i = 0; i < edges.size(); i++) {
+            RoadEdge e = edges.get(i);
+            out[i] = e.from() == at;
+            at = out[i] ? e.to() : e.from();
+        }
+        return out;
+    }
+
+    /** lineFrom(start, …)에서 line의 첫 점이 몇 번째인지. 출발 점을 앞에 붙이면 1 */
+    public int startOffset(double[] start) {
+        return Geo.distance(start, line.get(0)) > 0 ? 1 : 0;
+    }
+
     /** 요청한 출발·도착 점을 길 위 노드 앞뒤에 붙인 선. 노드와 같은 점이면 한 번만 */
     public List<double[]> lineFrom(double[] start, double[] end) {
         List<double[]> out = new ArrayList<>(line.size() + 2);
-        if (Geo.distance(start, line.get(0)) > 0) {
+        if (startOffset(start) == 1) {
             out.add(start);
         }
         out.addAll(line);
