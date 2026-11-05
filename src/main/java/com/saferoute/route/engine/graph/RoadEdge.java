@@ -9,9 +9,15 @@ import java.util.Map;
  * 두 점 사이의 길 하나 (road_edge 표 한 줄). 걷는 길이라 방향은 없다.
  *
  * @param geometry from에서 to 순서의 선. 점은 {경도, 위도}
+ * @param sidewalk 차도 옆 인도가 어느 쪽에 있는지 (from에서 to로 볼 때): left, right, both, no. 모르면 null
  */
 public record RoadEdge(long id, long from, long to, double lengthM, String highway,
-        List<double[]> geometry, EdgePenalty penalty) {
+        List<double[]> geometry, EdgePenalty penalty, String sidewalk) {
+
+    public RoadEdge(long id, long from, long to, double lengthM, String highway,
+            List<double[]> geometry, EdgePenalty penalty) {
+        this(id, from, to, lengthM, highway, geometry, penalty, null);
+    }
 
     /** 그래프 안에서 길을 id로만 구별한다 (선 좌표까지 비교하지 않도록) */
     @Override

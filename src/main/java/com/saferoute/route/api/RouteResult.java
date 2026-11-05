@@ -29,9 +29,19 @@ public record RouteResult(
      * @param kind     shortest(지도에 회색) 또는 safe(초록). 두 경로가 같으면 safe 하나만 온다
      * @param geometry [경도, 위도] 배열 (GeoJSON 순서)
      * @param counts   light·cctv·bell·help → 경로 주변 시설 수
+     * @param sidewalks 차도를 따라 걷는 구간의 인도 쪽. 인도·보행로 같은 걷는 길은 없다
      */
     public record Route(String kind, int distanceM, int durationMin, List<double[]> geometry,
-            Map<String, Integer> counts) {
+            Map<String, Integer> counts, List<Sidewalk> sidewalks) {
+    }
+
+    /**
+     * 차도 구간 하나의 인도 쪽 (OSM sidewalk 태그).
+     *
+     * @param from, to geometry 점 번호. from번 점부터 to번 점까지의 선
+     * @param side     걷는 방향 기준 left, right, both(양쪽), no(인도 없음), unknown(태그 없음)
+     */
+    public record Sidewalk(int from, int to, String side) {
     }
 
     /** @param diff 안전 − 최단 시설 수 */

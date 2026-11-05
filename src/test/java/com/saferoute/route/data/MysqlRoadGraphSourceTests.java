@@ -44,6 +44,19 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    void sidewalkFromTags() {
+        assertThat(MysqlRoadGraphSource.sidewalk("right", null, null, null)).isEqualTo("right");
+        assertThat(MysqlRoadGraphSource.sidewalk("none", null, null, null)).isEqualTo("no");
+        // sidewalk가 없으면 sidewalk:both·left·right. separate(따로 그림)도 그쪽에 인도가 있다
+        assertThat(MysqlRoadGraphSource.sidewalk(null, "separate", null, null)).isEqualTo("both");
+        assertThat(MysqlRoadGraphSource.sidewalk(null, null, "no", "separate")).isEqualTo("right");
+        assertThat(MysqlRoadGraphSource.sidewalk(null, null, "no", "no")).isEqualTo("no");
+        // 한쪽만 알면 다른 쪽을 몰라 정하지 않는다
+        assertThat(MysqlRoadGraphSource.sidewalk(null, null, null, "yes")).isNull();
+        assertThat(MysqlRoadGraphSource.sidewalk(null, null, null, null)).isNull();
+    }
+
+    @Test
     void parsesLineString() {
         assertThat(MysqlRoadGraphSource.parseLineString("LINESTRING(126.93 35.14,126.931 35.141)"))
                 .containsExactly(new double[] {126.93, 35.14}, new double[] {126.931, 35.141});
