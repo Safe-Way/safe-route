@@ -5,7 +5,10 @@
 -- 측정 규칙 (앱이 재고 서버가 한 번 더 거른다)
 --   - 길안내(FR-29) 중 300m 이상 걸었을 때만 잰다. 신호 대기처럼 멈춘 시간은 뺀다(moving_s).
 --   - 분당 20~150m 밖은 버스·자전거를 탔거나 GPS가 튄 것으로 보고 받지 않는다.
---   - 쓰는 속도(speed_m_min)는 최근 측정 10개의 중간값. 3개가 모이기 전에는 모드 기본 속도(6.2: 일반 80, 어린이 70, 노인 60, 휠체어 50)를 쓴다.
+--   - 쓰는 속도(speed_m_min)는 모드 기본 속도(6.2: 일반 80, 어린이 70, 노인 60, 휠체어 50)에서 내 속도로 서서히 옮겨 간다 (2026-11-05 팀 결정):
+--       쓰는 속도 = (기본 속도 × 5 + 남아 있는 측정 속도의 합) ÷ (5 + 측정 수)
+--     기본 속도를 '5번 잰 것'처럼 친다. 처음에는 모드 기준이고, 한두 번 이상하게 잰 값에 크게 흔들리지 않는다.
+--     예: 노인(기본 60)이 매번 45로 걸으면 1번 57.5 → 5번 52.5 → 10번 50 → 20번 48
 --   - 게스트·모드마다 측정은 최근 20개만 남기고 오래된 것은 지운다.
 -- "내 기록 지우기"를 누르면 walk_profile 줄을 지우고, 측정 줄도 같이 지워진다.
 -- 새 표만 만들므로 돌고 있는 서버에 영향이 없다.
@@ -14,7 +17,7 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS walk_profile (
     guest_id    CHAR(36)     NOT NULL COMMENT '앱이 처음 실행 때 만든 무작위 번호(UUID). 사람을 알아볼 수 있는 값이 아님',
     mode        VARCHAR(20)  NOT NULL COMMENT 'adult, child, senior, wheelchair (가족이 대신 찾을 수 있어 모드마다 따로)',
-    speed_m_min DECIMAL(5,1) NULL     COMMENT '지금 쓰는 걸음 속도(분당 m) = 최근 측정 10개 중간값. 측정 3개 전에는 NULL(모드 기본값 사용)',
+    speed_m_min DECIMAL(5,1) NULL     COMMENT '지금 쓰는 걸음 속도(분당 m) = (모드 기본 속도×5 + 측정 합) ÷ (5 + 측정 수). 측정이 없으면 NULL(모드 기본값)',
     samples     SMALLINT     NOT NULL DEFAULT 0 COMMENT '지금까지 받은 측정 수',
     walked_m    INT          NOT NULL DEFAULT 0 COMMENT '지금까지 잰 거리 합 (참고)',
     moving_s    INT          NOT NULL DEFAULT 0 COMMENT '지금까지 움직인 시간 합(초, 멈춘 시간 뺌)',

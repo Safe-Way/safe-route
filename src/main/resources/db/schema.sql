@@ -904,7 +904,7 @@ CREATE TABLE IF NOT EXISTS road_report_photo (
 CREATE TABLE IF NOT EXISTS walk_profile (
     guest_id    CHAR(36)     NOT NULL COMMENT '앱이 처음 실행 때 만든 무작위 번호(UUID). 사람을 알아볼 수 있는 값이 아님',
     mode        VARCHAR(20)  NOT NULL COMMENT 'adult, child, senior, wheelchair (가족이 대신 찾을 수 있어 모드마다 따로)',
-    speed_m_min DECIMAL(5,1) NULL     COMMENT '지금 쓰는 걸음 속도(분당 m) = 최근 측정 10개 중간값. 측정 3개 전에는 NULL(모드 기본값 사용)',
+    speed_m_min DECIMAL(5,1) NULL     COMMENT '지금 쓰는 걸음 속도(분당 m) = (모드 기본 속도×5 + 측정 합) ÷ (5 + 측정 수). 측정이 없으면 NULL(모드 기본값)',
     samples     SMALLINT     NOT NULL DEFAULT 0 COMMENT '지금까지 받은 측정 수',
     walked_m    INT          NOT NULL DEFAULT 0 COMMENT '지금까지 잰 거리 합 (참고)',
     moving_s    INT          NOT NULL DEFAULT 0 COMMENT '지금까지 움직인 시간 합(초, 멈춘 시간 뺌)',
