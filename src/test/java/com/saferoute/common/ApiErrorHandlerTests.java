@@ -38,6 +38,11 @@ class ApiErrorHandlerTests {
             throw new IllegalStateException("일부러 낸 오류");
         }
 
+        @GetMapping("/practice-too-big")
+        String tooBig() {
+            throw new org.springframework.web.multipart.MaxUploadSizeExceededException(5 * 1024 * 1024);
+        }
+
         @GetMapping("/practice-missing")
         String missing() throws NoResourceFoundException {
             throw new NoResourceFoundException(HttpMethod.GET, "/api/nothing", "api/nothing");
@@ -93,5 +98,12 @@ class ApiErrorHandlerTests {
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("SERVER_ERROR"))
                 .andExpect(jsonPath("$.message").value("잠시 후 다시 시도해 주세요"));
+    }
+
+    @Test
+    void tooBigUploadGives413() throws Exception {
+        mvc.perform(get("/practice-too-big"))
+                .andExpect(status().is(413))
+                .andExpect(jsonPath("$.code").value("PHOTO_TOO_BIG"));
     }
 }

@@ -5,11 +5,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -49,6 +51,18 @@ public class ApiErrorHandler {
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> wrongMethod(HttpRequestMethodNotSupportedException e) {
         return error(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "이 주소는 " + e.getMethod() + " 요청을 받지 않아요");
+    }
+
+    /** 보내는 모양이 틀림 (예: 사진 신고를 multipart 가 아닌 JSON 으로 보냄) */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> wrongMediaType(HttpMediaTypeNotSupportedException e) {
+        return error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", "보내는 형식이 맞지 않아요");
+    }
+
+    /** 올린 파일이 너무 큼 (application.yml 의 spring.servlet.multipart 한도) */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> tooLarge(MaxUploadSizeExceededException e) {
+        return error(HttpStatus.CONTENT_TOO_LARGE, "PHOTO_TOO_BIG", "사진이 너무 커요. 한 장 5MB, 모두 합쳐 16MB까지예요");
     }
 
     /** 그 밖에 예상하지 못한 오류. 자세한 내용은 서버 로그에만 남기고 앱에는 짧게 */
