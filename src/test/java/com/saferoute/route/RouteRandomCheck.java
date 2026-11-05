@@ -183,7 +183,8 @@ class RouteRandomCheck {
                 props.coverage().cctvM())), Math.max(Math.max(c.light(), c.cctv()), Math.max(c.bell(), c.help())));
         Nearby nearby = new Nearby(pois.within(BBox.around(new ArrayList<>(graph.nodes().values()), margin),
                 RouteService.POI_KINDS), pois.holidays(), now.toLocalDateTime(), pois.dataDate());
-        ToDoubleFunction<RoadEdge> extra = scorer.extraCost(graph, phase, cond.night(), nearby);
+        Coverage chosenCov = scorer.coverage(graph, phase, cond.night(), nearby);
+        ToDoubleFunction<RoadEdge> extra = scorer.extraCost(chosenCov, phase);
         RouteFinder.Found f;
         try {
             f = RouteFinder.find(graph, a.node(), b.node(), extra, profile.maxDetour(), profile::passable,
@@ -210,7 +211,7 @@ class RouteRandomCheck {
             noRoutes.add(where + (anyRoad ? ": 모든 길로는 이어짐 (제외한 길 때문에 끊김)" + why : ": 모든 길로도 안 이어짐"));
             return viaService(service, from, to, mode, cond.night(), "NO_ROUTE(끊김)");
         }
-        RouteResult r = assembler.assemble(cond, profile, phase, f, from, to, a.distanceM() + b.distanceM(), nearby);
+        RouteResult r = assembler.assemble(cond, profile, phase, f, from, to, a.distanceM() + b.distanceM(), nearby, chosenCov);
         long ms = (System.nanoTime() - started) / 1_000_000;
 
         String tag = where + ": ";

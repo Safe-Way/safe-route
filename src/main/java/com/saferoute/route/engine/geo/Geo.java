@@ -54,6 +54,45 @@ public final class Geo {
         return Math.sqrt(x * x + y * y);
     }
 
+    /**
+     * 점 p를 선 위로 내린 자리.
+     *
+     * @param atM     선의 처음부터 그 자리까지 선을 따라 잰 거리(m)
+     * @param offsetM 점 p에서 선까지 거리(m)
+     * @param left    선이 나아가는 방향에서 p가 왼쪽이면 true, 오른쪽이면 false
+     */
+    public record Along(double atM, double offsetM, boolean left) {
+    }
+
+    /** 점 p에서 가장 가까운 선 위 자리 (시설이 경로의 몇 m 지점·어느 쪽인지, FR-30) */
+    public static Along along(double[] p, List<double[]> line) {
+        double mPerLat = Math.toRadians(R);
+        double mPerLon = mPerLat * Math.cos(Math.toRadians(p[1]));
+        Along best = new Along(0, distance(p, line.get(0)), true);
+        double walked = 0;
+        for (int i = 1; i < line.size(); i++) {
+            double[] a = line.get(i - 1);
+            double[] b = line.get(i);
+            // distanceToSegment와 같이 p를 원점으로 둔 평면에서 잰다
+            double ax = (a[0] - p[0]) * mPerLon;
+            double ay = (a[1] - p[1]) * mPerLat;
+            double dx = (b[0] - a[0]) * mPerLon;
+            double dy = (b[1] - a[1]) * mPerLat;
+            double len2 = dx * dx + dy * dy;
+            double t = len2 == 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2));
+            double x = ax + t * dx;
+            double y = ay + t * dy;
+            double off = Math.sqrt(x * x + y * y);
+            double seg = distance(a, b);
+            if (off < best.offsetM()) {
+                // 진행 방향 (dx, dy)와 a→p (-ax, -ay)의 외적이 양수면 p는 왼쪽
+                best = new Along(walked + t * seg, off, dx * -ay - dy * -ax >= 0);
+            }
+            walked += seg;
+        }
+        return best;
+    }
+
     /** 점 p에서 선까지 가장 가까운 거리(m) */
     public static double distanceToLine(double[] p, List<double[]> line) {
         if (line.size() == 1) {
