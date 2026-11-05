@@ -76,4 +76,22 @@ class GeoTests {
 
         assertThat(box.toWkt()).isEqualTo("POLYGON((126.9 35.1, 127.0 35.1, 127.0 35.2, 126.9 35.2, 126.9 35.1))");
     }
+
+    @Test
+    void alongGivesDistanceFromStartAndSide() {
+        // 동쪽으로 약 100m 가다가 북쪽으로 약 100m 꺾는 선
+        List<double[]> line = List.of(new double[] {126.9300, 35.1400}, new double[] {126.9311, 35.1400},
+                new double[] {126.9311, 35.1409});
+
+        Geo.Along north = Geo.along(new double[] {126.9305, 35.1401}, line);   // 첫 구간 45% 지점(약 45.5m), 북쪽 약 11m
+        Geo.Along south = Geo.along(new double[] {126.9305, 35.1399}, line);   // 같은 자리, 남쪽
+        Geo.Along east = Geo.along(new double[] {126.9312, 35.1405}, line);    // 둘째 구간, 동쪽
+
+        assertThat(north.atM()).isCloseTo(45.5, within(1.0));
+        assertThat(north.offsetM()).isCloseTo(11, within(1.0));
+        assertThat(north.left()).isTrue();       // 동쪽으로 갈 때 북쪽은 왼쪽
+        assertThat(south.left()).isFalse();
+        assertThat(east.atM()).isCloseTo(100 + 55.6, within(2.0));
+        assertThat(east.left()).isFalse();       // 북쪽으로 갈 때 동쪽은 오른쪽
+    }
 }

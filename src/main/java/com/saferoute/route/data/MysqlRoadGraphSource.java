@@ -72,7 +72,7 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     @Override
     public RoadGraph load(BBox box) {
         // 1. 범위에 걸치는 길과 성질. edge_stat 줄이 없는 길은 아직 계산 안 된 것이라 데이터 부족으로 본다
-        String sql = "SELECT e.id, e.from_node, e.to_node, e.length_m, e.highway, e.steps, e.wheelchair_ramp, e.surface,"
+        String sql = "SELECT e.id, e.from_node, e.to_node, e.length_m, e.highway, e.footway, e.steps, e.wheelchair_ramp, e.surface,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.tracktype')) AS tracktype,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.sac_scale')) AS sac_scale,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.ford')) AS ford,"
@@ -97,6 +97,9 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             }
             if (isFord(rs.getString("ford"))) {
                 values.put(Penalty.FORD, 1.0);
+            }
+            if ("crossing".equals(rs.getString("footway"))) {
+                values.put(Penalty.CROSSWALK, 1.0);
             }
             switch (classify(rs.getString("surface"), rs.getString("highway"), rs.getString("tracktype"),
                     rs.getString("sac_scale"))) {

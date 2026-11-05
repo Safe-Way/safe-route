@@ -35,11 +35,10 @@ public record RoadPath(List<RoadEdge> edges, List<double[]> line, double lengthM
         return new RoadPath(List.copyOf(path.getEdgeList()), line, length);
     }
 
-    public boolean sameAs(RoadPath other) {
-        return edges.equals(other.edges);
-    }
-
-    /** 길마다 걸어가는 방향이 from→to인지 (edges와 같은 순서) */
+    /**
+     * 길마다 from → to 방향으로 지나는지. 첫 길은 경로 선의 첫 점이 그 길 선의 처음과 끝 중 어디에 가까운지로 정하고,
+     * 그다음부터는 앞 길에서 나온 노드로 정한다 (어두운 구간·꺾는 곳·인도 쪽 계산이 같이 쓴다)
+     */
     public boolean[] forward() {
         boolean[] out = new boolean[edges.size()];
         if (edges.isEmpty()) {
@@ -55,6 +54,10 @@ public record RoadPath(List<RoadEdge> edges, List<double[]> line, double lengthM
             at = out[i] ? e.to() : e.from();
         }
         return out;
+    }
+
+    public boolean sameAs(RoadPath other) {
+        return edges.equals(other.edges);
     }
 
     /** lineFrom(start, …)에서 line의 첫 점이 몇 번째인지. 출발 점을 앞에 붙이면 1 */
