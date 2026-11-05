@@ -82,6 +82,24 @@ class RouteServiceTests {
         assertThat(r.explanation().extraMin()).isZero(); // 200m·240m 모두 3분
 
         assertThat(r.facilities()).isNotEmpty().allMatch(m -> !m.on().equals("shortest"));
+        // 시설마다 지나는 경로에서의 자리 (FR-30): on에 든 경로만 있고, 경로 길이 안
+        assertThat(r.facilities()).allSatisfy(m -> {
+            assertThat(m.along().keySet()).isEqualTo(m.on().equals("both") ? java.util.Set.of("shortest", "safe")
+                    : java.util.Set.of(m.on()));
+            assertThat(m.along().get("safe").atM()).isBetween(0, safe.distanceM());
+            assertThat(m.along().get("safe").side()).isIn("left", "right");
+        });
+        // 밤: 등이 양 끝에만 있는 최단(곧은 길)은 가운데가 어둡고, 등이 줄지은 안전 경로는 어두운 구간이 짧다 (FR-31)
+        assertThat(shortest.dark()).isNotEmpty().allSatisfy(d -> {
+            assertThat(d.toM() - d.fromM()).isGreaterThanOrEqualTo(50);
+            assertThat(d.fromM()).isGreaterThanOrEqualTo(0);
+            assertThat(d.toM()).isLessThanOrEqualTo(shortest.distanceM());
+        });
+        assertThat(safe.dark().stream().mapToInt(d -> d.toM() - d.fromM()).sum())
+                .isLessThan(shortest.dark().stream().mapToInt(d -> d.toM() - d.fromM()).sum());
+        // 비상벨(126.93160, 35.14030)은 북쪽으로 돌아가는 안전 경로의 동쪽 끝 근처, 경로 아래(오른쪽)에 있다
+        RouteResult.Along bell = r.facilities().get(0).along().get("safe");
+        assertThat(bell.atM()).isGreaterThan(safe.distanceM() / 2);
         // 아이콘은 비상벨·CCTV가 등보다 앞에 온다
         assertThat(r.facilities().get(0).type()).isEqualTo("EMERGENCY_BELL");
         assertThat(r.dataQuality().status()).isEqualTo("OK");
@@ -98,6 +116,8 @@ class RouteServiceTests {
         assertThat(r.routes()).extracting(RouteResult.Route::kind).containsExactly("safe");
         assertThat(r.explanation().text()).isEqualTo("지금은 밤이 아니라 가장 짧은 길을 안내합니다");
         assertThat(r.explanation().extraM()).isZero();
+        // 낮에는 어두운 구간을 알리지 않는다
+        assertThat(r.routes().get(0).dark()).isEmpty();
     }
 
     @Test

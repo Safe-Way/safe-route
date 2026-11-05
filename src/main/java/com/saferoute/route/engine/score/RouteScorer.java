@@ -43,10 +43,14 @@ public class RouteScorer {
 
     /** 이 기준에서 길마다 더할 비용. 기준이 없으면(가장 짧은 길) null */
     public ToDoubleFunction<RoadEdge> extraCost(RoadGraph graph, Phase phase, boolean night, Nearby nearby) {
+        return extraCost(coverage(graph, phase, night, nearby), phase);
+    }
+
+    /** 이미 계산한 커버율로 길마다 더할 비용. 기준이 없으면 null */
+    public ToDoubleFunction<RoadEdge> extraCost(Coverage cov, Phase phase) {
         if (!phase.hasWeights()) {
             return null;
         }
-        Coverage cov = coverage(graph, phase, night, nearby);
         Map<Criterion, Double> w = phase.weights();
         return e -> {
             double missing = 0;

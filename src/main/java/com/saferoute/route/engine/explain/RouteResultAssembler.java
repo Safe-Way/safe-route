@@ -3,6 +3,7 @@ package com.saferoute.route.engine.explain;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,7 +18,9 @@ import com.saferoute.route.engine.facility.FacilityCounter.Counts;
 import com.saferoute.route.engine.facility.FacilityGroup;
 import com.saferoute.route.engine.facility.Nearby;
 import com.saferoute.route.engine.facility.Poi;
+import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.RoadEdge;
+import com.saferoute.route.engine.score.Coverage;
 import com.saferoute.route.engine.search.RoadPath;
 import com.saferoute.route.engine.search.RouteFinder;
 
@@ -46,6 +49,12 @@ public class RouteResultAssembler {
      */
     public RouteResult assemble(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
             RouteFinder.Found found, double[] start, double[] end, double snapM, Nearby nearby) {
+        return assemble(cond, profile, phase, found, start, end, snapM, nearby, Coverage.NONE);
+    }
+
+    /** @param cov 경로를 고를 때 쓴 커버율. 밤이면 고른 경로의 어두운 구간(FR-31)을 여기서 꺼낸다 */
+    public RouteResult assemble(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
+            RouteFinder.Found found, double[] start, double[] end, double snapM, Nearby nearby, Coverage cov) {
         boolean same = found.safe().sameAs(found.shortest());
         List<double[]> shortLine = found.shortest().lineFrom(start, end);
         List<double[]> safeLine = found.safe().lineFrom(start, end);
@@ -58,9 +67,11 @@ public class RouteResultAssembler {
 
         List<RouteResult.Route> routes = new ArrayList<>();
         if (!same) {
-            routes.add(route("shortest", shortM, profile.minutes(shortM), shortLine, shortCounts));
+            routes.add(route("shortest", shortM, profile.minutes(shortM), shortLine, shortCounts,
+                    dark(cond, found.shortest(), start, cov)));
         }
-        routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts));
+        routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts,
+                dark(cond, found.safe(), start, cov)));
 
         int extraM = same ? 0 : safeM - shortM;
         // 반올림을 따로 하면 "22분 / 24분"인데 "(1분) 더"가 나올 수 있어, 두 경로 시간의 차로 구한다
@@ -72,16 +83,33 @@ public class RouteResultAssembler {
                 RouteResult.Conditions.of(cond),
                 routes,
                 new RouteResult.Explanation(text, extraM, extraMin, FacilityGroup.keyed(diff)),
-                marks(same ? null : shortCounts, safeCounts),
+                marks(same ? null : shortCounts, safeCounts, same ? null : shortLine, safeLine),
                 dataQuality(same ? List.of(found.safe()) : List.of(found.shortest(), found.safe()), nearby));
     }
 
-    private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts) {
-        return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()));
+    private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts,
+            List<RouteResult.Stretch> dark) {
+        return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()), dark);
     }
 
-    /** 지도 아이콘. 도움 지점·비상벨·CCTV·등 순서로 최대 개수까지. shortCounts가 null이면 경로가 하나 */
-    private List<RouteResult.FacilityMark> marks(Counts shortCounts, Counts safeCounts) {
+    /** 밤에만. 시작 거리는 요청한 출발점부터 재서 시설 along.atM과 같은 기준으로 맞춘다 */
+    private List<RouteResult.Stretch> dark(Conditions cond, RoadPath path, double[] start, Coverage cov) {
+        if (!cond.night()) {
+            return List.of();
+        }
+        RouteProperties.DarkStretch d = props.darkStretch();
+        double startM = Geo.distance(start, path.line().get(0));
+        return DarkStretches.along(path, startM, cov, d.mergeGapM(), d.minM()).stream()
+                .map(s -> new RouteResult.Stretch((int) Math.round(s.fromM()), (int) Math.round(s.toM())))
+                .toList();
+    }
+
+    /**
+     * 지도 아이콘. 도움 지점·비상벨·CCTV·등 순서로 최대 개수까지. shortCounts가 null이면 경로가 하나.
+     * 시설마다 지나는 경로에서의 자리(몇 m 지점, 왼쪽·오른쪽)를 붙인다 (FR-30)
+     */
+    private List<RouteResult.FacilityMark> marks(Counts shortCounts, Counts safeCounts, List<double[]> shortLine,
+            List<double[]> safeLine) {
         Set<Poi> onShort = shortCounts == null ? Set.of() : new HashSet<>(shortCounts.passed());
         Set<Poi> onSafe = new HashSet<>(safeCounts.passed());
         Set<Poi> all = new HashSet<>(onShort);
@@ -89,9 +117,23 @@ public class RouteResultAssembler {
         return all.stream()
                 .sorted(Comparator.comparingInt((Poi p) -> markOrder(p.kind())).thenComparingLong(Poi::id))
                 .limit(props.maxFacilities())
-                .map(p -> new RouteResult.FacilityMark(type(p), p.lat(), p.lon(),
-                        onShort.contains(p) && onSafe.contains(p) ? "both" : onSafe.contains(p) ? "safe" : "shortest"))
+                .map(p -> {
+                    Map<String, RouteResult.Along> along = new LinkedHashMap<>();
+                    if (onShort.contains(p)) {
+                        along.put("shortest", along(p, shortLine));
+                    }
+                    if (onSafe.contains(p)) {
+                        along.put("safe", along(p, safeLine));
+                    }
+                    String on = along.size() == 2 ? "both" : along.keySet().iterator().next();
+                    return new RouteResult.FacilityMark(type(p), p.lat(), p.lon(), on, along);
+                })
                 .toList();
+    }
+
+    private static RouteResult.Along along(Poi p, List<double[]> line) {
+        Geo.Along a = Geo.along(new double[] {p.lon(), p.lat()}, line);
+        return new RouteResult.Along((int) Math.round(a.atM()), a.left() ? "left" : "right");
     }
 
     /** 지도 아이콘이 많을 때 먼저 남기는 순서. 등은 너무 많아서 맨 뒤 */
