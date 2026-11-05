@@ -3,7 +3,7 @@
 --         출입구번호 칸이 '내부'면 대합실↔승강장이라 뺐다.
 -- 근거 B: 광주교통공사 사이버스테이션 역정보 (grtc.co.kr/cyber/subway/layerC?subwayid=01~20)의 출구별 E/L 표시
 -- 두 출구 '사이'에 있는 엘리베이터는 두 출구 모두 1로 둔다.
--- 확인된 역은 나머지 출구를 0으로, 확인하지 못한 곳(문화전당 5번, 녹동)은 NULL(확인 안 됨)로 둔다.
+-- 확인된 역은 나머지 출구를 0으로, 확인하지 못한 곳(문화전당 5번)은 NULL(확인 안 됨)로 둔다.
 -- 넣은 뒤: python3 scripts/build_poi.py --only subway,subway_entrance
 SET NAMES utf8mb4;
 
@@ -107,4 +107,10 @@ JOIN (
 SET e.elevator = t.elevator,
     e.elevator_source = CONCAT('광주교통공사 엘리베이터 현황(data.go.kr 15041385)·역정보 E/L', IFNULL(CONCAT(' · ', t.note), ''));
 -- 문화전당 5번: 역정보(B)에는 E/L 표시가 있지만 공공데이터(A)에는 없어 확인 안 됨으로 둔다
--- 녹동: 역 안내도·공공데이터에 없고 공사 편의시설 표는 2대라고 해서 확인 안 됨으로 둔다
+-- 녹동: 역 안내도·공공데이터에 출구 엘리베이터가 없다. 공사 편의시설 표(grtc.co.kr disabledFacilityCnt)의 2대는
+--       출구 쪽이 아니라고 보고 팀이 '없음'으로 정했다 (2026-11-05)
+UPDATE subway_entrance e
+JOIN subway_station s ON s.station_id = e.station_id
+SET e.elevator = 0,
+    e.elevator_source = '팀 확인 2026-11-05: 출구 쪽 지상 엘리베이터 없음 (역 안내도·data.go.kr 15041385에 없음)'
+WHERE s.name = '녹동';
