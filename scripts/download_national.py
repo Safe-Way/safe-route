@@ -4,6 +4,7 @@
 - 이미 받은 페이지는 건너뛰므로 몇 번을 다시 실행해도 된다.
 - 재난안전데이터(safetydata)는 키마다 하루 1000번 한도가 있다.
   오늘 쓴 횟수를 data/raw/national/_quota.json 에 적어 두고 한도 전에 멈춘다.
+- 공공데이터포털(datagokr)은 한도를 넘으면 오류(코드 22)를 주므로, 그때 멈추고 다음에 이어 받는다.
 - --wait 를 주면 한도에 걸린 데이터는 다음 날 0시 10분까지 기다렸다가 이어서 받는다.
 
 실행: python3 scripts/download_national.py [--wait] [이름 ...]
@@ -24,8 +25,9 @@ DAILY_LIMIT = 990  # 한도 1000에서 조금 여유를 둔다
 
 SAFETYDATA = "https://www.safetydata.go.kr/V2/api/"
 SAFEMAP = "https://www.safemap.go.kr/openapi2/"
+DATA_GO_KR = "https://api.data.go.kr/openapi/"
 
-# 이름, 주소, 키 이름, 한도를 셀 키 묶음
+# 이름, 주소, 키 이름("A|B"면 A가 없을 때 B), 출처 종류
 DATASETS = [
     ("police", SAFETYDATA + "DSSP-IF-00080", "SAFETYDATA_POLICE_KEY", "safetydata"),
     ("security_light", SAFETYDATA + "DSSP-IF-00083", "SAFETYDATA_SECURITYLIGHT_KEY", "safetydata"),
@@ -34,8 +36,19 @@ DATASETS = [
     ("convenience_store", SAFEMAP + "IF_0039", "SAFEMAP_KEY", "safemap"),
     ("child_safety_house", SAFEMAP + "IF_0055", "SAFEMAP_KEY", "safemap"),
     ("heat_shelter", SAFEMAP + "IF_0001", "SAFEMAP_KEY", "safemap"),
-    ("cold_shelter", SAFEMAP + "IF_0136", "SAFEMAP_KEY", "safemap"),
-    ("public_toilet", SAFEMAP + "IF_0132", "SAFEMAP_KEY", "safemap"),
+    # 한파쉼터: 생활안전지도(IF_0136)는 10,000건까지만 줘서 재난안전데이터로 바꿈
+    ("cold_shelter_safetydata", SAFETYDATA + "DSSP-IF-10804", "SAFETYDATA_COLDSHELTER_KEY", "safetydata"),
+    # 공중화장실: 생활안전지도(IF_0132)는 약 2.5만 곳이 엉뚱한 좌표 세 점에 몰려 있고 주소도 비어 있어 뺌.
+    # 대신 공공데이터포털 공중화장실 CSV를 카카오 주소 검색으로 좌표로 바꿔 넣는다: scripts/load_toilet_std.py
+    # 전국보안등정보표준데이터: 지자체가 직접 올려서 공통POI 보안등보다 촘촘함 (약 186만 건)
+    ("security_light_std", DATA_GO_KR + "tn_pubr_public_scrty_lmp_api",
+     "DATA_GO_KR_SECURITYLIGHT_KEY|DATA_GO_KR_KEY", "datagokr"),
+    # 전국육교정보표준데이터: 휠체어 모드에서 엘리베이터·경사로 없는 육교를 빼려고 받음 (약 1,400건)
+    ("footbridge", DATA_GO_KR + "tn_pubr_public_overpass_api",
+     "DATA_GO_KR_FOOTBRIDGE_KEY|DATA_GO_KR_KEY", "datagokr"),
+    # 전국횡단보도표준데이터: 보도턱 낮춤·점자블록·음향신호기·보행 신호 시간 (약 5만 9천 건)
+    ("crosswalk", DATA_GO_KR + "tn_pubr_public_crosswalk_api",
+     "DATA_GO_KR_CROSSWALK_KEY|DATA_GO_KR_KEY", "datagokr"),
 ]
 
 
@@ -83,7 +96,10 @@ def add_use(q, key_name):
 
 def fetch(base, key, page, source):
     params = {"serviceKey": key, "pageNo": page, "numOfRows": PAGE_SIZE}
-    params["returnType"] = "JSON" if source == "safemap" else "json"
+    if source == "datagokr":
+        params["type"] = "json"
+    else:
+        params["returnType"] = "JSON" if source == "safemap" else "json"
     url = base + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=120) as r:
@@ -93,7 +109,7 @@ def fetch(base, key, page, source):
 def parse(data, source):
     """(결과코드, 전체 건수, 항목 목록)"""
     code = data.get("header", {}).get("resultCode")
-    if source == "safemap":
+    if source in ("safemap", "datagokr"):
         body = data.get("body") or {}
         items = (body.get("items") or {}).get("item") or []
         if isinstance(items, dict):
@@ -114,7 +130,7 @@ def total_of(name):
 def download(name, base, key_env, source, env, q):
     """끝까지 받으면 True, 한도 때문에 멈추면 False"""
     os.makedirs(os.path.join(OUT, name), exist_ok=True)
-    key = env.get(key_env)
+    key = next((env[k] for k in key_env.split("|") if env.get(k)), None)
     if not key:
         log("%s: .env에 %s 가 없어 건너뜀" % (name, key_env))
         return True
@@ -133,7 +149,7 @@ def download(name, base, key_env, source, env, q):
         data = None
         for attempt in range(4):
             try:
-                if source == "safetydata":
+                if source in ("safetydata", "datagokr"):
                     add_use(q, key_env)
                 data = fetch(base, key, page, source)
                 break
@@ -144,6 +160,14 @@ def download(name, base, key_env, source, env, q):
             log("%s p%d: 계속 실패해서 멈춤" % (name, page))
             return False
         code, total, items = parse(data, source)
+        if code is None and source == "datagokr":
+            # 공공데이터포털 오류는 OpenAPI_ServiceResponse 모양으로 온다
+            err = (data.get("OpenAPI_ServiceResponse") or {}).get("cmmMsgHeader") or {}
+            if err.get("returnReasonCode") == "22":
+                log("%s: 오늘 호출 한도 도달, %d쪽부터 다음에 이어 받음" % (name, page))
+            else:
+                log("%s p%d: 응답 오류 %s" % (name, page, json.dumps(err, ensure_ascii=False)))
+            return False
         if code not in ("00", "0"):
             log("%s p%d: 응답 오류 %s" % (name, page, json.dumps(data.get("header"), ensure_ascii=False)))
             return False

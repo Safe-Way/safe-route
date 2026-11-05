@@ -34,10 +34,30 @@
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
 
+        <!-- 경로 탐색 (A*). 길마다 비용을 요청 때 바꿔 끼우기 쉽다 -->
+        <dependency>
+            <groupId>org.jgrapht</groupId>
+            <artifactId>jgrapht-core</artifactId>
+            <version>1.5.2</version>
+        </dependency>
+
+        <!-- 서버 상태 확인 주소(/actuator/health). 배포 스크립트가 새 서버가 떴는지 이 주소로 본다 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- 일몰·일출 계산 (밤 판단, FR-02). 인터넷 호출 없이 위치와 날짜로 계산 -->
+        <dependency>
+            <groupId>org.shredzone.commons</groupId>
+            <artifactId>commons-suncalc</artifactId>
+            <version>3.11</version>
         </dependency>
 
         <dependency>

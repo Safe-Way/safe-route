@@ -1,0 +1,81 @@
+# 서버 CI/CD: PR과 develop/main 푸시마다 빌드하고 테스트한다 (CI).
+# develop에 푸시됐을 때(PR 머지 포함) 테스트가 통과하면 deploy.yml을 불러 학교 서버에 배포한다 (CD).
+# 학교 DB에는 GitHub 서버에서 접속할 수 없어서, 빈 MySQL 8.0을 잠깐 띄워 쓴다 (학교 서버와 같은 8.0).
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+# 같은 브랜치에 새로 푸시하면 앞의 검사는 멈춘다.
+# develop은 배포가 이어서 돌기 때문에 멈추지 않고, 앞의 실행(배포 포함)이 끝난 뒤 다음 것을 돌린다
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/develop' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: 서버 빌드·테스트
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: safe_route
+          MYSQL_USER: safe_route
+          MYSQL_PASSWORD: ci-only-password
+          MYSQL_ROOT_PASSWORD: ci-only-root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-only-root"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    # 앱은 .env가 없으면 이 환경변수를 읽는다 (CI 전용 값이라 비밀이 아님)
+    env:
+      DB_URL: jdbc:mysql://127.0.0.1:3306/safe_route?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+      DB_USERNAME: safe_route
+      DB_PASSWORD: ci-only-password
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: DB 표 만들기 (schema.sql 문법 검사 겸)
+        run: |
+          mysql -h 127.0.0.1 -u safe_route -pci-only-password --default-character-set=utf8mb4 safe_route \
+            < src/main/resources/db/schema.sql
+          mysql -h 127.0.0.1 -u safe_route -pci-only-password safe_route -e "SHOW FULL TABLES"
+
+      - name: 빌드·테스트
+        run: ./mvnw -B -ntp verify
+
+      - name: 실패한 테스트 결과 올리기
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: target/surefire-reports/
+          retention-days: 7
+
+  # develop 푸시에서 테스트가 통과했을 때만 배포한다. PR에서는 돌지 않는다
+  deploy:
+    name: 학교 서버 배포
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

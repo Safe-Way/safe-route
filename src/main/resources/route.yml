@@ -1,0 +1,108 @@
+# 경로 계산 설정. 값을 바꾸면 서버를 다시 켜야 적용된다.
+# 빌드 없이 한 번만 바꿔 보려면 실행 인자로 덮어쓴다: --route.profiles.child.day.help-m=140
+# 기준과 근거는 결정 문서 「경로 엔진 결정 사항 정리」(2026-11-02·03 확정)에 있다.
+#
+# 길 비용 = 길이 + λ × 추가 비용
+#   추가 비용 = 길이 × Σ 비중 × (그 길 중 기준 범위 밖 비율)
+#   λ(0~1)는 안전 경로가 우회 한도(max-detour)를 넘지 않는 가장 큰 값을 요청마다 찾는다.
+#   범위 밖 비율(커버율)은 서버가 요청 때 시설 표(poi)로 계산한다. DB(edge_stat)에는 원값만 있다.
+#
+# 기준 이름 (weights)
+#   light   가로등·보안등에서 길을 따라 30m 안
+#   cctv    CCTV에서 길을 따라 50m 안 (교통·쓰레기·시설·재난 단속용은 뺌, 결정 39)
+#   help    지금 이용 가능한 도움 시설에서 반경 help-m 안
+#           낮: 경찰·편의점·비상벨·아동안전지킴이집 / 밤: 지킴이집·건물 안 비상벨을 뺌 (24시간 경찰·길가 비상벨·편의점)
+#   school  어린이보호구역 대상 시설에서 반경 school-m 안
+#   rest    지금 이용 가능한 쉼터·공중화장실에서 반경 rest-m 안
+# 이용 가능: 운영 기간·시간·공휴일로 판단. 편의점은 시간 정보가 없어도 연 것으로 보고, 그 밖의 "확인 안 됨"은 세지 않는다.
+# 시간 정보가 없는 쉼터는 운영 기간 안이면 평일 09~18시에 연 것으로 본다.
+# 모르는 값(보도턱·신호 등)은 감점하지 않고 "확인 안 됨"으로만 알린다.
+
+route:
+  # 도로망을 어디서 읽을지. mysql: DB의 road_node·road_edge·edge_stat (A파트 적재, 문화전당 반경 2km)
+  # none: 도로망 없음(모든 요청 OUT_OF_AREA). DB 없이 서버만 띄울 때 실행 인자로 --route.road-source=none
+  road-source: mysql
+
+  # 조명·CCTV 커버율 ("길 따라": 시설을 가장 가까운 길 하나에 붙이고, 그곳에서 길을 따라 퍼진다)
+  coverage:
+    light-m: 30          # 등이 비추는 범위
+    cctv-m: 50           # CCTV가 찍는 범위
+    snap-to-road-m: 20   # 이보다 길에서 멀면 길을 비추거나 찍지 않는다고 본다
+    sample-m: 10         # 길을 이 간격으로 나눠 잰다
+
+  # 누가 걷는지에 따라 바뀌는 기준. 요청의 mode로 고른다. 없으면 adult
+  # mode 이름은 adult·child·senior·wheelchair로 통일한다 (2026-11-03 결정. 앱·요구사항 문서도 이 이름으로 맞춘다)
+  #   max-detour     안전 경로가 최단 경로의 몇 배까지 돌 수 있는지. 0이면 한도 없음
+  #   night-lead-min 일몰 몇 분 전부터 밤으로 볼지
+  #   exclude        이 성질이 확인된 길은 아예 뺀다 (stairs 경사로가 확인되지 않은 계단, curb 확인된 턱, footbridge 못 지나는 육교, trail 산행 길, ford 징검다리)
+  #   avoid-stairs   계단 조건부 제외: 계단 없는 길이 우회 한도 안에 있으면 계단 길을 뺀다
+  #   avoid-unpaved  비포장 조건부 제외: 비포장 없는 길이 우회 한도 안에 있으면 비포장 길을 뺀다
+  #   day / night    그때의 기준. weights가 비면 가장 짧은 길
+  #   *-m            반경은 "걸어서 약 2분" (어린이 분당 70m, 노인 60m, 어른 80m). 보호구역은 법 기준 300m
+  #   note           낮에 다른 길을 고른 이유로 보여 줄 문장
+  profiles:
+    adult:                 # 청년·중년
+      max-detour: 1.3
+      walk-speed-m-per-min: 80
+      night-lead-min: 0
+      night:
+        weights: { light: 5, help: 2, cctv: 1 }   # 밝기 > 도움 시설 > CCTV. 9:3:1에서 바꿈 (2026-11-04, 밝기 같고 덜 돎)
+        help-m: 160
+    child:                 # 어린이·청소년
+      max-detour: 1.3
+      walk-speed-m-per-min: 70
+      night-lead-min: 60
+      day:
+        weights: { school: 3, help: 1 }           # 보호구역 > 도움 시설
+        school-m: 300
+        help-m: 150
+        note: 어린이보호구역과 도움을 청할 곳이 가까운 길로 갑니다
+      night:
+        weights: { light: 5, help: 2, cctv: 1 }   # 밤에는 보호구역을 쓰지 않는다
+        help-m: 150
+    senior:                # 노인
+      max-detour: 1.2
+      walk-speed-m-per-min: 60
+      night-lead-min: 0
+      avoid-stairs: true
+      day:
+        weights: { rest: 4 }                      # 지금 이용 가능한 쉼터·공중화장실 (어린이 낮 3+1과 같은 세기)
+        rest-m: 120
+        note: 계단을 피하고 쉴 곳이 가까운 길로 갑니다
+      night:
+        weights: { light: 5, help: 2, cctv: 1 }   # 공중화장실은 경로 계산에 넣지 않는다
+        help-m: 120
+    wheelchair:            # 휠체어: 계단·확인된 턱·못 지나는 육교를 뺀 길 중에서 고른다
+      max-detour: 1.2      # 지날 수 있는 길 중 최단의 1.2배까지 (2026-11-04 결정. 이동이 힘들어 노인과 같은 값)
+      walk-speed-m-per-min: 50
+      night-lead-min: 0
+      exclude: [stairs, curb, footbridge, trail, ford]   # trail 등산 난이도가 붙은 산길, ford 징검다리 (2026-11-04)
+      avoid-unpaved: true  # 비포장 조건부 제외: 비포장 없는 길이 1.2배 안이면 그 길로, 아니면 비포장 길 + 알림 (2026-11-04)
+      day:                 # 낮: 가장 짧은 길. 비포장을 피해 다른 길을 고르면 그 이유를 note로 말한다
+        note: 비포장을 피하는 길로 갑니다
+      night:
+        weights: { light: 5, help: 2, cctv: 1 }   # 어두우면 턱·패인 곳이 안 보여 밝기를 먼저 (2026-11-04 결정)
+        help-m: 120                               # 노인과 같은 120m
+
+  # 경로에서 이 거리 안에 있는 시설을 "지나는 시설"로 센다 (설명 문장·지도 아이콘용, 결정 12)
+  count-radius-m:
+    light: 30        # 가로등·보안등
+    cctv: 50
+    bell: 50         # 비상벨
+    help: 50         # 경찰·편의점·아동안전지킴이집
+  # 시설은 poi(출처 중복을 10m 안에서 이미 합친 표)에서 읽으므로 서버에서 다시 합치지 않는다
+  # 지도에 보낼 시설 아이콘 최대 개수
+  max-facilities: 300
+
+  # 출발·도착을 감싼 사각형을 사방으로 넓혀 그 안의 길만 읽는다 (8.1)
+  search-margin-m: 500
+  # 그 범위에서 경로를 못 찾으면 이만큼 넓혀 한 번 더 찾는다. 강·철도·큰 도로를 다리·육교로 돌아가는 길 (2026-11-04)
+  retry-margin-m: 1500
+  # 출발·도착에서 가장 가까운 길까지 이보다 멀면 경로를 찾지 않는다
+  snap-max-m: 300
+  # 휠체어는 지날 수 있는 길(계단 등을 뺀 길)로 이어진 곳에 붙인다. 가장 가까운 길이 계단으로만 드나드는 구역이면
+  # 옆 길에 붙이고 설명에 알린다. 모든 길 기준보다 이보다 더 멀어지면 붙이지 않는다 (2026-11-04)
+  passable-snap-extra-m: 50
+  # 출발·도착이 이보다 가까우면 SAME_POINT, 직선거리가 이보다 멀면 TOO_FAR (8.3)
+  same-point-m: 50
+  too-far-m: 5000
