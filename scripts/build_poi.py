@@ -16,8 +16,9 @@
 - OSM 횡단보도(road_node crossing)·계단(road_edge steps)도 넣는다 (도로망 범위만). 횡단보도 표준데이터 10m 안이면 뺀다.
 - modes: 지도에 먼저 보일 모드 (FR-48, 결정 35). CCTV·경찰·비상벨·편의점은 모든 모드(common),
   지킴이집·어린이보호구역은 child, 쉼터·화장실은 senior, 육교·횡단보도·장애인 화장실은 wheelchair. 등은 아이콘 대신 밝기로만 쓰므로 비움.
-- 지하철역(subway_station, 광주 1호선 20역): 모든 모드(common, 결정 51). 엘리베이터가 있으면 wheelchair = 1(녹동역은 없음),
-  cnt = 엘리베이터 대수(앱이 노인·장애인 모드에서 "엘리베이터 N대" 배지로 씀).
+- 지하철역(subway_station, 광주 1호선 20역): 모든 모드(common, 결정 51). 휠체어 판단은 출구 기준:
+  지상 엘리베이터가 있는 출구가 있으면 wheelchair = 1, 모두 없음이면 0(양동시장), 모르면 NULL(녹동).
+  cnt = 엘리베이터 있는 출구 수(앱이 노인·장애인 모드에서 "엘리베이터 출구 N곳" 배지로 씀).
   여는 시간은 열차 시간표(subway_timetable 평일)의 그 역 첫차~막차.
 - 지하철 출입구(subway_entrance, OSM 92곳): 모든 모드(common). wheelchair = 그 출구 쪽 지상 엘리베이터
   (subway_entrance.elevator, 없으면 OSM wheelchair yes/no, 그것도 없으면 NULL = 확인 안 됨).
@@ -359,19 +360,38 @@ def build():
     trains = {name: (frm, to) for name, frm, to in query(
         "SELECT station_name, TIME_FORMAT(MIN(arrive_time), '%H:%i'), TIME_FORMAT(MAX(arrive_time), '%H:%i') "
         "FROM subway_timetable WHERE day_type = '평일' GROUP BY station_name")}
+    # 역의 휠체어 판단은 출구 기준 (결정 51): 지상에서 엘리베이터로 들어갈 수 있는 출구가 하나라도 있으면 1,
+    # 출구가 모두 '없음'으로 확인됐으면 0, 모르는 출구가 남아 있으면 NULL. 역 안(대합실↔승강장) 엘리베이터만 있는 역은 0
+    exits = defaultdict(list)
+    for sid, exit_no, elev in query("SELECT station_id, IFNULL(exit_no, ''), IFNULL(elevator, '') FROM subway_entrance "
+                                    "WHERE station_id IS NOT NULL"):
+        exits[int(sid)].append((exit_no, None if elev == "" else int(elev)))
     for sid, name, addr, lon, lat, elev, elev_ok, toilet, charger in query(
             "SELECT station_id, name, IFNULL(address, ''), lon, lat, elevator_total, elevator_available, "
             "accessible_toilet_total, wheelchair_charger_total FROM subway_station"):
         elev, elev_ok, toilet, charger = int(elev), int(elev_ok), int(toilet), int(charger)
         frm, to = trains.get(name, (None, None))
-        parts = ["지하철역", f"엘리베이터 {elev}대" + (f"(지금 {elev_ok}대 운행)" if elev_ok < elev else "")
-                 if elev else "엘리베이터 없음"]
+        ex = exits.get(int(sid), [])
+        lift_exits = sorted((no for no, e in ex if e == 1), key=lambda n: int(n) if n.isdigit() else 99)
+        if lift_exits:
+            wc = 1
+        elif ex and all(e == 0 for _, e in ex):
+            wc = 0
+        else:
+            wc = None
+        if lift_exits:
+            gate = f"엘리베이터 있는 출구 {len(lift_exits)}곳({'·'.join(lift_exits)}번)"
+        elif wc == 0:
+            gate = "지상에서 내려가는 엘리베이터 없음" + (f"(역 안 엘리베이터 {elev}대)" if elev else "")
+        else:
+            gate = "출구 엘리베이터 확인 안 됨"
+        parts = ["지하철역", gate]
         parts += [s for s, ok in ((f"장애인 화장실 {toilet}곳", toilet), (f"전동휠체어 충전기 {charger}대", charger)) if ok]
         if frm:
             parts.append(f"열차 {frm}~{to}")
         out.append(poi("subway", [{"lon": float(lon), "lat": float(lat), "src": f"subway_station:{sid}",
                                    "address": addr or None}],
-                       f"{name}역", sub="지하철역", cnt=elev, wheelchair=1 if elev_ok > 0 else 0, modes="common",
+                       f"{name}역", sub="지하철역", cnt=len(lift_exits), wheelchair=wc, modes="common",
                        open_hours=f"열차 {frm}~{to}" if frm else None, open_from=frm, open_to=to,
                        open_days="매일" if frm else None, detail=" · ".join(parts)))
     # 지하철 출입구: 출구 쪽 지상 엘리베이터 (elevator는 손으로 채운 값, 없으면 OSM wheelchair 표시)

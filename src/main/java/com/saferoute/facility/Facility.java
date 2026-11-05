@@ -17,7 +17,7 @@ import java.util.List;
  * @param nowNote    무엇으로 판단했는지 (개방 시간, 일반 업무 시간 기준 등). 없으면 null
  * @param wheelchair 휠체어: 장애인 화장실·지나갈 수 있는 육교·보도턱 낮춘 횡단보도·엘리베이터 있는 역·출입구면 true.
  *                   모르면 null
- * @param count      이 점에 합친 수 (CCTV 대수 등). 지하철역은 엘리베이터 대수
+ * @param count      이 점에 합친 수 (CCTV 대수 등). 지하철역은 지상 엘리베이터가 있는 출구 수
  * @param modes      지도에 먼저 보일 모드 (common, child, senior, wheelchair)
  * @param detail     앱에 바로 띄울 짧은 설명
  */

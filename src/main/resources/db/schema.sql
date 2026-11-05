@@ -533,7 +533,7 @@ CREATE TABLE IF NOT EXISTS region_density (
 -- 원본 표는 그대로 두고, scripts/build_poi.py가 이 표를 지우고 다시 만든다.
 -- kind: light 등, cctv, police 경찰, bell 비상벨, store 편의점, guard_house 아동안전지킴이집,
 --       shelter 무더위·한파쉼터, toilet 공중화장실, footbridge 육교, crosswalk 횡단보도(표준데이터 + OSM), school_zone 어린이보호구역,
---       stairs 계단(OSM, 도로망 범위), subway 지하철역(엘리베이터·장애인 화장실·전동휠체어 충전기, subway_station. cnt = 엘리베이터 대수),
+--       stairs 계단(OSM, 도로망 범위), subway 지하철역(엘리베이터·장애인 화장실·전동휠체어 충전기, subway_station. cnt = 엘리베이터 있는 출구 수, wheelchair는 출구 기준),
 --       subway_entrance 지하철 출입구(subway_entrance. wheelchair = 그 출구 쪽 지상 엘리베이터, NULL은 확인 안 됨)
 --   경로 엔진은 정해 둔 종류만 읽는다(RouteService.POI_KINDS). subway·subway_entrance는 지도 표시용이라 경로 계산에 쓰지 않는다
 --   한 종류만 다시 넣기: python3 scripts/build_poi.py --only subway,subway_entrance (다른 시설 id는 그대로)
