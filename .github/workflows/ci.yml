@@ -1,7 +1,7 @@
-# 서버 CI: PR과 develop/main 푸시마다 빌드하고 테스트한다.
-# develop에 푸시됐을 때(PR 머지 포함) 테스트가 통과하면 deploy.yml을 불러 학교 서버에 배포한다.
+# 서버 CI/CD: PR과 develop/main 푸시마다 빌드하고 테스트한다 (CI).
+# develop에 푸시됐을 때(PR 머지 포함) 테스트가 통과하면 deploy.yml을 불러 학교 서버에 배포한다 (CD).
 # 학교 DB에는 GitHub 서버에서 접속할 수 없어서, 빈 MySQL 8.0을 잠깐 띄워 쓴다 (학교 서버와 같은 8.0).
-name: CI
+name: CI/CD
 
 on:
   pull_request:
