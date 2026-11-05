@@ -86,8 +86,8 @@ JOIN (
     UNION ALL SELECT '금남로4가', '4', 0, NULL
     UNION ALL SELECT '문화전당', '1', 0, NULL
     UNION ALL SELECT '문화전당', '2', 1, NULL
-    UNION ALL SELECT '문화전당', '3', 0, NULL
-    UNION ALL SELECT '문화전당', '4', 0, NULL
+    UNION ALL SELECT '문화전당', '3', 1, '3·4번 사이(5·18민주광장~방문자센터), 현장 확인 2026-11-05'
+    UNION ALL SELECT '문화전당', '4', 1, '3·4번 사이(5·18민주광장~방문자센터), 현장 확인 2026-11-05'
     UNION ALL SELECT '문화전당', '6', 0, NULL
     UNION ALL SELECT '남광주', '1', 0, NULL
     UNION ALL SELECT '남광주', '2', 0, NULL
@@ -107,6 +107,7 @@ JOIN (
 SET e.elevator = t.elevator,
     e.elevator_source = CONCAT('광주교통공사 엘리베이터 현황(data.go.kr 15041385)·역정보 E/L', IFNULL(CONCAT(' · ', t.note), ''));
 -- 문화전당 5번: 역정보(B)에는 E/L 표시가 있지만 공공데이터(A)에는 없어 확인 안 됨으로 둔다
+-- 문화전당 3·4번: A·B에는 없지만 팀이 현장에서 3·4번 사이 지상 엘리베이터를 확인함 (2026-11-05)
 -- 녹동: 역 안내도·공공데이터에 출구 엘리베이터가 없다. 공사 편의시설 표(grtc.co.kr disabledFacilityCnt)의 2대는
 --       출구 쪽이 아니라고 보고 팀이 '없음'으로 정했다 (2026-11-05)
 UPDATE subway_entrance e
