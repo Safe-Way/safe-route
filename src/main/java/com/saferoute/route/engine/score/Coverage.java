@@ -1,6 +1,7 @@
 package com.saferoute.route.engine.score;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,13 +25,31 @@ public final class Coverage {
     private static final double EDGE_CELL_M = 50;
 
     private final Map<Long, double[]> byEdge;
+    /** 조명의 표본별 결과. 어두운 구간 안내(FR-31)에만 쓰므로 조명만 남긴다 */
+    private final Map<Criterion, Map<Long, Sampled>> sampled;
 
-    private Coverage(Map<Long, double[]> byEdge) {
+    private Coverage(Map<Long, double[]> byEdge, Map<Criterion, Map<Long, Sampled>> sampled) {
         this.byEdge = byEdge;
+        this.sampled = sampled;
     }
 
     /** 아무 기준도 없을 때 */
-    public static final Coverage NONE = new Coverage(Map.of());
+    public static final Coverage NONE = new Coverage(Map.of(), Map.of());
+
+    /**
+     * 길 하나를 나눈 표본마다 기준 범위 안인지.
+     *
+     * @param offsetM 표본 자리: 길의 from에서 잰 거리(m, 길 길이 기준)
+     * @param inside  그 표본이 범위 안이면 true
+     */
+    public record Sampled(double[] offsetM, boolean[] inside) {
+    }
+
+    /** 표본별 결과 (조명만). 계산하지 않은 기준이나 길이면 null */
+    public Sampled sampled(RoadEdge e, Criterion c) {
+        Map<Long, Sampled> m = sampled.get(c);
+        return m == null ? null : m.get(e.id());
+    }
 
     /** 그 길이 기준 범위 안에 드는 비율 (0~1). 계산하지 않은 기준은 0 */
     public double covered(RoadEdge e, Criterion c) {
@@ -65,6 +84,7 @@ public final class Coverage {
         for (RoadEdge e : g.graph().edgeSet()) {
             out.put(e.id(), new double[Criterion.values().length]);
         }
+        Map<Criterion, Map<Long, Sampled>> sampled = new EnumMap<>(Criterion.class);
         EdgeIndex index = null;
         for (Map.Entry<Criterion, Layer> c : layers.entrySet()) {
             Layer layer = c.getValue();
@@ -73,7 +93,11 @@ public final class Coverage {
                 if (index == null) {
                     index = new EdgeIndex(g, pr);
                 }
-                alongRoad(g, index, pr, layer, snapM, samples, out, k);
+                Map<Long, Sampled> flags = c.getKey() == Criterion.LIGHT ? new HashMap<>() : null;
+                alongRoad(g, index, pr, layer, snapM, samples, out, k, flags);
+                if (flags != null) {
+                    sampled.put(c.getKey(), flags);
+                }
             } else {
                 PointGrid grid = new PointGrid(layer.points(), pr, layer.radiusM());
                 for (RoadEdge e : g.graph().edgeSet()) {
@@ -83,13 +107,13 @@ public final class Coverage {
                 }
             }
         }
-        return new Coverage(out);
+        return new Coverage(out, sampled);
     }
 
     // ------------------------------------------------------------------ 길 따라
 
     private static void alongRoad(RoadGraph g, EdgeIndex index, Projection pr, Layer layer, double snapM,
-            Map<Long, List<Sample>> samples, Map<Long, double[]> out, int k) {
+            Map<Long, List<Sample>> samples, Map<Long, double[]> out, int k, Map<Long, Sampled> flags) {
         double radius = layer.radiusM();
         Map<Long, List<Double>> onEdge = new HashMap<>();
         Map<Long, Double> dist = new HashMap<>();
@@ -128,12 +152,20 @@ public final class Coverage {
             double dt = dist.getOrDefault(e.to(), Double.MAX_VALUE);
             List<Double> same = onEdge.getOrDefault(e.id(), List.of());
             int in = 0;
-            for (Sample s : ss) {
+            double[] offsets = new double[ss.size()];
+            boolean[] inside = new boolean[ss.size()];
+            for (int si = 0; si < ss.size(); si++) {
+                Sample s = ss.get(si);
                 double d = Math.min(df + s.offsetM, dt + e.lengthM() - s.offsetM);
                 for (double o : same) {
                     d = Math.min(d, Math.abs(s.offsetM - o));
                 }
-                in += d <= radius ? 1 : 0;
+                offsets[si] = s.offsetM;
+                inside[si] = d <= radius;
+                in += inside[si] ? 1 : 0;
+            }
+            if (flags != null) {
+                flags.put(e.id(), new Sampled(offsets, inside));
             }
             out.get(e.id())[k] = ss.isEmpty() ? 0 : (double) in / ss.size();
         }
