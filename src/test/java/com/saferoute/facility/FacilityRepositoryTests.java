@@ -77,4 +77,17 @@ class FacilityRepositoryTests {
 
         assertThat(repo.within(w, s, e, n, Set.of("toilet", "cctv"), 2)).hasSize(2);
     }
+
+    @Test
+    void subwayKeepsZeroElevatorExits() {
+        jdbc.update("INSERT INTO poi (kind, name, lon, lat, geom, cnt, wheelchair, modes, detail, sources, built_at)"
+                + " VALUES ('subway', '시험역', ?, ?, ST_SRID(POINT(?, ?), 0), 0, 0, 'common', '시험역', '[]', NOW())",
+                LON, LAT, LON, LAT);
+        double w = LON - 0.01, e = LON + 0.01, s = LAT - 0.01, n = LAT + 0.01;
+
+        Facility station = repo.within(w, s, e, n, Set.of("subway"), 10).get(0);
+        assertThat(station.count()).isZero();
+        assertThat(station.wheelchair()).isFalse();
+        assertThat(repo.within(w, s, e, n, Set.of("cctv"), 10).get(0).count()).isEqualTo(1);
+    }
 }
