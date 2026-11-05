@@ -203,8 +203,9 @@ ${servers}}
 server {
     # 컨테이너 안 8080. 서버의 <포트번호>가 여기로 이어진다
     listen 8080;
-    # 요청 본문 최대 크기 (불편 접수 사진은 2차)
-    client_max_body_size 10m;
+    # 요청 본문 최대 크기. 불편 신고(POST /api/reports)는 사진 3장까지 합쳐 16MB를 받으므로(application.yml
+    # spring.servlet.multipart.max-request-size) 그보다 조금 크게 둔다. 작으면 서버까지 가기 전에 여기서 413(HTML)이 난다
+    client_max_body_size 20m;
     # 접속 기록은 학교 nginx가 남기므로 여기서는 끈다
     access_log off;
 
