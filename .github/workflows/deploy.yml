@@ -1,5 +1,6 @@
 # 학교 서버 배포.
-# develop에 푸시되면 CI(ci.yml)가 테스트를 돌리고, 통과하면 이 워크플로를 불러 배포한다.
+# main에 푸시되면 CI(ci.yml)가 테스트를 돌리고, 통과하면 이 워크플로를 불러 배포한다.
+# develop은 기능 브랜치를 따고 합치는 곳이라 배포하지 않는다. 배포하려면 develop → main PR을 머지한다.
 # 도커 이미지를 만들어 ssh로 서버에 올리고 deploy/deploy.sh로 띄운다.
 # (Actions 탭의 Run workflow 버튼은 이 파일이 기본 브랜치(main)에 들어간 뒤에 보인다)
 #
