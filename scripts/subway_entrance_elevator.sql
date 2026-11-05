@@ -3,11 +3,11 @@
 --         출입구번호 칸이 '내부'면 대합실↔승강장이라 뺐다.
 -- 근거 B: 광주교통공사 사이버스테이션 역정보 (grtc.co.kr/cyber/subway/layerC?subwayid=01~20)의 출구별 E/L 표시
 -- 두 출구 '사이'에 있는 엘리베이터는 두 출구 모두 1로 둔다.
--- 확인된 역은 나머지 출구를 0으로, 확인하지 못한 곳(문화전당 5번)은 NULL(확인 안 됨)로 둔다.
+-- 확인된 역은 나머지 출구를 0으로 둔다. 지금은 92곳 모두 확인됨 (NULL = 확인 안 됨은 새 출구가 생길 때만).
 -- 넣은 뒤: python3 scripts/build_poi.py --only subway,subway_entrance
 SET NAMES utf8mb4;
 
-UPDATE subway_entrance SET elevator = NULL, elevator_source = NULL;
+UPDATE subway_entrance SET elevator = NULL, elevator_source = NULL, note = NULL;
 
 -- (역 이름, 출구, 엘리베이터 1 있음·0 없음, 메모). 학교 DB는 임시 표 권한이 없어 SELECT를 묶어 쓴다
 UPDATE subway_entrance e
@@ -72,7 +72,7 @@ JOIN (
     UNION ALL SELECT '돌고개', '4', 0, NULL
     UNION ALL SELECT '양동시장', '1', 0, NULL
     UNION ALL SELECT '양동시장', '2', 0, NULL
-    UNION ALL SELECT '양동시장', '3', 0, '휠체어리프트만 있음'
+    UNION ALL SELECT '양동시장', '3', 0, '엘리베이터 없음, 계단 휠체어리프트만 있음'
     UNION ALL SELECT '양동시장', '4', 0, NULL
     UNION ALL SELECT '금남로5가', '1', 0, NULL
     UNION ALL SELECT '금남로5가', '2', 0, NULL
@@ -86,8 +86,9 @@ JOIN (
     UNION ALL SELECT '금남로4가', '4', 0, NULL
     UNION ALL SELECT '문화전당', '1', 0, NULL
     UNION ALL SELECT '문화전당', '2', 1, NULL
-    UNION ALL SELECT '문화전당', '3', 0, NULL
-    UNION ALL SELECT '문화전당', '4', 0, NULL
+    UNION ALL SELECT '문화전당', '3', 1, '3·4번 사이(5·18민주광장~방문자센터), 현장 확인 2026-11-05'
+    UNION ALL SELECT '문화전당', '4', 1, '3·4번 사이(5·18민주광장~방문자센터), 현장 확인 2026-11-05'
+    UNION ALL SELECT '문화전당', '5', 0, '현장 확인 2026-11-05'
     UNION ALL SELECT '문화전당', '6', 0, NULL
     UNION ALL SELECT '남광주', '1', 0, NULL
     UNION ALL SELECT '남광주', '2', 0, NULL
@@ -106,7 +107,8 @@ JOIN (
 ) t ON t.station = s.name AND t.exit_no = e.exit_no
 SET e.elevator = t.elevator,
     e.elevator_source = CONCAT('광주교통공사 엘리베이터 현황(data.go.kr 15041385)·역정보 E/L', IFNULL(CONCAT(' · ', t.note), ''));
--- 문화전당 5번: 역정보(B)에는 E/L 표시가 있지만 공공데이터(A)에는 없어 확인 안 됨으로 둔다
+-- 문화전당 5번: 역정보(B)에는 E/L 표시가 있지만 공공데이터(A)에는 없었다. 팀이 현장에서 없음을 확인함 (2026-11-05)
+-- 문화전당 3·4번: A·B에는 없지만 팀이 현장에서 3·4번 사이 지상 엘리베이터를 확인함 (2026-11-05)
 -- 녹동: 역 안내도·공공데이터에 출구 엘리베이터가 없다. 공사 편의시설 표(grtc.co.kr disabledFacilityCnt)의 2대는
 --       출구 쪽이 아니라고 보고 팀이 '없음'으로 정했다 (2026-11-05)
 UPDATE subway_entrance e
@@ -114,3 +116,11 @@ JOIN subway_station s ON s.station_id = e.station_id
 SET e.elevator = 0,
     e.elevator_source = '팀 확인 2026-11-05: 출구 쪽 지상 엘리베이터 없음 (역 안내도·data.go.kr 15041385에 없음)'
 WHERE s.name = '녹동';
+
+-- 출구 안내 (024 note): 엘리베이터 판단은 그대로 두고 설명에만 붙인다
+-- 양동시장 3번 휠체어리프트: 광주교통공사 역정보 출구 안내와 공공데이터 15048368(승강설비 현황, 2021)에 1대.
+--   실시간 편의시설 API는 0대라 엘리베이터로 치지 않고 안내만 함 (팀 결정 2026-11-05). 20역 중 리프트는 이곳뿐
+UPDATE subway_entrance e
+JOIN subway_station s ON s.station_id = e.station_id
+SET e.note = '계단 휠체어리프트 있음(역무원 호출 필요)'
+WHERE s.name = '양동시장' AND e.exit_no = '3';
