@@ -12,7 +12,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -54,11 +53,19 @@ class TransitServiceTests {
                 new OdsayPath.Seg(3, 250, 4, null, null, List.of(), null, 0))));
     }
 
+    /** 길찾기 결과. Route 는 B 가 칸을 늘려 가므로 직접 만들지 않고 쓰는 칸만 흉내 낸다 */
     private static RouteResult walkResult(int meters, int minutes) {
-        return new RouteResult(null, List.of(
-                new RouteResult.Route("shortest", meters - 20, minutes, List.of(), Map.of(), List.of()),
-                new RouteResult.Route("safe", meters, minutes, List.of(new double[] {35.1, 126.9}), Map.of(), List.of())),
+        return new RouteResult(null, List.of(route("shortest", meters - 20, minutes), route("safe", meters, minutes)),
                 null, List.of(), null);
+    }
+
+    private static RouteResult.Route route(String kind, int meters, int minutes) {
+        RouteResult.Route r = mock(RouteResult.Route.class);
+        when(r.kind()).thenReturn(kind);
+        when(r.distanceM()).thenReturn(meters);
+        when(r.durationMin()).thenReturn(minutes);
+        when(r.geometry()).thenReturn(List.of(new double[] {126.9, 35.1}));
+        return r;
     }
 
     private static StationTrains station(String name, Boolean wheelchair) {
@@ -70,7 +77,8 @@ class TransitServiceTests {
     }
 
     private void stubLive(Boolean wheelchair) {
-        when(route.route(any())).thenReturn(walkResult(300, 5));
+        RouteResult walk = walkResult(300, 5); // 흉내 낸 Route 를 먼저 만든다 (when 안에서 만들면 Mockito 가 헷갈림)
+        when(route.route(any())).thenReturn(walk);
         when(bus.nearby(anyDouble(), anyDouble())).thenReturn(new BusNearbyResponse(List.of(
                 new StopArrivals(10, "조선대학교", "남광주", 35.1421, 126.9302, 30, true,
                         List.of(new BusArrival(1, "봉선37", 2, 1, false, "x", "y"))),
@@ -161,7 +169,8 @@ class TransitServiceTests {
     @Test
     void liveInfoFailureStillGivesPath() {
         when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("문화전당"));
-        when(route.route(any())).thenReturn(walkResult(300, 5));
+        RouteResult walk = walkResult(300, 5); // 흉내 낸 Route 를 먼저 만든다 (when 안에서 만들면 Mockito 가 헷갈림)
+        when(route.route(any())).thenReturn(walk);
         when(bus.nearby(anyDouble(), anyDouble())).thenThrow(new RuntimeException("bis down"));
         when(subway.nearby(anyDouble(), anyDouble())).thenThrow(new RuntimeException("db down"));
 
