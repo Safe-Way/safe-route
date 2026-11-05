@@ -1,7 +1,10 @@
 package com.saferoute.bus;
 
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -36,5 +39,21 @@ public class BusStopRepository {
                         rs.getString("next_busstop"), rs.getDouble("lat"), rs.getDouble("lon"),
                         (int) Math.round(rs.getDouble("dist"))),
                 lon, lat, box, radiusM, limit);
+    }
+
+    /** 정류장 번호들로 이름·좌표 찾기 (버스 위치용). 표에 없는 번호는 결과에 없다. 거리는 0 */
+    public Map<Integer, BusStop> byIds(Collection<Integer> ids) {
+        Map<Integer, BusStop> out = new HashMap<>();
+        if (ids.isEmpty()) {
+            return out;
+        }
+        String marks = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        String sql = "SELECT busstop_id, name, next_busstop, lat, lon FROM bus_stop WHERE busstop_id IN (" + marks + ")";
+        jdbc.query(sql, rs -> {
+            BusStop s = new BusStop(rs.getInt("busstop_id"), rs.getString("name"), rs.getString("next_busstop"),
+                    rs.getDouble("lat"), rs.getDouble("lon"), 0);
+            out.put(s.id(), s);
+        }, ids.toArray());
+        return out;
     }
 }

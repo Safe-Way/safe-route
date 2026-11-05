@@ -29,7 +29,7 @@ class BusControllerTests {
     void returnsStopsAndArrivals() throws Exception {
         when(bus.nearby(35.1401, 126.9336)).thenReturn(new BusNearbyResponse(List.of(
                 new StopArrivals(1230, "조선대", "남광주", 35.1405, 126.933, 60, true,
-                        List.of(new BusArrival("15", 3, 1, true, "광주역", "조선대"))))));
+                        List.of(new BusArrival(15, "15", 3, 1, true, "광주역", "조선대"))))));
 
         mvc.perform(get("/api/bus/nearby").param("lat", "35.1401").param("lon", "126.9336"))
                 .andExpect(status().isOk())
@@ -37,6 +37,7 @@ class BusControllerTests {
                 .andExpect(jsonPath("$.stops[0].name").value("조선대"))
                 .andExpect(jsonPath("$.stops[0].distanceM").value(60))
                 .andExpect(jsonPath("$.stops[0].available").value(true))
+                .andExpect(jsonPath("$.stops[0].arrivals[0].lineId").value(15))
                 .andExpect(jsonPath("$.stops[0].arrivals[0].lineName").value("15"))
                 .andExpect(jsonPath("$.stops[0].arrivals[0].remainMin").value(3))
                 .andExpect(jsonPath("$.stops[0].arrivals[0].lowFloor").value(true));
@@ -69,6 +70,38 @@ class BusControllerTests {
         when(bus.nearby(anyDouble(), anyDouble())).thenThrow(new DataAccessResourceFailureException("down"));
 
         mvc.perform(get("/api/bus/nearby").param("lat", "35.1401").param("lon", "126.9336"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("DB_UNAVAILABLE"));
+    }
+
+    @Test
+    void returnsBusLocations() throws Exception {
+        when(bus.locations(2)).thenReturn(new BusLocationResponse(2, true, List.of(
+                new BusLocation("775293", true, 1205, "조선대", 35.14, 126.93, 30))));
+
+        mvc.perform(get("/api/bus/locations").param("lineId", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lineId").value(2))
+                .andExpect(jsonPath("$.available").value(true))
+                .andExpect(jsonPath("$.buses[0].busId").value("775293"))
+                .andExpect(jsonPath("$.buses[0].lowFloor").value(true))
+                .andExpect(jsonPath("$.buses[0].stopName").value("조선대"))
+                .andExpect(jsonPath("$.buses[0].lat").value(35.14));
+    }
+
+    @Test
+    void missingLineIdGives400() throws Exception {
+        mvc.perform(get("/api/bus/locations"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_PARAM"));
+        verify(bus, never()).locations(org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void locationsDbDownGives503() throws Exception {
+        when(bus.locations(2)).thenThrow(new DataAccessResourceFailureException("down"));
+
+        mvc.perform(get("/api/bus/locations").param("lineId", "2"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("DB_UNAVAILABLE"));
     }
