@@ -2,6 +2,7 @@ package com.saferoute.air;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +36,11 @@ public class SidoFinder {
             Map.entry("경상북도", "경북"), Map.entry("경상남도", "경남"),
             Map.entry("제주특별자치도", "제주"));
 
+    /** 광주·전남이 합쳐진 뒤 카카오가 주는 시도 이름. 에어코리아는 아직 광주·전남으로 나눠 부른다고 보고 구·시·군으로 가른다 */
+    static final String MERGED_GWANGJU_JEONNAM = "전남광주통합특별시";
+    /** 옛 광주광역시의 구 */
+    static final Set<String> GWANGJU_GU = Set.of("동구", "서구", "남구", "북구", "광산구");
+
     private final RestClient rest;
     private final String key;
 
@@ -67,12 +73,25 @@ public class SidoFinder {
         } catch (RestClientException e) {
             throw new AirUnavailableException("카카오 행정구역 요청 실패: " + e.getMessage(), e);
         }
-        String region = res == null ? "" : res.path("documents").path(0).path("region_1depth_name").asString("");
+        JsonNode doc = res == null ? null : res.path("documents").path(0);
+        String region = doc == null ? "" : doc.path("region_1depth_name").asString("");
+        if (MERGED_GWANGJU_JEONNAM.equals(region)) {
+            return gwangjuOrJeonnam(doc.path("region_2depth_name").asString(""));
+        }
         String sido = AIRKOREA_SIDO.get(region);
         if (sido == null) {
             throw new AirUnavailableException("시도를 알 수 없어요: " + region, null);
         }
         return sido;
+    }
+
+    /** 통합시 안에서 옛 광주의 구(예: 동구, 광주 동구)면 광주, 나머지 시·군이면 전남 */
+    static String gwangjuOrJeonnam(String district) {
+        String d = district.trim();
+        if (d.startsWith("광주")) {
+            return "광주";
+        }
+        return GWANGJU_GU.contains(d) ? "광주" : "전남";
     }
 
     private static SimpleClientHttpRequestFactory timeoutFactory() {
