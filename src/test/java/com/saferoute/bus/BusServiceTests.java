@@ -25,9 +25,9 @@ class BusServiceTests {
     private static final double LON = 126.9336;
     private static final BusStop A = new BusStop(1230, "조선대", "남광주", 35.1405, 126.9330, 60);
     private static final BusStop B = new BusStop(1231, "조선대", "산수오거리", 35.1406, 126.9331, 70);
-    private static final BusArrival LATE = new BusArrival("01", 14, 10, false, "무등산국립공원", "전대동창회관");
-    private static final BusArrival SOON = new BusArrival("15", 3, 1, true, "광주역", "조선대");
-    private static final BusArrival UNKNOWN = new BusArrival("07", null, null, false, "상무지구", "");
+    private static final BusArrival LATE = new BusArrival(2, "01", 14, 10, false, "무등산국립공원", "전대동창회관");
+    private static final BusArrival SOON = new BusArrival(15, "15", 3, 1, true, "광주역", "조선대");
+    private static final BusArrival UNKNOWN = new BusArrival(7, "07", null, null, false, "상무지구", "");
 
     private final BusStopRepository repo = mock(BusStopRepository.class);
     private final GjBisClient bis = mock(GjBisClient.class);
@@ -119,6 +119,50 @@ class BusServiceTests {
         BusNearbyResponse second = service.nearby(LAT, LON);
 
         assertThat(second.stops().get(0).available()).isTrue();
+    }
+
+    // ---- 버스 위치 (locations) ----
+
+    private static final GjBisClient.BusOnLine FAR = new GjBisClient.BusOnLine("775293", 1205, true, 30);
+    private static final GjBisClient.BusOnLine NEAR = new GjBisClient.BusOnLine("775240", 852, false, 17);
+    private static final GjBisClient.BusOnLine NOT_IN_TABLE = new GjBisClient.BusOnLine("775299", 99999, false, 40);
+
+    @Test
+    void locationsGetStopCoordinatesInLineOrder() {
+        when(bis.locations(2)).thenReturn(List.of(FAR, NOT_IN_TABLE, NEAR));
+        when(repo.byIds(org.mockito.ArgumentMatchers.anyCollection())).thenReturn(java.util.Map.of(
+                852, new BusStop(852, "전대동창회관", "전남대", 35.17, 126.91, 0),
+                1205, new BusStop(1205, "조선대", "남광주", 35.14, 126.93, 0)));
+
+        BusLocationResponse r = service.locations(2);
+
+        assertThat(r.available()).isTrue();
+        assertThat(r.buses()).containsExactly(
+                new BusLocation("775240", false, 852, "전대동창회관", 35.17, 126.91, 17),
+                new BusLocation("775293", true, 1205, "조선대", 35.14, 126.93, 30),
+                new BusLocation("775299", false, 99999, null, null, null, 40));
+    }
+
+    @Test
+    void locationFailureIsUnavailableAndNotKept() {
+        when(bis.locations(2)).thenThrow(new BusUnavailableException("고장", null)).thenReturn(List.of());
+
+        assertThat(service.locations(2).available()).isFalse();
+        assertThat(service.locations(2).available()).isTrue();
+    }
+
+    @Test
+    void locationsKept15Seconds() {
+        when(bis.locations(2)).thenReturn(List.of());
+
+        service.locations(2);
+        clock.move(Duration.ofSeconds(10));
+        service.locations(2);
+        verify(bis, times(1)).locations(2);
+
+        clock.move(Duration.ofSeconds(6));
+        service.locations(2);
+        verify(bis, times(2)).locations(2);
     }
 
     /** 시간을 마음대로 옮길 수 있는 시계 */

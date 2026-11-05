@@ -4,9 +4,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -34,6 +36,8 @@ public class BusService {
     static final int MAX_STOPS = 5;
     static final Duration WAIT = Duration.ofSeconds(3);
     static final Duration KEEP = Duration.ofSeconds(30);
+    /** 버스 위치는 15초 기억 (정류장 하나 지나는 데 보통 1분 안팎이라 짧게) */
+    static final Duration KEEP_LOCATION = Duration.ofSeconds(15);
 
     private static final Logger log = LoggerFactory.getLogger(BusService.class);
     private static final Comparator<BusArrival> SOONEST = Comparator.comparing(BusArrival::remainMin,
@@ -44,6 +48,7 @@ public class BusService {
     private final Clock clock;
     private final ExecutorService pool;
     private final Map<Integer, Saved> saved = new ConcurrentHashMap<>();
+    private final Map<Integer, SavedLine> savedLines = new ConcurrentHashMap<>();
 
     @Autowired
     public BusService(BusStopRepository stops, GjBisClient bis, Clock clock) {
@@ -104,6 +109,43 @@ public class BusService {
     private static StopArrivals withArrivals(BusStop s, boolean available, List<BusArrival> arrivals) {
         return new StopArrivals(s.id(), s.name(), s.nextStop(), s.lat(), s.lon(), s.distanceM(), available,
                 arrivals);
+    }
+
+    /**
+     * 한 노선 위 버스들이 지금 있는 정류장과 그 좌표. 광주버스정보가 실패하면 available=false + 빈 목록.
+     *
+     * @throws org.springframework.dao.DataAccessException DB가 고장 났을 때 (창구가 503으로 바꾼다)
+     */
+    public BusLocationResponse locations(int lineId) {
+        SavedLine kept = savedLines.get(lineId);
+        if (kept != null && clock.instant().isBefore(kept.at().plus(KEEP_LOCATION))) {
+            return kept.value();
+        }
+        List<GjBisClient.BusOnLine> buses;
+        try {
+            buses = bis.locations(lineId);
+        } catch (BusUnavailableException e) {
+            log.warn("버스 위치를 못 받았어요 (노선 {}): {}", lineId, e.getMessage());
+            return new BusLocationResponse(lineId, false, List.of());
+        }
+        Set<Integer> stopIds = new LinkedHashSet<>();
+        for (GjBisClient.BusOnLine b : buses) {
+            stopIds.add(b.stopId());
+        }
+        Map<Integer, BusStop> where = stops.byIds(stopIds);
+        List<BusLocation> out = new ArrayList<>();
+        for (GjBisClient.BusOnLine b : buses) {
+            BusStop s = where.get(b.stopId());
+            out.add(new BusLocation(b.busId(), b.lowFloor(), b.stopId(), s == null ? null : s.name(),
+                    s == null ? null : s.lat(), s == null ? null : s.lon(), b.seq()));
+        }
+        out.sort(Comparator.comparingInt(BusLocation::seq));
+        BusLocationResponse res = new BusLocationResponse(lineId, true, List.copyOf(out));
+        savedLines.put(lineId, new SavedLine(res, clock.instant()));
+        return res;
+    }
+
+    private record SavedLine(BusLocationResponse value, Instant at) {
     }
 
     private record Saved(List<BusArrival> arrivals, Instant at) {
