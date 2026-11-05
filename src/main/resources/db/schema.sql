@@ -529,12 +529,14 @@ CREATE TABLE IF NOT EXISTS region_density (
 
 -- ---------------------------------------------------------------- 정제 시설 (지도 표시용, scripts/build_poi.py)
 
--- 지도 표시·경로 응답용 정제 시설 표 (광주). 원본 시설 표 14개를 한 모양으로 모으고 중복을 합친다.
+-- 지도 표시·경로 응답용 정제 시설 표 (광주). 원본 시설 표 15개를 한 모양으로 모으고 중복을 합친다.
 -- 원본 표는 그대로 두고, scripts/build_poi.py가 이 표를 지우고 다시 만든다.
 -- kind: light 등, cctv, police 경찰, bell 비상벨, store 편의점, guard_house 아동안전지킴이집,
 --       shelter 무더위·한파쉼터, toilet 공중화장실, footbridge 육교, crosswalk 횡단보도(표준데이터 + OSM), school_zone 어린이보호구역,
---       stairs 계단(OSM, 도로망 범위), subway 지하철역(엘리베이터·장애인 화장실·전동휠체어 충전기, subway_station)
---   경로 엔진은 정해 둔 종류만 읽는다(RouteService.POI_KINDS). subway는 지도 표시용이라 경로 계산에 쓰지 않는다
+--       stairs 계단(OSM, 도로망 범위), subway 지하철역(엘리베이터·장애인 화장실·전동휠체어 충전기, subway_station. cnt = 엘리베이터 있는 출구 수, wheelchair는 출구 기준),
+--       subway_entrance 지하철 출입구(subway_entrance. wheelchair = 그 출구 쪽 지상 엘리베이터, NULL은 확인 안 됨)
+--   경로 엔진은 정해 둔 종류만 읽는다(RouteService.POI_KINDS). subway·subway_entrance는 지도 표시용이라 경로 계산에 쓰지 않는다
+--   한 종류만 다시 넣기: python3 scripts/build_poi.py --only subway,subway_entrance (다른 시설 id는 그대로)
 -- modes: 지도에 먼저 보일 모드 (FR-48, 결정 35). common = 모든 모드
 -- 지금 이용할 수 있는지 (서버가 경로 위 화장실·쉼터에 붙임):
 --   season_from이 있고 오늘(MM-DD)이 운영 기간 밖이면 '운영 기간 아님' (해를 넘기는 기간은 from > to)
@@ -747,6 +749,8 @@ CREATE TABLE IF NOT EXISTS subway_entrance (
     exit_no           VARCHAR(10) NULL COMMENT 'OSM ref (출구 번호)',
     name              VARCHAR(100) NULL,
     wheelchair        VARCHAR(10) NULL COMMENT 'OSM wheelchair 표시 (대부분 비어 있음)',
+    elevator          TINYINT     NULL COMMENT '이 출구 쪽 지상 엘리베이터: 1 있음, 0 없음, NULL 모름 (022, 손으로 확인)',
+    elevator_source   VARCHAR(300) NULL COMMENT 'elevator 값의 근거',
     lon               DOUBLE      NOT NULL,
     lat               DOUBLE      NOT NULL,
     geom              POINT       NOT NULL SRID 0,
