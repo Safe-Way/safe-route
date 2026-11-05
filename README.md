@@ -1,6 +1,6 @@
 # 세잎지도 (safe-route)
 
-[![CI](https://github.com/Safe-Way/safe-route/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/Safe-Way/safe-route/actions/workflows/ci.yml)
+[![CI/CD](https://github.com/Safe-Way/safe-route/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/Safe-Way/safe-route/actions/workflows/ci.yml)
 
 밤길·혼자 걷는 길에서 **가장 짧은 길 대신 더 안전한 길**을 알려 주는 도보 길찾기 서비스입니다.
 가로등·보안등, CCTV, 비상벨, 편의점, 아동안전지킴이집 같은 공공데이터로 길마다 점수를 매기고,
@@ -143,7 +143,37 @@ CSV로만 받는 파일은 직접 내려받아 넣습니다.
 
 같은 종류를 다시 넣으면 지우고 새로 넣으므로 여러 번 실행해도 됩니다.
 
-### 5. 테스트
+### 5. 한 번에 갱신하기 (FR-08)
+
+3·4번과 좌표 고치기, 대중교통, 길 점수 계산까지 15단계를 정해진 순서로 한 번에 돌립니다(광주).
+
+```bash
+python3 scripts/refresh_data.py --dry-run       # 할 일 목록만 보기
+python3 scripts/refresh_data.py                 # 전부: 받기 → 넣기 → 계산
+python3 scripts/refresh_data.py --only compute  # 길 점수만 다시 계산
+python3 scripts/refresh_data.py --from load     # 받기는 건너뛰고 넣기부터
+python3 scripts/refresh_data.py --fresh crosswalk  # 이 데이터는 처음부터 다시 받기
+python3 scripts/refresh_data.py --roads         # OSM 도로망도 다시 받기 (수십 분)
+```
+
+명령 하나로 돌리면 좋은 점
+
+- **순서를 외우지 않아도 됩니다.** 데이터 스크립트들은 앞뒤가 얽혀 있습니다.
+  - 대중교통을 다시 넣으면 손으로 확인한 출구 엘리베이터 값이 비어서, 바로 뒤에 `subway_entrance_elevator.sql`을 넣어야 합니다.
+  - 정제 시설(`poi`)을 다시 만들면 id가 바뀌어서, 길별 주변 시설(`edge_poi`)을 그 뒤에 다시 만들어야 합니다.
+  - 하나라도 빠뜨리면 지도와 경로에 틀린 값이 나옵니다. 이 명령이 그 순서를 지킵니다.
+- **누가 돌려도 결과가 같습니다.** A파트가 없어도 팀원 누구나 시연 전에 최신 데이터로 맞출 수 있습니다.
+- **끝나면 스스로 점검합니다.**
+  - 길마다 원값이 있는지, 없는 길·시설을 가리키는 줄이 없는지, 확인 안 된 지하철 출구가 없는지, 같은 원본이 두 번 들어갔는지 봅니다.
+  - 주요 표 22개의 줄 수를 지난번과 비교합니다. 줄 수가 같으면 중복 없이 같은 결과이고, 달라졌으면 새 원본이 들어왔거나 무언가 빠진 것입니다.
+- **실패하면 멈추고 이어서 돌립니다.** 실패한 단계의 기록이 `data/raw/refresh_logs/<시각>/`에 남습니다. 고친 뒤 `--from <단계>`로 이어 돌립니다.
+- **두 사람이 동시에 돌리지 못합니다.** 돌고 있으면 `data/raw/refresh.lock`이 있어서, 두 번째 실행은 바로 멈춥니다.
+
+서버는 길찾기 요청마다 DB를 읽으므로, 갱신이 끝나면 서버를 다시 띄우지 않아도 반영됩니다.
+도는 동안에는 경로가 "확인 안 됨"으로 나올 수 있으니 시연·테스트가 없을 때 돌립니다.
+직접 받는 CSV(위 3번 목록, 공중화장실 CSV, `data/raw/regional/` 광주 CSV)는 새 파일로 바꿔 둔 뒤 돌립니다.
+
+### 6. 테스트
 
 ```bash
 ./mvnw test

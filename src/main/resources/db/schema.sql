@@ -529,12 +529,14 @@ CREATE TABLE IF NOT EXISTS region_density (
 
 -- ---------------------------------------------------------------- 정제 시설 (지도 표시용, scripts/build_poi.py)
 
--- 지도 표시·경로 응답용 정제 시설 표 (광주). 원본 시설 표 14개를 한 모양으로 모으고 중복을 합친다.
+-- 지도 표시·경로 응답용 정제 시설 표 (광주). 원본 시설 표 15개를 한 모양으로 모으고 중복을 합친다.
 -- 원본 표는 그대로 두고, scripts/build_poi.py가 이 표를 지우고 다시 만든다.
 -- kind: light 등, cctv, police 경찰, bell 비상벨, store 편의점, guard_house 아동안전지킴이집,
 --       shelter 무더위·한파쉼터, toilet 공중화장실, footbridge 육교, crosswalk 횡단보도(표준데이터 + OSM), school_zone 어린이보호구역,
---       stairs 계단(OSM, 도로망 범위), subway 지하철역(엘리베이터·장애인 화장실·전동휠체어 충전기, subway_station)
---   경로 엔진은 정해 둔 종류만 읽는다(RouteService.POI_KINDS). subway는 지도 표시용이라 경로 계산에 쓰지 않는다
+--       stairs 계단(OSM, 도로망 범위), subway 지하철역(엘리베이터·장애인 화장실·전동휠체어 충전기, subway_station. cnt = 엘리베이터 있는 출구 수, wheelchair는 출구 기준),
+--       subway_entrance 지하철 출입구(subway_entrance. wheelchair = 그 출구 쪽 지상 엘리베이터, NULL은 확인 안 됨)
+--   경로 엔진은 정해 둔 종류만 읽는다(RouteService.POI_KINDS). subway·subway_entrance는 지도 표시용이라 경로 계산에 쓰지 않는다
+--   한 종류만 다시 넣기: python3 scripts/build_poi.py --only subway,subway_entrance (다른 시설 id는 그대로)
 -- modes: 지도에 먼저 보일 모드 (FR-48, 결정 35). common = 모든 모드
 -- 지금 이용할 수 있는지 (서버가 경로 위 화장실·쉼터에 붙임):
 --   season_from이 있고 오늘(MM-DD)이 운영 기간 밖이면 '운영 기간 아님' (해를 넘기는 기간은 from > to)
@@ -747,6 +749,9 @@ CREATE TABLE IF NOT EXISTS subway_entrance (
     exit_no           VARCHAR(10) NULL COMMENT 'OSM ref (출구 번호)',
     name              VARCHAR(100) NULL,
     wheelchair        VARCHAR(10) NULL COMMENT 'OSM wheelchair 표시 (대부분 비어 있음)',
+    elevator          TINYINT     NULL COMMENT '이 출구 쪽 지상 엘리베이터: 1 있음, 0 없음, NULL 모름 (022, 손으로 확인)',
+    elevator_source   VARCHAR(300) NULL COMMENT 'elevator 값의 근거',
+    note              VARCHAR(200) NULL COMMENT '설명에 덧붙일 출구 안내 (024, 예: 휠체어리프트 있음). 엘리베이터 판단에는 쓰지 않음',
     lon               DOUBLE      NOT NULL,
     lat               DOUBLE      NOT NULL,
     geom              POINT       NOT NULL SRID 0,
@@ -858,6 +863,39 @@ CREATE TABLE IF NOT EXISTS lowfloor_bus (
     PRIMARY KEY (vehicle_no),
     KEY idx_lowfloor_bus_route (route_name)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '광주 저상버스';
+
+-- ---------------------------------------------------------------- 불편 접수 (023, FR-49)
+
+-- 노인·장애인 모드에서 올린 불편한 곳(급경사·공사·턱 등)과 사진. 로그인이 없어 누가 올렸는지는 적지 않는다.
+-- 처음에는 지도에 "신고된 곳"으로만 보이고 경로 계산에는 쓰지 않는다. 사진은 서버 재배포에도 남게 DB에 둔다.
+CREATE TABLE IF NOT EXISTS road_report (
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    report_type VARCHAR(20)  NOT NULL COMMENT '유형: steep 급경사, construction 공사, curb 턱, broken 보도 파손, obstacle 막는 물건, other 기타',
+    mode        VARCHAR(20)  NULL     COMMENT '올린 모드 (senior, wheelchair)',
+    memo        VARCHAR(300) NULL     COMMENT '한 줄 설명 (넣지 않아도 됨)',
+    lon         DOUBLE       NOT NULL,
+    lat         DOUBLE       NOT NULL,
+    geom        POINT        NOT NULL SRID 0 COMMENT 'POINT(경도, 위도), 다른 표와 같음',
+    accuracy_m  SMALLINT     NULL     COMMENT '올릴 때 GPS 정확도 (m)',
+    edge_id     BIGINT       NULL     COMMENT '가장 가까운 길 road_edge.id (나중에 경로에 반영할 때 씀, 비어도 됨)',
+    status      VARCHAR(10)  NOT NULL DEFAULT 'open' COMMENT 'open 지도에 보임, confirmed 확인됨, hidden 숨김(잘못 올림·얼굴·차량 번호)',
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '올린 시각 (학교 DB는 한국 시각)',
+    PRIMARY KEY (id),
+    KEY idx_road_report_status (status),
+    SPATIAL INDEX sx_road_report_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '불편 접수 (FR-49)';
+
+-- 신고 사진. 신고를 지우면 사진도 같이 지워진다
+CREATE TABLE IF NOT EXISTS road_report_photo (
+    report_id    BIGINT      NOT NULL,
+    seq          TINYINT     NOT NULL DEFAULT 1 COMMENT '사진 순서 (1부터)',
+    content_type VARCHAR(30) NOT NULL COMMENT 'image/jpeg 등',
+    size_bytes   INT         NOT NULL,
+    data         MEDIUMBLOB  NOT NULL COMMENT '사진 원본 (칸은 16MB까지, 앱에서 줄여 1장 1MB 안팎을 권장)',
+    created_at   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (report_id, seq),
+    CONSTRAINT fk_road_report_photo FOREIGN KEY (report_id) REFERENCES road_report (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '불편 접수 사진 (FR-49)';
 
 -- ---------------------------------------------------------------- 전체 보기
 

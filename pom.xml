@@ -41,6 +41,12 @@
             <version>1.5.2</version>
         </dependency>
 
+        <!-- 서버 상태 확인 주소(/actuator/health). 배포 스크립트가 새 서버가 떴는지 이 주소로 본다 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>

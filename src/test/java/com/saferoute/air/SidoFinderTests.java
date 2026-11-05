@@ -51,6 +51,21 @@ class SidoFinderTests {
     }
 
     @Test
+    void mergedGwangjuJeonnamSplitsByDistrict() {
+        kakao.expect(requestTo(Matchers.startsWith("https://dapi.kakao.com")))
+                .andRespond(withSuccess("""
+                        { "documents": [ { "region_type": "B", "region_1depth_name": "전남광주통합특별시",
+                                           "region_2depth_name": "동구" } ] }
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThat(finder.sidoAt(35.1401, 126.9336)).isEqualTo("광주");
+        assertThat(SidoFinder.gwangjuOrJeonnam("광산구")).isEqualTo("광주");
+        assertThat(SidoFinder.gwangjuOrJeonnam("광주 북구")).isEqualTo("광주");
+        assertThat(SidoFinder.gwangjuOrJeonnam("목포시")).isEqualTo("전남");
+        assertThat(SidoFinder.gwangjuOrJeonnam("나주시")).isEqualTo("전남");
+    }
+
+    @Test
     void unknownPlaceFails() {
         kakao.expect(requestTo(Matchers.startsWith("https://dapi.kakao.com")))
                 .andRespond(withSuccess("{ \"documents\": [] }", MediaType.APPLICATION_JSON));
