@@ -58,6 +58,7 @@ STEPS = [
     ("load", "cctv_purpose", [PY, "scripts/classify_cctv.py"], "CCTV 목적 분류"),
     ("load", "transit", [PY, "scripts/load_transit.py"], "대중교통 표"),
     ("load", "subway_elevator", None, "출구 엘리베이터 (손으로 확인한 값, scripts/subway_entrance_elevator.sql)"),
+    ("load", "events", [PY, "scripts/load_events.py"], "행사·돌발상황 (문화축제 표준데이터, 국가교통정보센터)"),
     ("load", "roads", [PY, "scripts/load_road_network.py", "--area", "KR-29", "gwangju"],
      "OSM 도로망 (--roads 줄 때만)"),
     ("compute", "poi", [PY, "scripts/build_poi.py"], "정제 시설 (지도 표시용)"),

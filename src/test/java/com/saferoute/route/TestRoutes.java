@@ -20,6 +20,7 @@ import org.springframework.core.io.ClassPathResource;
 
 import com.saferoute.route.data.InMemoryRoadGraphSource;
 import com.saferoute.route.data.PoiSource;
+import com.saferoute.route.engine.event.RoadEvent;
 import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.score.RouteScorer;
@@ -127,6 +128,32 @@ final class TestRoutes {
     /** 2026-10-30(금) hour시 서울 */
     static ZonedDateTime at(int hour) {
         return ZonedDateTime.of(2026, 10, 30, hour, 0, 0, 0, ZoneId.of("Asia/Seoul"));
+    }
+
+    /** 고정 목록 poi와 진행 중인 행사·돌발상황 */
+    static PoiSource pois(List<Poi> list, List<RoadEvent> events) {
+        PoiSource base = pois(list);
+        return new PoiSource() {
+            @Override
+            public List<Poi> within(BBox box, Set<String> kinds) {
+                return base.within(box, kinds);
+            }
+
+            @Override
+            public Set<LocalDate> holidays() {
+                return base.holidays();
+            }
+
+            @Override
+            public LocalDate dataDate() {
+                return base.dataDate();
+            }
+
+            @Override
+            public List<RoadEvent> events(BBox box, java.time.LocalDateTime at) {
+                return events.stream().filter(e -> box.contains(e.lon(), e.lat())).toList();
+            }
+        };
     }
 
     /** 고정 목록 poi (공휴일 없음) */
