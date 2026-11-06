@@ -6,9 +6,13 @@
   서버가 응답에 tools(부른 도구 이름 목록)를 넣어 주면 expect_tools 순서도 본다(없으면 건너뜀).
 - "context": "N번 바로 뒤"인 질문은 같은 대화로 이어 보낸다(서버가 conversationId를 돌려주면 그대로 씀).
 - 날씨·시각(weather, time)은 서버가 시험용으로 받아 주면 쓴다(body의 test 칸). 안 받으면 지금 날씨로 답한다.
+- 앱처럼 휴대폰의 자주 가는 곳(favorites)을 같이 보낸다. 집 좌표는 서버에 없고 휴대폰에만 있어서, 안 보내면 "집에 가자"를 못 한다.
+  A의 집은 seed_demo.py의 HOME_A와 같은 꾸민 값, B의 집도 꾸민 값(충장동 둘레)이다.
+- 질문에 at([위도, 경도])이 있으면 그 질문만 그 자리에서 보낸다(예: 문화전당에서 집으로 갈 때).
+- writes가 true인 질문(설정 바꾸기 확인, 신고 확인)은 학교 DB에 진짜로 저장되므로 --write를 줄 때만 보낸다.
 - 결과는 표로 찍고 data/raw/eval/assistant_<날짜시각>.json에 남긴다. 실패한 것만 다시 보려면 --only 3,7
 
-실행: python3 scripts/eval_assistant.py [--base https://safe-route.java21.net] [--only 1,2,3]
+실행: python3 scripts/eval_assistant.py [--base https://safe-route.java21.net] [--only 1,2,3] [--write]
 비서 창구(POST /api/assistant)가 아직 없으면 404로 알려 주고 멈춘다.
 """
 import json
@@ -25,6 +29,10 @@ OUT_DIR = os.path.join(ROOT, "data", "raw", "eval")
 GUESTS = {"A": "00000000-0000-4000-8000-00000000de01", "B": "00000000-0000-4000-8000-00000000de02",
           "C": "00000000-0000-4000-8000-00000000de03"}
 WHERE = {"A": (35.1480, 126.9260), "B": (35.1460, 126.9210), "C": (35.1480, 126.9260), "new": (35.1466, 126.9204)}
+# 휴대폰에 저장한 자주 가는 곳 (꾸민 값). A의 집 = seed_demo.py HOME_A
+FAVORITES = {"A": [{"name": "집", "lat": 35.148, "lon": 126.926}],
+             "B": [{"name": "집", "lat": 35.150, "lon": 126.915}],
+             "C": [{"name": "집", "lat": 35.148, "lon": 126.926}]}
 
 
 def arg(name, default=None):
@@ -58,16 +66,20 @@ def check(q, status, ans):
 def main():
     base = arg("--base", "https://safe-route.java21.net")
     only = {int(x) for x in arg("--only", "").split(",") if x}
+    write = "--write" in sys.argv
     qs = json.load(open(QUESTIONS, encoding="utf-8"))["questions"]
     results, convo, new_guest = [], {}, str(uuid.uuid4())
     for q in qs:
         if only and q["id"] not in only:
             continue
+        if q.get("writes") and not write:
+            print(f"{q['id']:>2} 건너뜀 [{q['guest']}] {q['text'][:28]:<28} → 학교 DB에 저장돼서 --write를 줄 때만")
+            continue
         who = q["guest"]
         guest = GUESTS.get(who) or new_guest
-        lat, lon = WHERE.get(who, WHERE["new"])
+        lat, lon = q.get("at") or WHERE.get(who, WHERE["new"])
         body = {"guestId": guest, "text": q["text"], "lat": lat, "lon": lon,
-                "now": datetime.now().isoformat(timespec="minutes"),
+                "now": datetime.now().isoformat(timespec="minutes"), "favorites": FAVORITES.get(who, []),
                 "test": {"weather": q.get("weather"), "time": q.get("time"), "ai": q.get("ai")}}
         if q.get("context") and who in convo:
             body["conversationId"] = convo[who]
