@@ -188,15 +188,17 @@ class RouteServiceTests {
     }
 
     @Test
-    void dataGapIsReportedNotCalledSafe() {
+    void dataGapIsNotShown() {
+        // 데이터 부족 길만 지나도 알림을 띄우지 않는다 (2026-11-06). 기준일만 준다
         EdgePenalty gap = new EdgePenalty(Map.of(), true);
         RoadGraph graph = new RoadGraph(Map.of(S, S_P, T, T_P), List.of(edge(1, S, T, S_P, T_P, gap)));
         RouteService s = TestRoutes.service(graph, facilities(List.of()), 21);
 
         RouteResult r = s.route(request("auto"));
 
-        assertThat(r.dataQuality().status()).isEqualTo("NO_DATA");
-        assertThat(r.dataQuality().message()).isEqualTo("이 지역은 안전 데이터가 부족합니다");
+        assertThat(r.dataQuality().status()).isEqualTo("OK");
+        assertThat(r.dataQuality().message()).isNull();
+        assertThat(r.dataQuality().dataDate()).isEqualTo("2026-10-28");
     }
 
     @Test
@@ -269,8 +271,8 @@ class RouteServiceTests {
         // 북쪽 길에만 등이 있어 밤에는 북쪽(데이터 부족)으로 간다
         RouteResult r = TestRoutes.service(g, facilities(brightSideFacilities()), 21).route(request("auto"));
 
-        assertThat(r.dataQuality().status()).isEqualTo("PARTIAL");
-        assertThat(r.dataQuality().message()).isNotNull();
+        assertThat(r.dataQuality().status()).isEqualTo("OK");
+        assertThat(r.dataQuality().message()).isNull();
     }
 
     @Test

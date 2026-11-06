@@ -37,7 +37,6 @@ import com.saferoute.route.engine.search.RouteFinder;
 @Component
 public class RouteResultAssembler {
 
-    private static final String NO_DATA_MESSAGE = "이 지역은 안전 데이터가 부족합니다";
     private static final DateTimeFormatter ENDS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final FacilityCounter counter;
@@ -119,7 +118,7 @@ public class RouteResultAssembler {
                 routes,
                 RouteResult.Explanation.of(summary, notes, extraM, extraMin, FacilityGroup.keyed(diff)),
                 marks(same ? null : shortCounts, safeCounts, same ? null : shortLine, safeLine),
-                dataQuality(same ? List.of(found.safe()) : List.of(found.shortest(), found.safe()), nearby));
+                dataQuality(nearby));
     }
 
     private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts,
@@ -273,20 +272,18 @@ public class RouteResultAssembler {
         };
     }
 
-    /** 데이터가 빈 지역을 지나는 길이 비율로 상태를 정한다. 빈 곳을 안전하다고 하지 않는다 (NFR-04) */
-    private RouteResult.DataQuality dataQuality(List<RoadPath> paths, Nearby nearby) {
-        Set<RoadEdge> edges = new HashSet<>();
-        paths.forEach(p -> edges.addAll(p.edges()));
-        double total = 0;
-        double gap = 0;
-        for (RoadEdge e : edges) {
-            total += e.lengthM();
-            if (e.penalty().dataGap()) {
-                gap += e.lengthM();
-            }
-        }
-        String status = gap == 0 ? "OK" : gap >= total ? "NO_DATA" : "PARTIAL";
-        return new RouteResult.DataQuality(status, gap == 0 ? null : NO_DATA_MESSAGE,
+    /**
+     * 데이터 부족 알림은 띄우지 않는다 (2026-11-06). 늘 OK, message null, 시설 데이터 기준일만 준다.
+     * <ul>
+     *   <li>안전 경로는 같은 데이터로 최단과 비교한 상대적인 길이지, "이 길은 안전하다"는 절대 판정이 아니다</li>
+     *   <li>데이터가 빈 길(광주는 대학 캠퍼스 안 조명·CCTV)은 시설이 없는 길로 계산돼 오히려 피하는 쪽이라,
+     *       빈 곳을 안전하다고 하는 일이 없다 (NFR-04)</li>
+     *   <li>캠퍼스를 조금만 지나도 "이 지역은 안전 데이터가 부족합니다"가 떠서 지역 전체가 위험해 보였다</li>
+     * </ul>
+     * 앱이 깨지지 않게 칸은 남긴다.
+     */
+    private static RouteResult.DataQuality dataQuality(Nearby nearby) {
+        return new RouteResult.DataQuality("OK", null,
                 nearby.dataDate() == null ? null : nearby.dataDate().toString());
     }
 }
