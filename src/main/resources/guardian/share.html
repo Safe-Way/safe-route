@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>세잎지도 · 위치 보기</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { --bg:#ffffff; --fg:#1d1d1f; --sub:#5f6368; --card:#f4f6f5; --ok:#1e8e3e; --warn:#c5221f; --accent:#2e7d5b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141414; --fg:#f1f1f1; --sub:#a8a8a8; --card:#222; --ok:#5bd17d; --warn:#ff7b72; --accent:#5ec29a; } }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header { padding: 16px 16px 12px; }
+  h1 { margin: 0; font-size: 22px; line-height: 1.35; }
+  #sub { margin-top: 6px; font-size: 17px; color: var(--sub); }
+  #map { flex: 1; min-height: 260px; }
+  footer { padding: 12px 16px 18px; background: var(--card); font-size: 17px; line-height: 1.5; }
+  .big { font-size: 20px; font-weight: 700; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); }
+  #note { font-size: 14px; color: var(--sub); margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">위치를 불러오고 있어요</h1>
+  <div id="sub"></div>
+</header>
+<div id="map"></div>
+<footer>
+  <div id="status" class="big"></div>
+  <div id="detail"></div>
+  <div id="note">10초마다 새로 고쳐져요. 도착하면 위치는 바로 지워지고, 지나온 길은 남지 않아요.</div>
+</footer>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  var token = location.pathname.split('/').filter(Boolean).pop() || '';
+  var api = '/api/guardian/shares/' + encodeURIComponent(token);
+  var $ = function (id) { return document.getElementById(id); };
+  var map = null, me = null, dest = null, first = true, timer = null;
+
+  function setup(v) {
+    if (map || typeof L === 'undefined') return;
+    var start = v.lat != null ? [v.lat, v.lon] : (v.destLat != null ? [v.destLat, v.destLon] : [35.1468, 126.9198]);
+    map = L.map('map', { zoomControl: true }).setView(start, 16);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+    if (v.destLat != null) {
+      dest = L.marker([v.destLat, v.destLon], { title: '가는 곳' }).addTo(map);
+    }
+  }
+
+  function draw(v) {
+    var who = v.walkerName || '걷는 사람';
+    $('title').textContent = who + (v.destName ? '님이 ' + v.destName + '(으)로 가고 있어요' : '님의 지금 위치');
+    $('sub').textContent = v.startedAt ? '출발 ' + v.startedAt.substring(11, 16) : '';
+    setup(v);
+    var st = $('status'), dt = $('detail');
+    st.className = 'big';
+    if (v.status === 'walking') {
+      var bits = [];
+      if (v.remainM != null) bits.push('남은 거리 ' + (v.remainM >= 1000 ? (v.remainM / 1000).toFixed(1) + 'km' : v.remainM + 'm'));
+      if (v.etaMin != null) bits.push('약 ' + v.etaMin + '분 뒤 도착');
+      st.textContent = bits.length ? bits.join(' · ') : '가는 중이에요';
+      var info = [];
+      if (v.secondsAgo != null) info.push(v.secondsAgo < 60 ? '방금 전 위치' : Math.floor(v.secondsAgo / 60) + '분 전 위치');
+      if (v.offRoute) info.push('정한 길에서 조금 벗어났어요');
+      dt.textContent = info.join(' · ');
+      dt.className = v.offRoute ? 'warn' : '';
+      if (v.lat != null && map) {
+        var p = [v.lat, v.lon];
+        if (!me) { me = L.circleMarker(p, { radius: 10, color: '#fff', weight: 3, fillColor: '#1a73e8', fillOpacity: 1 }).addTo(map); }
+        else { me.setLatLng(p); }
+        if (first) { map.setView(p, 16); first = false; }
+      }
+    } else {
+      if (me && map) { map.removeLayer(me); me = null; }
+      var words = { arrived: '도착했어요', stopped: '위치 보내기를 그만뒀어요', expired: '위치 공유가 끝났어요', sos: 'SOS를 눌렀어요. 전화해 보세요' };
+      st.textContent = words[v.status] || '위치 공유가 끝났어요';
+      st.className = 'big ' + (v.status === 'arrived' ? 'ok' : (v.status === 'sos' ? 'warn' : ''));
+      dt.textContent = v.endedAt ? v.endedAt.substring(11, 16) + '에 끝났어요' : '';
+      dt.className = '';
+      if (timer) { clearInterval(timer); timer = null; }
+    }
+  }
+
+  function load() {
+    fetch(api, { cache: 'no-store' }).then(function (r) {
+      if (r.status === 404) { throw new Error('gone'); }
+      if (!r.ok) { throw new Error('later'); }
+      return r.json();
+    }).then(draw).catch(function (e) {
+      if (e.message === 'gone') {
+        $('title').textContent = '링크가 끝났거나 없어요';
+        $('status').textContent = '';
+        $('detail').textContent = '위치 공유는 도착 10분 뒤 지워져요.';
+        if (timer) { clearInterval(timer); timer = null; }
+      } else {
+        $('detail').textContent = '잠시 연결이 안 돼요. 다시 시도하고 있어요.';
+      }
+    });
+  }
+
+  load();
+  timer = setInterval(load, 10000);
+})();
+</script>
+</body>
+</html>
