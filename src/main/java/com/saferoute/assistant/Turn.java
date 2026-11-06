@@ -14,6 +14,7 @@ import com.saferoute.situation.WeatherDust;
 final class Turn {
 
     static final int MAX_TOOL_CALLS = 4;
+    static final java.util.Set<String> APP_MODES = java.util.Set.of("adult", "child", "senior", "wheelchair");
     private static final Pattern UUID = Pattern.compile(
             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
 
@@ -23,6 +24,8 @@ final class Turn {
     final Double lat;
     final Double lon;
     final LocalDateTime now;
+    /** 앱이 보낸 지금 모드 (모르는 값이면 null). 내 정보가 없을 때만 쓴다 */
+    final String appMode;
     /** 시험 시각을 받았으면 true (그러면 밤도 그 시각으로 정함) */
     final boolean testTime;
     /** 시험 날씨. 없으면 null (진짜 날씨) */
@@ -49,6 +52,8 @@ final class Turn {
         this.text = req.text() == null ? "" : req.text().strip();
         this.guestId = req.guestId() != null && UUID.matcher(req.guestId().strip()).matches()
                 ? req.guestId().strip().toLowerCase() : null;
+        this.appMode = req.mode() != null && APP_MODES.contains(req.mode().strip().toLowerCase())
+                ? req.mode().strip().toLowerCase() : null;
         this.lat = req.lat();
         this.lon = req.lon();
         this.now = now;
@@ -67,10 +72,18 @@ final class Turn {
     }
 
     /** 지금 쓸 모드: 이번 대화에서 말한 것 > 저장된 지금 모드(잠깐 바뀐 모드 포함). 모르면 null */
+    /** 처음 설정 질문을 해야 하나: 내 정보도 없고 앱이 모드도 안 보냈을 때만 */
+    boolean needsSetup() {
+        return (profile == null || !profile.setupDone()) && appMode == null;
+    }
+
     String mode() {
         if (convo.mode() != null) {
             return convo.mode();
         }
-        return profile == null ? null : profile.modeNow();
+        if (profile != null && profile.modeNow() != null) {
+            return profile.modeNow();
+        }
+        return appMode;
     }
 }

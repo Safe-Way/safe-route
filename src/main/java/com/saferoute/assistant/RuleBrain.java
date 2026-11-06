@@ -173,11 +173,11 @@ class RuleBrain {
     /** 오늘 제안 (사용자가 말하지 않고 앱이 먼저 물어봄) */
     Outcome suggest(Turn t) {
         Profile p = tools.getMyInfo(t);
-        if (p == null || !p.setupDone()) {
+        if (t.needsSetup()) {
             return startSetup(t);
         }
         LocalDate today = t.now.toLocalDate();
-        if (p.tempActive() && p.tempUntil() != null && !p.tempUntil().isAfter(today)) {
+        if (p != null && p.tempActive() && p.tempUntil() != null && !p.tempUntil().isAfter(today)) {
             String body = p.tempReason() != null && p.tempReason().contains("다리") ? "다리는" : "몸은";
             t.convo = t.convo.withPending(tools.proposeMyInfo(Map.of("clear_temp", true), "", null));
             return Outcome.ask(body + " 좀 괜찮아지셨어요? 괜찮아지셨으면 내일부터 평소처럼 "
