@@ -237,8 +237,8 @@ public class AssistantTools {
         }
         Facility pick = open != null ? open : unknown;
         if (pick == null) {
-            t.spotMessage = list.isEmpty() ? "1km 안에 " + t.spotKindName + "이(가) 없어요."
-                    : "가까운 " + t.spotKindName + "이(가) 지금은 모두 닫혀 있어요.";
+            t.spotMessage = list.isEmpty() ? "1km 안에 " + Josa.iGa(t.spotKindName) + " 없어요."
+                    : "가까운 " + Josa.iGa(t.spotKindName) + " 지금은 모두 닫혀 있어요.";
             return null;
         }
         t.spot = new AssistantReply.Spot(pick.kind(), pick.name(), pick.lat(), pick.lon(), pick.distanceM(),

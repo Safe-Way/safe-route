@@ -59,7 +59,7 @@ final class Sentences {
         }
         if (walk) {
             for (RouteResult.Event e : best.events()) {
-                sb.append(" 가는 길에 '").append(e.title()).append("' ").append(e.kind()).append("이(가) 있어요.");
+                sb.append(" 가는 길에 '").append(e.title()).append("' ").append(Josa.iGa(e.kind())).append(" 있어요.");
                 sb.append(e.avoid() ? " 피할 길이 없어서 지나가요. 조심하세요." : "");
             }
         }
@@ -124,7 +124,7 @@ final class Sentences {
         if (t.spot == null) {
             return t.spotMessage == null ? "가까운 곳을 찾지 못했어요." : t.spotMessage;
         }
-        StringBuilder sb = new StringBuilder("가장 가까운 ").append(t.spotKindName).append("은(는) ")
+        StringBuilder sb = new StringBuilder("가장 가까운 ").append(Josa.eun(t.spotKindName)).append(" ")
                 .append(t.spot.name());
         if (t.spot.distanceM() != null) {
             sb.append("으로 ").append(t.spot.distanceM()).append("m예요.");

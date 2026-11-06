@@ -396,7 +396,7 @@ class GeminiBrain {
             q.append("지도에 보여 드리").append(remove.isEmpty() ? "릴게요. " : "고 ");
         }
         if (!remove.isEmpty()) {
-            q.append(names(remove)).append("은(는) 지도에서 뺄게요. ");
+            q.append(Josa.eun(names(remove))).append(" 지도에서 뺄게요. ");
         }
         q.append("맞으세요?");
         return tools.proposeLayers(add, remove, until, a.path("reason").asString(null), q.toString());

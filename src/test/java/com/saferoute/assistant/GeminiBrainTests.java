@@ -12,6 +12,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.time.Clock;
@@ -22,6 +23,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
@@ -121,5 +123,36 @@ class GeminiBrainTests {
         AssistantReply r = ask("화장실 어디야");
         assertThat(r.ai()).isFalse();
         assertThat(r.say()).contains("장애인 화장실", "50m");
+    }
+
+    @Test
+    void busyModelAsksBackupModel() {
+        String backup = URL.replace("gemini-test", GeminiClient.BACKUP_MODELS.get(0));
+        server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+                .body("{\"error\":{\"code\":503,\"message\":\"The model is overloaded.\"}}"));
+        server.expect(requestTo(backup)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[
+                  {"functionCall":{"name":"find_nearby","args":{"kind":"toilet"}}}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(backup)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"가장 가까운 장애인 화장실은 50m 앞이에요."}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        AssistantReply r = ask("화장실 급해");
+        assertThat(r.ai()).isTrue();
+        assertThat(r.say()).contains("50m");
+        server.verify();
+    }
+
+    @Test
+    void readsAnswerEvenWhenTypeIsOctetStream() {
+        server.expect(requestTo(URL)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[
+                  {"functionCall":{"name":"find_nearby","args":{"kind":"toilet"}}}]}}]}
+                """, MediaType.APPLICATION_OCTET_STREAM));
+        server.expect(requestTo(URL)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"가장 가까운 장애인 화장실은 50m 앞이에요."}]}}]}
+                """, MediaType.APPLICATION_OCTET_STREAM));
+        AssistantReply r = ask("화장실 급해");
+        assertThat(r.ai()).isTrue();
     }
 }
