@@ -121,6 +121,11 @@ public class AssistantTools {
             log.warn("비서 장소 검색 실패: {}", e.getMessage());
             return new Found("error", List.of());
         }
+        // "충장로", "양림동"처럼 거리·동네 이름이면 가게를 고르게 하지 않고 그 거리로 (점검 5번)
+        Place area = area(q, found);
+        if (area != null) {
+            return decide(t, List.of(area), q);
+        }
         List<com.saferoute.place.Place> ordered = new ArrayList<>(found);
         if (near) {
             ordered.sort(AssistantTools::byDistance); // "가까운 카페", "근처 국밥집" → 가까운 순
@@ -152,6 +157,40 @@ public class AssistantTools {
         }
         t.convo = t.convo.withCandidates(cand).asked("place");
         return new Found("choose", cand);
+    }
+
+    private static final java.util.regex.Pattern AREA = java.util.regex.Pattern.compile(
+            "^[가-힣]{1,8}(대로|로|길|동)(\\d{1,2}가)?$");
+
+    /**
+     * 거리·동네 이름("충장로", "금남로", "양림동", "충장로3가")이면 그 이름이 주소에 들어 있는 검색 결과들의 가운데를
+     * 도착지로 삼는다. 이름이 장소 이름과 똑같은 곳이 있거나(예: "○○길"이라는 가게), 주소에 든 곳이 없으면 null.
+     */
+    static Place area(String q, List<com.saferoute.place.Place> found) {
+        String name = q.replace(" ", "");
+        if (!AREA.matcher(name).matches()) {
+            return null;
+        }
+        String road = name.replaceAll("\\d{1,2}가$", "");
+        List<com.saferoute.place.Place> on = new ArrayList<>();
+        for (com.saferoute.place.Place p : found) {
+            if (p.name().replace(" ", "").equals(name)) {
+                return null;
+            }
+            if (p.address() != null && p.address().replace(" ", "").contains(road)
+                    && inGwangju(new Place(p.name(), null, p.lat(), p.lon()))) {
+                on.add(p);
+            }
+        }
+        if (on.isEmpty()) {
+            return null;
+        }
+        double lat = on.stream().mapToDouble(com.saferoute.place.Place::lat).average().orElseThrow();
+        double lon = on.stream().mapToDouble(com.saferoute.place.Place::lon).average().orElseThrow();
+        String addr = on.get(0).address();
+        int at = addr.indexOf(road.substring(0, Math.min(road.length(), 2)));
+        String where = (at > 0 ? addr.substring(0, at) : "") + name + " 일대";
+        return new Place(name, where.strip(), lat, lon);
     }
 
     /** "가까운", "근처", "주변" 이 들어 있으면 가까운 순으로 보여 준다 */

@@ -92,7 +92,8 @@ public class TripRecommender {
 
         List<Trip> trips = new ArrayList<>();
         boolean night = "on".equals(a.night());
-        boolean personal = false;
+        WalkSpeed speed = speed(a.guestId(), a.mode());
+        boolean personal = speed != null && speed.personal();
         String failText = null;
 
         // 1. 걷는 길 (원일님 엔진): 최단·맞춤 중 피할 것이 적은 길을 걷기 후보로
@@ -100,22 +101,22 @@ public class TripRecommender {
             RouteResult r = routes.route(req);
             night = r.conditions() != null && r.conditions().night();
             Map<String, Integer> near = reportsNear(r.routes());
-            WalkSpeed speed = speed(a.guestId(), a.mode());
-            personal = speed != null && speed.personal();
             RouteResult.Route w = bestWalk(r.routes(), near);
             if (w != null) {
                 int minutes = personal ? (int) Math.ceil(w.distanceM() / speed.speedMMin()) : w.durationMin();
                 Map<String, Integer> diff = r.explanation() == null || r.explanation().diff() == null
                         ? Map.of() : r.explanation().diff();
                 trips.add(new Trip("walk", minutes, w.distanceM(), 0, near.getOrDefault(w.kind(), 0),
-                        "걸어서 " + minutes + "분, " + String.format("%,d", w.distanceM()) + "m", request(req),
-                        w.kind(), diff, w.events() == null ? List.of() : w.events(), false, null));
+                        minutes + "분, " + String.format("%,d", w.distanceM()) + "m",
+                        request(req), w.kind(), diff, w.events() == null ? List.of() : w.events(), false, null,
+                        w.counts() == null ? null : w.counts().get("rest")));
                 // 최단 길이 피할 행사를 지나면 이유에 "○○ 피함"을 쓰려고 후보로만 남긴다 (점수에서 밀림)
                 for (RouteResult.Route o : r.routes()) {
                     if (o != w && o.events() != null && o.events().stream().anyMatch(RouteResult.Event::avoid)) {
                         int m = personal ? (int) Math.ceil(o.distanceM() / speed.speedMMin()) : o.durationMin();
                         trips.add(new Trip("walk", m, o.distanceM(), 0, near.getOrDefault(o.kind(), 0),
-                                "걸어서 " + m + "분, " + String.format("%,d", o.distanceM()) + "m", request(req),
+                                m + "분, " + String.format("%,d", o.distanceM()) + "m",
+                                request(req),
                                 o.kind(), Map.of(), o.events(), false, null));
                     }
                 }
@@ -133,11 +134,14 @@ public class TripRecommender {
             if (t.paths() != null && !t.paths().isEmpty()) {
                 TransitResult.TransitPath p = t.paths().get(0);
                 BusArrival bus = firstBus(p);
-                trips.add(new Trip("transit", p.totalMin(), p.walkM(), p.transfers(), 0,
-                        lines(p) + ", " + p.totalMin() + "분", request(req), null, Map.of(), List.of(),
+                List<TransitResult.Leg> legs = mySpeed(p.legs(), speed);
+                int total = p.totalMin() + legs.stream().mapToInt(TransitResult.Leg::minutes).sum()
+                        - p.legs().stream().mapToInt(TransitResult.Leg::minutes).sum();
+                trips.add(new Trip("transit", total, p.walkM(), p.transfers(), 0,
+                        lines(p) + ", " + total + "분", request(req), null, Map.of(), List.of(),
                         bus != null && bus.lowFloor(),
                         bus == null || bus.remainMin() == null ? null
-                                : bus.lineName().strip() + "번 " + bus.remainMin() + "분 뒤"));
+                                : bus.lineName().strip() + "번 " + bus.remainMin() + "분 뒤", null, legs));
             }
         } catch (TransitException e) {
             log.info("비서 대중교통 후보 없음: {}", e.code());
@@ -181,6 +185,28 @@ public class TripRecommender {
         m.put("night", req.night());
         m.put("mode", req.mode());
         return m;
+    }
+
+    /** 걷는 구간 분을 걸음 속도로 다시 센다 (잰 적이 있으면 내 속도, 없으면 모드 기본 속도. 속도를 못 읽으면 그대로) */
+    static List<TransitResult.Leg> mySpeed(List<TransitResult.Leg> legs, WalkSpeed speed) {
+        if (legs == null) {
+            return List.of();
+        }
+        if (speed == null || speed.speedMMin() <= 0) {
+            return legs;
+        }
+        List<TransitResult.Leg> out = new ArrayList<>();
+        for (TransitResult.Leg l : legs) {
+            if (!"walk".equals(l.type())) {
+                out.add(l);
+                continue;
+            }
+            int m = (int) Math.ceil(l.distanceM() / speed.speedMMin());
+            out.add(new TransitResult.Leg(l.type(), l.distanceM(), m, l.from(), l.to(), l.lines(), l.way(),
+                    l.stationCount(), l.safeWalk(), l.geometry(), l.sidewalks(), l.liveAvailable(), l.buses(),
+                    l.trains()));
+        }
+        return out;
     }
 
     /** "버스 30번 → 지하철 1호선" */

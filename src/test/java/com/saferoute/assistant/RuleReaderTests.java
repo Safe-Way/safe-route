@@ -19,6 +19,8 @@ class RuleReaderTests {
             "학교로 가자, -, 학교",
             "금남로 가는 길, -, 금남로",
             "광주역으로 갈게, -, 광주역",
+            "충장로 쪽으로 가 줘, -, 충장로",
+            "시청 방향으로 가자, -, 시청",
     })
     void readsModeAndDestination(String text, String mode, String dest) {
         assertThat(RuleReader.mode(text)).isEqualTo(mode);

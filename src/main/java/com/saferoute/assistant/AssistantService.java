@@ -128,12 +128,21 @@ public class AssistantService {
             situation = new Situation(t.plan.night(), w.rain(), w.heat(), w.cold(), w.tempC(), w.weatherAvailable(),
                     w.dustBad(), w.dustAvailable(), List.copyOf(events));
         }
-        Conversation next = t.convo.withTurn("user", t.text).withTurn("model", o.say());
+        String mode = t.mode();
+        String say = Sentences.polish(o.say(), mode);
+        String ask = Sentences.polish(o.ask(), mode);
+        if (pick != null) {
+            pick = new Pick(pick.type(), pick.request(), Sentences.polish(pick.summary(), mode), pick.minutes(),
+                    pick.route());
+        }
+        others = others.stream().map(x -> new Other(x.type(), Sentences.polish(x.summary(), mode), x.minutes()))
+                .toList();
+        Conversation next = t.convo.withTurn("user", t.text).withTurn("model", say);
         List<String> called = new ArrayList<>();
         for (String name : t.tools) {
             called.add(name.replace(":confirm", ""));
         }
-        return new AssistantReply(o.say(), pick, others, because, o.ask(), o.choices(), t.spot,
+        return new AssistantReply(say, pick, others, because, ask, o.choices(), t.spot,
                 codec.encode(next), List.copyOf(called), o.ai(), situation);
     }
 
