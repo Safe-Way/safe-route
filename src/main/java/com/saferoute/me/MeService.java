@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -177,9 +178,9 @@ public class MeService {
         return new MeRequests.TripStarted(id, now.toLocalDate().toString(), slot.toString());
     }
 
-    /** 도착·그만둠과 한마디 적기 */
+    /** 도착·그만둠과 한마디 적기. 그 기록까지 보고 대중교통·계단 선호를 고친다 (PreferenceLearner) */
     @Transactional
-    public void endTrip(long id, MeRequests.TripEnd in) {
+    public MeRequests.TripEnded endTrip(long id, MeRequests.TripEnd in) {
         if (in == null) {
             throw MeException.bad("보낼 내용이 없어요");
         }
@@ -192,6 +193,19 @@ public class MeService {
         if (repo.endTrip(g, id, result, "stopped".equals(result) ? null : actual, feedback, reason) == 0) {
             throw MeException.tripNotFound();
         }
+        MeRepository.Row me = repo.find(g).orElse(null);
+        List<PreferenceLearner.Done> recent = repo.recentDone(g, PreferenceLearner.RECENT);
+        List<MeRequests.Learned> learned = PreferenceLearner.learn(recent,
+                new PreferenceLearner.Done(null, result, feedback, reason),
+                me == null ? null : me.preferTransit(), me == null ? null : me.stairsOk());
+        if (!learned.isEmpty()) {
+            Map<String, Object> f = new LinkedHashMap<>();
+            for (MeRequests.Learned l : learned) {
+                f.put("preferTransit".equals(l.what()) ? "prefer_transit" : "stairs_ok", l.to());
+            }
+            repo.save(g, f);
+        }
+        return new MeRequests.TripEnded(learned);
     }
 
     /** 내 기록 모두 지우기: 내 정보, 다닌 기록, 지도 설정, 걸음 속도, 보호자 공유 */

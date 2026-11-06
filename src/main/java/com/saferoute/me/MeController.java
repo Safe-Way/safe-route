@@ -76,9 +76,9 @@ public class MeController {
     }
 
     @PatchMapping("/trips/{id}")
-    public ResponseEntity<Void> endTrip(@PathVariable long id, @RequestBody(required = false) MeRequests.TripEnd in) {
-        service.endTrip(id, in);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<MeRequests.TripEnded> endTrip(@PathVariable long id,
+                                                        @RequestBody(required = false) MeRequests.TripEnd in) {
+        return ResponseEntity.ok(service.endTrip(id, in));
     }
 
     @ExceptionHandler(MeException.class)
