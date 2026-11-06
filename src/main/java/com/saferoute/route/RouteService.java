@@ -136,13 +136,14 @@ public class RouteService {
         RouteResult result = assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(), a.nearby(),
                 a.coverage(), events, avoided::contains);
         if (profile.avoidUnpaved()) {
-            result = withSurfaceNote(result, a.found(), profile);
+            result = withNotes(result, surfaceNotes(a.found(), profile));
         }
-        return withNote(result, a.snapNote());
+        return withNotes(result, a.snapNotes());
     }
 
-    /** 한 도로망에서 찾은 결과. snapNote: 휠체어가 가장 가까운 길이 아닌 곳에 붙었을 때 알림 (없으면 "") */
-    private record Attempt(RouteFinder.Found found, double snapM, Nearby nearby, String snapNote, Coverage coverage) {
+    /** 한 도로망에서 찾은 결과. snapNotes: 휠체어가 가장 가까운 길이 아닌 곳에 붙었을 때 주의 (없으면 빈 목록) */
+    private record Attempt(RouteFinder.Found found, double snapM, Nearby nearby, List<RouteResult.Note> snapNotes,
+            Coverage coverage) {
     }
 
     /** 길에 붙인 곳. moved: 모든 길 기준으로 가장 가까운 곳이 아닌 곳에 붙였는지 (휠체어) */
@@ -168,7 +169,7 @@ public class RouteService {
         java.util.function.Predicate<RoadEdge> aside = zone.isEmpty() ? null : e -> zone.contains(e.id());
         try {
             return new Attempt(RouteFinder.find(graph, from.node(), to.node(), extra, profile.maxDetour(),
-                    profile::passable, profile.avoid(), aside), from.distanceM() + to.distanceM(), nearby, "", cov);
+                    profile::passable, profile.avoid(), aside), from.distanceM() + to.distanceM(), nearby, List.of(), cov);
         } catch (RouteException e) {
             if (profile.exclude().isEmpty()) {
                 return null;
@@ -186,23 +187,24 @@ public class RouteService {
             RouteFinder.Found found = RouteFinder.find(graph, f.snap().node(), t.snap().node(), extra,
                     profile.maxDetour(), profile::passable, profile.avoid(), aside);
             return new Attempt(found, f.snap().distanceM() + t.snap().distanceM(), nearby,
-                    placeNote("출발점", f) + placeNote("도착점", t), cov);
+                    java.util.stream.Stream.of(placeNote("출발점", f), placeNote("도착점", t))
+                            .flatMap(java.util.Optional::stream).toList(), cov);
         } catch (RouteException e) {
             return null;
         }
     }
 
     /**
-     * 안내하는 경로의 바닥을 설명 문장 뒤에 알린다 (휠체어, 2026-11-04 결정).
+     * 안내하는 경로의 바닥을 주의·알림으로 알린다 (휠체어, 2026-11-04 결정).
      * <ul>
      *   <li>비포장을 지나면: 피하면 얼마나 더 걸리는지, 비포장 없이는 이어지지 않으면 피하는 길이 없다고</li>
      *   <li>재질을 모르는 산길을 지나면: "확인 안 됨"</li>
      * </ul>
      */
-    static RouteResult withSurfaceNote(RouteResult r, RouteFinder.Found found, RouteProperties.Profile profile) {
+    static List<RouteResult.Note> surfaceNotes(RouteFinder.Found found, RouteProperties.Profile profile) {
         double unpaved = lengthOf(found.safe(), RouteFinder::isUnpaved);
         double unknown = lengthOf(found.safe(), e -> e.penalty().get(Penalty.SURFACE_UNKNOWN) >= 1);
-        StringBuilder note = new StringBuilder();
+        List<RouteResult.Note> notes = new ArrayList<>();
         if (unpaved > 0) {
             String avoid;
             if (found.avoidFree() == null) {
@@ -213,23 +215,23 @@ public class RouteService {
                 avoid = extraMin > 0 ? "비포장을 피하면 %dm(%d분) 더 걸립니다".formatted(extraM, extraMin)
                         : "비포장을 피하면 %dm 더 걸립니다".formatted(extraM);
             }
-            note.append(" (주의: 비포장길 약 %dm를 지납니다. %s)".formatted(Math.round(unpaved), avoid));
+            notes.add(RouteResult.Note.warn("unpaved",
+                    "비포장길 약 %dm를 지납니다. %s".formatted(Math.round(unpaved), avoid)));
         }
         if (unknown > 0) {
-            note.append(" (확인 안 됨: 바닥 재질을 모르는 산길 약 %dm를 지납니다)".formatted(Math.round(unknown)));
+            notes.add(RouteResult.Note.unknown("surface",
+                    "바닥 재질을 모르는 산길 약 %dm를 지납니다".formatted(Math.round(unknown))));
         }
-        return withNote(r, note.toString());
+        return notes;
     }
 
-    /** 설명 문장 끝에 알림을 붙인다 */
-    private static RouteResult withNote(RouteResult r, String note) {
-        if (note.isEmpty()) {
+    /** 설명에 주의·알림을 더한다 */
+    private static RouteResult withNotes(RouteResult r, List<RouteResult.Note> notes) {
+        if (notes.isEmpty()) {
             return r;
         }
-        RouteResult.Explanation e = r.explanation();
-        return new RouteResult(r.conditions(), r.routes(),
-                new RouteResult.Explanation(e.text() + note, e.extraM(), e.extraMin(), e.diff()),
-                r.facilities(), r.dataQuality());
+        return new RouteResult(r.conditions(), r.routes(), r.explanation().with(notes), r.facilities(),
+                r.dataQuality());
     }
 
     private static double lengthOf(com.saferoute.route.engine.search.RoadPath p,
@@ -241,7 +243,8 @@ public class RouteService {
     private Nearby nearby(RoadGraph graph, RouteProperties.Phase phase, ZonedDateTime now) {
         RouteProperties.CountRadius c = props.countRadiusM();
         double margin = Math.max(Math.max(Math.max(phase.helpM(), phase.restM()), Math.max(phase.schoolM(),
-                props.coverage().cctvM())), Math.max(Math.max(c.light(), c.cctv()), Math.max(c.bell(), c.help())));
+                props.coverage().cctvM())), Math.max(Math.max(Math.max(c.light(), c.cctv()), Math.max(c.bell(), c.help())),
+                Math.max(c.rest(), c.school())));
         BBox box = BBox.around(new ArrayList<>(graph.nodes().values()), margin);
         return new Nearby(pois.within(box, POI_KINDS), pois.holidays(), now.toLocalDateTime(), pois.dataDate());
     }
@@ -296,9 +299,10 @@ public class RouteService {
     }
 
     /** 옆 길에 붙였으면 남은 거리를 알린다. 계단으로만 드나드는 곳이라 휠체어 길이 확인되지 않은 구간이다 */
-    private static String placeNote(String which, Placed p) {
-        return p.moved() ? " (주의: %s 근처 약 %dm는 휠체어로 이어진 길이 확인되지 않았습니다)".formatted(which,
-                Math.round(p.snap().distanceM())) : "";
+    private static java.util.Optional<RouteResult.Note> placeNote(String which, Placed p) {
+        return p.moved() ? java.util.Optional.of(RouteResult.Note.warn("snap",
+                "%s 근처 약 %dm는 휠체어로 이어진 길이 확인되지 않았습니다".formatted(which,
+                        Math.round(p.snap().distanceM())))) : java.util.Optional.empty();
     }
 
     /** {경도, 위도} */

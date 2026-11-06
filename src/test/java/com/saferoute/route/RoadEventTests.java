@@ -48,7 +48,9 @@ class RoadEventTests {
             assertThat(e.fromM()).isBetween(65, 75);
             assertThat(e.toM()).isBetween(125, 135);
         });
-        assertThat(r.explanation().text()).endsWith("(충장축제 행사 둘레도 피했습니다)");
+        // 쉼 곳 등 다른 차이 없이 행사만 피해 돌았다
+        assertThat(r.explanation().text())
+                .isEqualTo("%dm(1분) 더 돌지만 충장축제 행사 둘레를 피해 갑니다".formatted(r.explanation().extraM()));
     }
 
     @Test

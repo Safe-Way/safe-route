@@ -52,10 +52,11 @@ class FacilityCounterTests {
                 at("police", 1, 10, 1),
                 at("store", 2, 20, 1),
                 at("guard_house", 3, 30, 1),
-                at("toilet", 4, 5, 1)));     // 화장실은 1차 설명에 세지 않음
+                at("toilet", 4, 5, 1)));     // 화장실은 도움 지점이 아니라 쉼 곳 (2026-11-06)
 
         assertThat(c.get(FacilityGroup.HELP)).isEqualTo(3);
-        assertThat(c.passed()).hasSize(3);
+        assertThat(c.get(FacilityGroup.REST)).isEqualTo(1);
+        assertThat(c.passed()).hasSize(4);
     }
 
     @Test

@@ -7,6 +7,7 @@ import java.util.Set;
 /**
  * 차이 설명에서 세는 시설 묶음 (요구사항 8.3의 counts).
  * light는 가로등+보안등, help는 경찰·편의점·아동안전지킴이집이다. 묶음은 poi 종류(kind)로 정한다.
+ * rest(지금 이용 가능한 쉼터·화장실)와 school(어린이보호구역 대상 시설)은 노인·어린이 낮 기준을 화면에 보여 주려고 센다 (2026-11-06).
  * 이름·단위처럼 묶음마다 다른 값은 모두 여기 둔다.
  */
 public enum FacilityGroup {
@@ -14,7 +15,9 @@ public enum FacilityGroup {
     LIGHT("light", "가로등", "개", Set.of("light")),
     CCTV("cctv", "CCTV", "대", Set.of("cctv")),
     BELL("bell", "비상벨", "개", Set.of("bell")),
-    HELP("help", "도움 지점", "곳", Set.of("police", "store", "guard_house"));
+    HELP("help", "도움 지점", "곳", Set.of("police", "store", "guard_house")),
+    REST("rest", "쉼 곳", "곳", Set.of("shelter", "toilet")),
+    SCHOOL("school", "어린이보호구역", "곳", Set.of("school_zone"));
 
     private final String key;
     private final String title;
@@ -38,7 +41,7 @@ public enum FacilityGroup {
         return title + " +" + n + unit;
     }
 
-    /** poi 종류가 속한 묶음. 세지 않는 종류(화장실·쉼터 등)면 null */
+    /** poi 종류가 속한 묶음. 세지 않는 종류면 null */
     public static FacilityGroup of(String kind) {
         for (FacilityGroup g : values()) {
             if (g.kinds.contains(kind)) {
