@@ -125,6 +125,16 @@ class TodayServiceTests {
     }
 
     @Test
+    void lateNightWindowStopsAtMidnight() {
+        // 2026-11-06 (금) 23:40 → 23:10 ~ 23:59 (다음 날로 넘어가지 않음)
+        TodayService late = new TodayService(memory, trips, weather,
+                Clock.fixed(Instant.parse("2026-11-06T14:40:00Z"), ZoneId.of("Asia/Seoul")));
+        when(memory.habits(anyString(), any(Integer.class), any(), any())).thenReturn(List.of());
+        late.today(G, null, null, null);
+        verify(memory).habits(G, 5, LocalTime.of(23, 10), LocalTime.of(23, 59));
+    }
+
+    @Test
     void weatherHintNeedsEnoughTrips() {
         assertThat(TodayService.hint("rain", new MemoryRepository.WeatherChoice(2, 2, 0, 0))).isNull();
         assertThat(TodayService.hint("heat", new MemoryRepository.WeatherChoice(4, 1, 3, 0)))
