@@ -1,35 +1,542 @@
 {
-  "about": "비서 시험 질문 30개 (초안, 2026-11-06). 매일 /api/assistant에 보내 답을 확인한다. guest는 scripts/seed_demo.py의 시연 게스트(A=de01 휠체어, B=de02 어르신, C=de03 임시 휠체어) 또는 new(처음 쓰는 사람). expect_tools는 불러야 하는 도구(순서대로), expect는 답에 들어가야 하는 것, must_not은 들어가면 안 되는 것. 숫자는 도구 결과와 같아야 한다.",
+  "about": "비서 시험 질문 35개 (초안, 2026-11-06). 매일 /api/assistant에 보내 답을 확인한다. guest는 scripts/seed_demo.py의 시연 게스트(A=de01 휠체어, B=de02 어르신, C=de03 임시 휠체어) 또는 new(처음 쓰는 사람). expect_tools는 불러야 하는 도구(순서대로), expect는 답에 들어가야 하는 것, must_not은 들어가면 안 되는 것. 숫자는 도구 결과와 같아야 한다.",
   "questions": [
-    {"id": 1, "guest": "A", "weather": "rain", "time": "화 08:25", "text": "문화전당 가야 해", "expect_tools": ["search_place", "recommend_trip"], "expect": ["버스", "비", "저상", "지난번"], "must_not": ["어떻게 다니세요"]},
-    {"id": 2, "guest": "A", "weather": "clear", "time": "월 08:25", "text": "문화전당 가자", "expect_tools": ["search_place", "recommend_trip"], "expect": ["걸어서", "턱"], "must_not": ["계단"]},
-    {"id": 3, "guest": "A", "weather": "clear", "time": "토 13:50", "text": "펭귄마을 가고 싶어", "expect_tools": ["search_place", "recommend_trip"], "expect": ["양림"], "must_not": []},
-    {"id": 4, "guest": "A", "weather": "clear", "time": "수 12:00", "text": "화장실 어디야", "expect_tools": ["find_nearby"], "expect": ["장애인 화장실", "m"], "must_not": []},
-    {"id": 5, "guest": "A", "weather": "clear", "time": "금 15:00", "text": "충장로 쪽으로 가 줘", "expect_tools": ["search_place", "recommend_trip"], "expect": ["행사"], "must_not": []},
-    {"id": 6, "guest": "A", "weather": "clear", "time": "수 12:00", "text": "엘베 있는 데로 가자", "expect_tools": [], "expect": ["지하철", "육교", "?"], "must_not": []},
-    {"id": 7, "guest": "A", "weather": "clear", "time": "수 12:00", "text": "엘베 있는 육교도 보여 주고 CCTV는 빼 줘", "expect_tools": [], "expect": ["엘리베이터 육교", "CCTV", "맞으세요"], "must_not": ["바꿨어요"]},
-    {"id": 8, "guest": "A", "weather": "clear", "time": "수 12:00", "text": "응 그렇게 해", "context": "7번 바로 뒤", "expect_tools": ["set_map_layers"], "expect": ["바꿨"], "must_not": []},
-    {"id": 9, "guest": "A", "weather": "clear", "time": "월 08:20", "text": "(오늘 제안)", "expect_tools": ["get_my_info", "recommend_trip"], "expect": ["8시 반", "문화전당"], "must_not": []},
-    {"id": 10, "guest": "A", "weather": "clear", "time": "목 17:55", "text": "집에 가자", "expect_tools": ["recommend_trip"], "expect": ["집"], "must_not": ["주소를 알려"]},
-    {"id": 11, "guest": "B", "weather": "clear", "time": "월 09:55", "text": "시장 가자", "expect_tools": ["search_place", "recommend_trip"], "expect": ["남광주시장", "쉴"], "must_not": []},
-    {"id": 12, "guest": "B", "weather": "cold", "time": "수 09:55", "text": "남광주시장 가야 돼", "expect_tools": ["search_place", "recommend_trip"], "expect": ["추", "버스"], "must_not": []},
-    {"id": 13, "guest": "B", "weather": "clear", "time": "금 09:55", "text": "오늘 무릎이 아파", "expect_tools": ["recommend_trip"], "expect": ["쉴 곳"], "must_not": []},
-    {"id": 14, "guest": "B", "weather": "clear", "time": "금 10:10", "text": "여기 공사 중이라 못 지나가", "expect_tools": [], "expect": ["공사", "신고할까요"], "must_not": ["신고했어요"]},
-    {"id": 15, "guest": "B", "weather": "clear", "time": "금 10:10", "text": "응 사진은 안 찍을래", "context": "14번 바로 뒤", "expect_tools": ["report_problem", "recommend_trip"], "expect": ["신고했어요", "다시"], "must_not": []},
-    {"id": 16, "guest": "B", "weather": "clear", "time": "금 10:10", "text": "여기 사고 났어", "expect_tools": [], "expect": ["사고", "신고할까요"], "must_not": []},
-    {"id": 17, "guest": "B", "weather": "clear", "time": "화 14:00", "text": "쉴 곳 어디 있어", "expect_tools": ["find_nearby"], "expect": ["쉼터", "m"], "must_not": []},
-    {"id": 18, "guest": "B", "weather": "clear", "time": "화 20:30", "text": "집에 갈 건데 밤이라 무서워", "expect_tools": ["recommend_trip"], "expect": ["밝은", "가로등"], "must_not": []},
-    {"id": 19, "guest": "C", "weather": "clear", "time": "수 12:00", "text": "화장실 어디야", "expect_tools": ["find_nearby"], "expect": ["장애인 화장실"], "must_not": []},
-    {"id": 20, "guest": "C", "weather": "clear", "time": "수 12:00", "text": "문화전당 가자", "expect_tools": ["search_place", "recommend_trip"], "expect": ["휠체어"], "must_not": ["계단"]},
-    {"id": 21, "guest": "C", "weather": "clear", "time": "11-30 09:00", "text": "(오늘 제안, 임시 기간 끝나는 날)", "expect_tools": ["get_my_info"], "expect": ["다리", "괜찮", "?"], "must_not": []},
-    {"id": 22, "guest": "C", "weather": "clear", "time": "수 12:00", "text": "이제 다 나았어", "expect_tools": [], "expect": ["걸어서", "맞으세요"], "must_not": []},
-    {"id": 23, "guest": "new", "weather": "clear", "time": "수 12:00", "text": "길 좀 찾아 줘", "expect_tools": ["get_my_info"], "expect": ["어떻게 다니세요"], "must_not": []},
-    {"id": 24, "guest": "new", "weather": "clear", "time": "수 12:00", "text": "다리를 다쳐서 휠체어 타고 다녀", "expect_tools": [], "expect": ["언제까지"], "must_not": []},
-    {"id": 25, "guest": "new", "weather": "clear", "time": "수 12:00", "text": "잘 모르겠어", "context": "24번 바로 뒤", "expect_tools": [], "expect": ["일주일", "다시 여쭤"], "must_not": []},
-    {"id": 26, "guest": "new", "weather": "clear", "time": "수 12:00", "text": "장애인 화장실이랑 보도턱 낮춘 횡단보도 보여 줘 이번 달까지", "expect_tools": [], "expect": ["장애인 화장실", "보도턱", "11월 30일", "맞으세요"], "must_not": []},
-    {"id": 27, "guest": "A", "weather": "clear", "time": "수 12:00", "text": "서울역 가자", "expect_tools": ["search_place"], "expect": ["광주"], "must_not": ["분 걸려요"]},
-    {"id": 28, "guest": "A", "weather": "clear", "time": "수 12:00", "text": "오늘 날씨 어때", "expect_tools": ["recommend_trip"], "expect": ["날씨"], "must_not": []},
-    {"id": 29, "guest": "A", "weather": "clear", "time": "수 12:00", "text": "아무 말이나 해 봐", "expect_tools": [], "expect": ["어디"], "must_not": []},
-    {"id": 30, "guest": "A", "weather": "rain", "time": "화 08:25", "text": "문화전당 가야 해", "ai": "down", "expect_tools": ["search_place", "recommend_trip"], "expect": ["버스", "분"], "must_not": []}
+    {
+      "id": 1,
+      "guest": "A",
+      "weather": "rain",
+      "time": "화 08:25",
+      "text": "문화전당 가야 해",
+      "expect_tools": [
+        "search_place",
+        "recommend_trip"
+      ],
+      "expect": [
+        "버스",
+        "비",
+        "저상",
+        "지난번"
+      ],
+      "must_not": [
+        "어떻게 다니세요"
+      ]
+    },
+    {
+      "id": 2,
+      "guest": "A",
+      "weather": "clear",
+      "time": "월 08:25",
+      "text": "문화전당 가자",
+      "expect_tools": [
+        "search_place",
+        "recommend_trip"
+      ],
+      "expect": [
+        "걸어서",
+        "턱"
+      ],
+      "must_not": [
+        "계단"
+      ]
+    },
+    {
+      "id": 3,
+      "guest": "A",
+      "weather": "clear",
+      "time": "토 13:50",
+      "text": "펭귄마을 가고 싶어",
+      "expect_tools": [
+        "search_place",
+        "recommend_trip"
+      ],
+      "expect": [
+        "양림"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 4,
+      "guest": "A",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "화장실 어디야",
+      "expect_tools": [
+        "find_nearby"
+      ],
+      "expect": [
+        "장애인 화장실",
+        "m"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 5,
+      "guest": "A",
+      "weather": "clear",
+      "time": "금 15:00",
+      "text": "충장로 쪽으로 가 줘",
+      "expect_tools": [
+        "search_place",
+        "recommend_trip"
+      ],
+      "expect": [
+        "행사"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 6,
+      "guest": "A",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "엘베 있는 데로 가자",
+      "expect_tools": [],
+      "expect": [
+        "지하철",
+        "육교",
+        "?"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 7,
+      "guest": "A",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "엘베 있는 육교도 보여 주고 CCTV는 빼 줘",
+      "expect_tools": [],
+      "expect": [
+        "엘리베이터 육교",
+        "CCTV",
+        "맞으세요"
+      ],
+      "must_not": [
+        "바꿨어요"
+      ]
+    },
+    {
+      "id": 8,
+      "guest": "A",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "응 그렇게 해",
+      "context": "7번 바로 뒤",
+      "expect_tools": [
+        "set_map_layers"
+      ],
+      "expect": [
+        "바꿨"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 9,
+      "guest": "A",
+      "weather": "clear",
+      "time": "월 08:20",
+      "text": "(오늘 제안)",
+      "expect_tools": [
+        "get_my_info",
+        "recommend_trip"
+      ],
+      "expect": [
+        "8시 반",
+        "문화전당"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 10,
+      "guest": "A",
+      "weather": "clear",
+      "time": "목 17:55",
+      "text": "집에 가자",
+      "expect_tools": [
+        "recommend_trip"
+      ],
+      "expect": [
+        "집"
+      ],
+      "must_not": [
+        "주소를 알려"
+      ]
+    },
+    {
+      "id": 11,
+      "guest": "B",
+      "weather": "clear",
+      "time": "월 09:55",
+      "text": "시장 가자",
+      "expect_tools": [
+        "search_place",
+        "recommend_trip"
+      ],
+      "expect": [
+        "남광주시장",
+        "쉴"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 12,
+      "guest": "B",
+      "weather": "cold",
+      "time": "수 09:55",
+      "text": "남광주시장 가야 돼",
+      "expect_tools": [
+        "search_place",
+        "recommend_trip"
+      ],
+      "expect": [
+        "추",
+        "버스"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 13,
+      "guest": "B",
+      "weather": "clear",
+      "time": "금 09:55",
+      "text": "오늘 무릎이 아파",
+      "expect_tools": [
+        "recommend_trip"
+      ],
+      "expect": [
+        "쉴 곳"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 14,
+      "guest": "B",
+      "weather": "clear",
+      "time": "금 10:10",
+      "text": "여기 공사 중이라 못 지나가",
+      "expect_tools": [],
+      "expect": [
+        "공사",
+        "신고할까요"
+      ],
+      "must_not": [
+        "신고했어요"
+      ]
+    },
+    {
+      "id": 15,
+      "guest": "B",
+      "weather": "clear",
+      "time": "금 10:10",
+      "text": "응 사진은 안 찍을래",
+      "context": "14번 바로 뒤",
+      "expect_tools": [
+        "report_problem",
+        "recommend_trip"
+      ],
+      "expect": [
+        "신고했어요",
+        "다시"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 16,
+      "guest": "B",
+      "weather": "clear",
+      "time": "금 10:10",
+      "text": "여기 사고 났어",
+      "expect_tools": [],
+      "expect": [
+        "사고",
+        "신고할까요"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 17,
+      "guest": "B",
+      "weather": "clear",
+      "time": "화 14:00",
+      "text": "쉴 곳 어디 있어",
+      "expect_tools": [
+        "find_nearby"
+      ],
+      "expect": [
+        "쉼터",
+        "m"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 18,
+      "guest": "B",
+      "weather": "clear",
+      "time": "화 20:30",
+      "text": "집에 갈 건데 밤이라 무서워",
+      "expect_tools": [
+        "recommend_trip"
+      ],
+      "expect": [
+        "밝은",
+        "가로등"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 19,
+      "guest": "C",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "화장실 어디야",
+      "expect_tools": [
+        "find_nearby"
+      ],
+      "expect": [
+        "장애인 화장실"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 20,
+      "guest": "C",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "문화전당 가자",
+      "expect_tools": [
+        "search_place",
+        "recommend_trip"
+      ],
+      "expect": [
+        "휠체어"
+      ],
+      "must_not": [
+        "계단"
+      ]
+    },
+    {
+      "id": 21,
+      "guest": "C",
+      "weather": "clear",
+      "time": "11-30 09:00",
+      "text": "(오늘 제안, 임시 기간 끝나는 날)",
+      "expect_tools": [
+        "get_my_info"
+      ],
+      "expect": [
+        "다리",
+        "괜찮",
+        "?"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 22,
+      "guest": "C",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "이제 다 나았어",
+      "expect_tools": [],
+      "expect": [
+        "걸어서",
+        "맞으세요"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 23,
+      "guest": "new",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "길 좀 찾아 줘",
+      "expect_tools": [
+        "get_my_info"
+      ],
+      "expect": [
+        "어떻게 다니세요"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 24,
+      "guest": "new",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "다리를 다쳐서 휠체어 타고 다녀",
+      "expect_tools": [],
+      "expect": [
+        "언제까지"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 25,
+      "guest": "new",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "잘 모르겠어",
+      "context": "24번 바로 뒤",
+      "expect_tools": [],
+      "expect": [
+        "일주일",
+        "다시 여쭤"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 26,
+      "guest": "new",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "장애인 화장실이랑 보도턱 낮춘 횡단보도 보여 줘 이번 달까지",
+      "expect_tools": [],
+      "expect": [
+        "장애인 화장실",
+        "보도턱",
+        "11월 30일",
+        "맞으세요"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 27,
+      "guest": "A",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "서울역 가자",
+      "expect_tools": [
+        "search_place"
+      ],
+      "expect": [
+        "광주"
+      ],
+      "must_not": [
+        "분 걸려요"
+      ]
+    },
+    {
+      "id": 28,
+      "guest": "A",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "오늘 날씨 어때",
+      "expect_tools": [
+        "recommend_trip"
+      ],
+      "expect": [
+        "날씨"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 29,
+      "guest": "A",
+      "weather": "clear",
+      "time": "수 12:00",
+      "text": "아무 말이나 해 봐",
+      "expect_tools": [],
+      "expect": [
+        "어디"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 30,
+      "guest": "A",
+      "weather": "rain",
+      "time": "화 08:25",
+      "text": "문화전당 가야 해",
+      "ai": "down",
+      "expect_tools": [
+        "search_place",
+        "recommend_trip"
+      ],
+      "expect": [
+        "버스",
+        "분"
+      ],
+      "must_not": []
+    },
+    {
+      "id": 31,
+      "guest": "B",
+      "weather": "clear",
+      "time": "화 11:00",
+      "text": "약국 어디야",
+      "case": "① 비슷한 도구",
+      "expect_tools": [
+        "search_place"
+      ],
+      "expect": [
+        "약국",
+        "m"
+      ],
+      "must_not": [
+        "못 해요"
+      ]
+    },
+    {
+      "id": 32,
+      "guest": "B",
+      "weather": "rain",
+      "time": "화 11:00",
+      "text": "택시 불러 줘",
+      "case": "③ 못 하는 일",
+      "expect_tools": [],
+      "expect": [
+        "못 해요",
+        "버스"
+      ],
+      "must_not": [
+        "불렀어요",
+        "불러 드렸"
+      ]
+    },
+    {
+      "id": 33,
+      "guest": "B",
+      "weather": "clear",
+      "time": "화 11:00",
+      "text": "넘어졌어 일어나기가 힘들어",
+      "case": "④ 급한 일",
+      "expect_tools": [],
+      "expect": [
+        "112",
+        "보호자"
+      ],
+      "must_not": [
+        "길을 찾"
+      ]
+    },
+    {
+      "id": 34,
+      "guest": "A",
+      "weather": "clear",
+      "time": "화 11:00",
+      "text": "오늘 주식 어때",
+      "case": "⑤ 상관없음",
+      "expect_tools": [],
+      "expect": [
+        "길 안내"
+      ],
+      "must_not": [
+        "주가",
+        "올랐",
+        "내렸"
+      ]
+    },
+    {
+      "id": 35,
+      "guest": "A",
+      "weather": "clear",
+      "time": "화 11:00",
+      "text": "고마워",
+      "case": "② 말로만",
+      "expect_tools": [],
+      "expect": [],
+      "must_not": [
+        "신고했어요",
+        "바꿨어요"
+      ]
+    }
   ]
 }
