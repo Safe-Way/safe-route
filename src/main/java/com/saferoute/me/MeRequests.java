@@ -46,6 +46,20 @@ public final class MeRequests {
     public record TripStarted(long id, String startedOn, String startSlot) {
     }
 
+    /**
+     * 다닌 기록으로 내 정보를 고친 것 (PATCH /api/me/trips/{id} 답). 고친 게 없으면 빈 목록.
+     *
+     * @param what preferTransit 또는 stairsOk
+     * @param from 고치기 전 값 (모르면 null)
+     * @param to   고친 값
+     * @param say  사용자에게 보여 줄 한 문장
+     */
+    public record Learned(String what, Integer from, int to, String say) {
+    }
+
+    public record TripEnded(java.util.List<Learned> learned) {
+    }
+
     public record Layer(String layer, String name, boolean shown, String until, String reason) {
     }
 

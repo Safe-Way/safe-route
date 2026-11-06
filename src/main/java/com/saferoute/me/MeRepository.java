@@ -167,6 +167,15 @@ public class MeRepository {
                 + " WHERE id = ? AND guest_id = ?", result, actualMin, feedback, reason, id, guestId);
     }
 
+    /** 최근 끝난 기록 (도착·그만둠, 최근 것부터) */
+    public List<PreferenceLearner.Done> recentDone(String guestId, int limit) {
+        return jdbc.query("SELECT travel, result, feedback, feedback_reason FROM trip_log"
+                        + " WHERE guest_id = ? AND result IN ('arrived', 'stopped') ORDER BY id DESC LIMIT " + limit,
+                (rs, i) -> new PreferenceLearner.Done(rs.getString(1), rs.getString(2), rs.getString(3),
+                        rs.getString(4)),
+                guestId);
+    }
+
     public int deleteTrips(String guestId) {
         return jdbc.update("DELETE FROM trip_log WHERE guest_id = ?", guestId);
     }
