@@ -116,7 +116,7 @@ public class TripScorer {
             out.add("엘리베이터로 들어갈 수 있는 역만");
         }
         if (walk && other != null && best.minutes() < other.minutes()) {
-            out.add(Sentences.go(ctx.mode()) + " " + best.minutes() + "분으로 " + (other.minutes() - best.minutes()) + "분 더 빨라요");
+            out.add(best.minutes() + "분으로 " + (other.minutes() - best.minutes()) + "분 더 빨라요");
         }
         if (walk && best.reports() == 0) {
             int avoidedReports = all.stream().filter(t -> "walk".equals(t.type())).mapToInt(Trip::reports).max().orElse(0);

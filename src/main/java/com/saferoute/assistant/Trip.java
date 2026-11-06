@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.saferoute.route.api.RouteResult;
+import com.saferoute.transit.TransitResult;
 
 /**
  * recommend_trip 이 모은 후보 하나 (점수 매기기 전).
@@ -21,15 +22,28 @@ import com.saferoute.route.api.RouteResult;
  * @param lowFloor  대중교통 첫 버스 중 곧 오는 저상버스가 있으면 true
  * @param firstBus  대중교통 첫 버스 번호와 몇 분 뒤 (예: "30번 5분 뒤"). 모르면 null
  * @param rest      걷는 길 주변 지금 쉴 수 있는 곳(쉼터·화장실) 수 (원일님 counts.rest). 대중교통·모르면 null
+ * @param legs      대중교통 구간 차례대로 (걷기·버스·지하철, 걷는 구간 분은 내 걸음 속도로 다시 셈). 걷기는 빈 목록
  */
 public record Trip(String type, int minutes, int walkM, int transfers, int reports, String summary,
                    Map<String, Object> request, String route, Map<String, Integer> diff,
-                   List<RouteResult.Event> events, boolean lowFloor, String firstBus, Integer rest) {
+                   List<RouteResult.Event> events, boolean lowFloor, String firstBus, Integer rest,
+                   List<TransitResult.Leg> legs) {
+
+    public Trip {
+        legs = legs == null ? List.of() : List.copyOf(legs);
+    }
+
+    public Trip(String type, int minutes, int walkM, int transfers, int reports, String summary,
+                Map<String, Object> request, String route, Map<String, Integer> diff,
+                List<RouteResult.Event> events, boolean lowFloor, String firstBus, Integer rest) {
+        this(type, minutes, walkM, transfers, reports, summary, request, route, diff, events, lowFloor, firstBus,
+                rest, List.of());
+    }
 
     public Trip(String type, int minutes, int walkM, int transfers, int reports, String summary,
                 Map<String, Object> request, String route, Map<String, Integer> diff,
                 List<RouteResult.Event> events, boolean lowFloor, String firstBus) {
         this(type, minutes, walkM, transfers, reports, summary, request, route, diff, events, lowFloor, firstBus,
-                null);
+                null, List.of());
     }
 }

@@ -62,7 +62,8 @@ class GeminiBrain {
             - 존댓말, 세 문장 이하. 어린이에게는 아주 쉬운 말, 어르신에게는 짧고 또박또박.
             - recommend_trip 결과의 sentence 를 바탕으로 말하고, because 중 중요한 것 하나를 이유로 넣는다.
             - sentence 에 쉴 곳 개수, "지난번", 저상버스 말이 있으면 빼지 않는다.
-            - 휠체어 사용자에게는 "걸어서" 대신 "휠체어로"라고 말한다. "~드리겠어요" 대신 "~드릴게요"라고 말한다.""";
+            - "걸어서"·"휠체어로" 같은 이동 수단 말 없이 "○○까지 22분 걸려요"처럼 시간만 말한다. 대중교통이면 sentence 의 정류장·버스·정거장 순서를 그대로 쓴다.
+            - "~드리겠어요" 대신 "~드릴게요"라고 말한다.""";
 
     private final GeminiClient gemini;
     private final AssistantTools tools;

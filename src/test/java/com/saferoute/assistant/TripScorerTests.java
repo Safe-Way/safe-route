@@ -44,6 +44,6 @@ class TripScorerTests {
                 null, null);
         TripScorer.Scored s = scorer.score(List.of(walk(22, 1300), bus(36, 300, true)), clear);
         assertThat(s.best().type()).isEqualTo("walk");
-        assertThat(s.because()).contains("휠체어로 22분으로 14분 더 빨라요");
+        assertThat(s.because()).contains("22분으로 14분 더 빨라요");
     }
 }

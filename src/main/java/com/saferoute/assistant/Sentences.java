@@ -1,6 +1,10 @@
 package com.saferoute.assistant;
 
+import java.util.ArrayList;
 import java.util.List;
+
+import com.saferoute.bus.BusArrival;
+import com.saferoute.transit.TransitResult;
 
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.situation.WeatherDust;
@@ -18,7 +22,7 @@ final class Sentences {
 
     /**
      * 나가기 전 문장 다듬기 (규칙 문장·AI 문장 모두): "을(를)" 같은 두 갈래 조사를 하나로,
-     * "드리겠어요" → "드릴게요", 휠체어 사용자에게 "걸어서 N분" → "휠체어로 N분" (비서 점검 11/06).
+     * "드리겠어요" → "드릴게요", 휠체어 사용자에게 "걸어서 N분" → "N분" (비서 점검 11/06, 이동 수단 말 없이 시간만).
      */
     static String polish(String s, String mode) {
         if (s == null) {
@@ -26,14 +30,9 @@ final class Sentences {
         }
         String out = Josa.fix(s).replace("드리겠어요", "드릴게요").replace("드리겠습니다", "드릴게요");
         if ("wheelchair".equals(mode)) {
-            out = WALK_MIN.matcher(out).replaceAll("휠체어로 $1분");
+            out = WALK_MIN.matcher(out).replaceAll("$1분");
         }
         return out;
-    }
-
-    /** "걸어서", 휠체어면 "휠체어로" */
-    static String go(String mode) {
-        return "wheelchair".equals(mode) ? "휠체어로" : "걸어서";
     }
 
     /** recommend_trip 결과를 말로 */
@@ -54,22 +53,33 @@ final class Sentences {
         boolean heavy = "wheelchair".equals(mode) || "senior".equals(mode);
         boolean bad = w.rain() || w.heat() || w.cold() || w.dustBad();
         if (walk) {
-            sb.append(dest).append("까지 ").append(go(mode)).append(' ').append(best.minutes()).append("분이에요.");
+            // "문화전당까지 22분 걸려요." 시간은 모드 기본 속도(잰 적이 있으면 내 속도)로 센 값
+            sb.append(dest).append("까지 ").append(best.minutes()).append("분 걸려요.");
             if ("wheelchair".equals(mode)) {
-                sb.append(" 휠체어가 못 지나는 곳과 확인된 턱을 피한 길이에요.");
+                sb.append(" 확인된 턱과 못 지나는 곳을 피한 길이에요.");
             }
             if (bad && heavy && plan.scored().others().stream().noneMatch(o -> "transit".equals(o.type()))) {
-                sb.append(" 지금은 버스 길을 찾지 못해서 ").append(go(mode).equals("휠체어로") ? "휠체어로 가는" : "걷는")
-                        .append(" 길을 알려 드려요.");
+                sb.append(" 지금은 버스 길을 찾지 못해서 이 길을 알려 드려요.");
             }
         } else {
-            String how = best.summary().replaceAll(", \\d+분$", "");
-            sb.append(dest).append("까지 ").append(Josa.ro(how)).append(' ').append(best.minutes()).append("분이에요.");
-            if (best.firstBus() != null) {
-                sb.append(" ").append(best.firstBus()).append("에 와요.");
+            sb.append(dest).append("까지 ").append(best.minutes()).append("분 걸려요. ");
+            String steps = steps(best.legs());
+            if (steps != null) {
+                sb.append(steps);
+            } else {
+                String how = best.summary().replaceAll(", \\d+분$", "");
+                sb.append(Josa.ro(how)).append(" 가요.");
             }
-            if (best.lowFloor()) {
-                sb.append(" 곧 오는 저상버스가 있어요.");
+            String next = nextBus(best.legs());
+            if (next != null) {
+                sb.append(' ').append(next);
+            } else {
+                if (best.firstBus() != null) {
+                    sb.append(" ").append(best.firstBus()).append("에 와요.");
+                }
+                if (best.lowFloor()) {
+                    sb.append(" 곧 오는 저상버스가 있어요.");
+                }
             }
         }
         for (String b : plan.scored().because()) {
@@ -105,6 +115,82 @@ final class Sentences {
         }
         sb.append(weatherTail(w));
         return sb.toString().strip();
+    }
+
+    /**
+     * 대중교통 구간을 차례대로 말로.
+     * "금남로4가 정류장까지 5분 가서, 59번 버스를 타고 6정거장(10분), 남광주시장 정류장에서 내려 3분 더 가요."
+     * 구간 정보가 없으면 null (한 줄 요약으로 대신 말함)
+     */
+    static String steps(List<TransitResult.Leg> legs) {
+        if (legs == null || legs.stream().noneMatch(l -> !"walk".equals(l.type()))) {
+            return null;
+        }
+        List<String> parts = new ArrayList<>();
+        boolean rode = false;
+        for (int i = 0; i < legs.size(); i++) {
+            TransitResult.Leg l = legs.get(i);
+            if ("walk".equals(l.type())) {
+                TransitResult.Leg next = i + 1 < legs.size() ? legs.get(i + 1) : null;
+                if (next == null) {
+                    parts.add(l.minutes() > 0 ? l.minutes() + "분 더 가요" : "도착해요");
+                } else if (l.minutes() > 0) {
+                    parts.add(stop(next.from(), next.type()) + "까지 " + l.minutes() + "분 가서");
+                }
+                continue;
+            }
+            String ride = "bus".equals(l.type())
+                    ? String.join("·", l.lines()) + "번 버스를 타고"
+                    : Josa.eul("지하철 " + String.join("·", l.lines())) + " 타고";
+            if (rode && (i == 0 || !"walk".equals(legs.get(i - 1).type()))) {
+                ride = stop(l.from(), l.type()) + "에서 " + ride;
+            }
+            String count = l.stationCount() == null ? "" : " " + l.stationCount() + ("bus".equals(l.type()) ? "정거장" : "역");
+            parts.add(ride + count + "(" + l.minutes() + "분)");
+            String off = stop(l.to(), l.type()) + "에서 내려";
+            boolean last = i + 1 == legs.size();
+            parts.add(last ? off + "요" : off);
+            rode = true;
+        }
+        String s = String.join(", ", parts).replace("내려, ", "내려 ");
+        if (s.endsWith("내려요")) {
+            s = s.substring(0, s.length() - 3) + "내리면 돼요";
+        }
+        return s + ".";
+    }
+
+    /** "금남로4가 정류장", "문화전당역" (이름이 이미 "역"으로 끝나면 그대로) */
+    private static String stop(TransitResult.Stop s, String type) {
+        String name = s == null || s.name() == null ? "타는 곳" : s.name().strip();
+        if ("subway".equals(type)) {
+            return name.endsWith("역") ? name : name + "역";
+        }
+        return name.endsWith("정류장") || name.endsWith("역") ? name : name + " 정류장";
+    }
+
+    /** "다음 저상버스는 4분 뒤예요." 첫 버스 구간의 곧 오는 버스. 모르면 null */
+    static String nextBus(List<TransitResult.Leg> legs) {
+        if (legs == null) {
+            return null;
+        }
+        for (TransitResult.Leg l : legs) {
+            if ("subway".equals(l.type())) {
+                return null;
+            }
+            if ("bus".equals(l.type())) {
+                if (l.buses() == null || l.buses().isEmpty()) {
+                    return null;
+                }
+                BusArrival b = l.buses().stream().filter(x -> x.remainMin() != null && x.lowFloor()).findFirst()
+                        .orElse(l.buses().stream().filter(x -> x.remainMin() != null).findFirst().orElse(null));
+                if (b == null) {
+                    return null;
+                }
+                return (b.lowFloor() ? "다음 저상버스는 " : "다음 버스는 ")
+                        + (b.remainMin() <= 0 ? "곧 와요." : b.remainMin() + "분 뒤예요.");
+            }
+        }
+        return null;
     }
 
     static TripScorer.Context ctx(WeatherDust w) {

@@ -238,7 +238,7 @@ class AssistantServiceTests {
         when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
                 List.of()), WeatherDust.unknown(), false, null));
         AssistantReply r = ask(A, "문화전당 가자", null);
-        assertThat(r.say()).contains("휠체어로 9분", "턱").doesNotContain("계단", "걸어서");
+        assertThat(r.say()).contains("9분 걸려요", "턱").doesNotContain("계단", "걸어서", "휠체어로");
     }
 
     @Test
@@ -274,7 +274,7 @@ class AssistantServiceTests {
         when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
                 List.of()), WeatherDust.unknown(), false, null));
         AssistantReply r = ask(A, "충장로 쪽으로 가 줘", null);
-        assertThat(r.say()).startsWith("충장로까지 휠체어로 9분이에요.").doesNotContain("당구장");
+        assertThat(r.say()).startsWith("충장로까지 9분 걸려요.").doesNotContain("당구장");
         assertThat(r.tools()).containsExactly("search_place", "recommend_trip");
         ArgumentCaptor<TripRecommender.Ask> a = ArgumentCaptor.forClass(TripRecommender.Ask.class);
         verify(trips).recommend(a.capture());
@@ -304,7 +304,7 @@ class AssistantServiceTests {
         when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(bus, List.of(),
                 List.of()), WeatherDust.unknown(), false, null));
         AssistantReply r = ask(A, "남광주시장 가자", null);
-        assertThat(r.say()).contains("버스 59번으로 15분이에요", "쉴 곳").doesNotContain("(으)");
+        assertThat(r.say()).contains("남광주시장까지 15분 걸려요. 버스 59번으로 가요.", "쉴 곳").doesNotContain("(으)");
     }
 
     @Test
@@ -318,13 +318,13 @@ class AssistantServiceTests {
         when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
                 List.of()), rain, false, null));
         AssistantReply r = ask(A, "문화전당 가야 해", null);
-        assertThat(r.say()).contains("지금은 버스 길을 찾지 못해서 휠체어로 가는 길을 알려 드려요");
+        assertThat(r.say()).contains("지금은 버스 길을 찾지 못해서 이 길을 알려 드려요");
     }
 
     @Test
     void polishFixesJosaPoliteEndingAndWheelchairWords() {
         assertThat(Sentences.polish("엘리베이터 육교을(를) 지도에 보여 드리겠어요. 걸어서 22분이에요.", "wheelchair"))
-                .isEqualTo("엘리베이터 육교를 지도에 보여 드릴게요. 휠체어로 22분이에요.");
+                .isEqualTo("엘리베이터 육교를 지도에 보여 드릴게요. 22분이에요.");
         assertThat(Sentences.polish("'충장로'(으)로 3곳, 지팡이(으)로, 장애인 화장실을(를), 카페이(가)", "adult"))
                 .isEqualTo("'충장로'로 3곳, 지팡이로, 장애인 화장실을, 카페가");
         assertThat(Sentences.polish("걸어서 12분이에요.", "senior")).isEqualTo("걸어서 12분이에요.");
@@ -359,7 +359,7 @@ class AssistantServiceTests {
         when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
                 List.of()), WeatherDust.unknown(), false, null));
         AssistantReply second = ask(A, "응", first.conversationId());
-        assertThat(second.say()).contains("충장약국까지 휠체어로 5분");
+        assertThat(second.say()).contains("충장약국까지 5분 걸려요");
     }
 
     @Test
@@ -385,7 +385,7 @@ class AssistantServiceTests {
                 List.of()), WeatherDust.unknown(), false, null));
         AssistantReply third = service.answer(new AssistantRequest(A, "", LAT, LON, null, second.conversationId(),
                 "0", null, null, null));
-        assertThat(third.say()).contains("월계수식당까지 휠체어로 4분");
+        assertThat(third.say()).contains("월계수식당까지 4분 걸려요");
     }
 
     @Test
