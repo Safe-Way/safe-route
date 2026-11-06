@@ -23,6 +23,7 @@ import com.saferoute.route.engine.graph.RoadGraph;
  * <ol>
  *   <li>지날 수 없는 길(휠체어의 계단 등)은 처음부터 뺀다. 최단 경로와 우회율도 "지날 수 있는 길 중에서" 잰다</li>
  *   <li>조건부 제외(노인 계단, 휠체어 비포장): 피할 길이 없는 경로가 우회 한도 안에 있으면 그 길을 뺀다. 없으면 허용한다</li>
+ *   <li>행사·돌발상황 둘레도 같은 방식으로 피한다. 계단·비포장 피하기를 먼저 지키고, 그 위에서 한도 안이면 뺀다</li>
  *   <li>선호(밝은 길, 도움 시설 등): 길 비용 = 길이 + λ × 추가 비용. 우회 한도를 넘지 않는 가장 큰 λ(0~1)를 이분 탐색으로 찾는다.
  *       예전처럼 가중치를 반씩 줄이면 계단 회피까지 같이 약해져 계단 길이 다시 나왔다</li>
  * </ol>
@@ -63,6 +64,15 @@ public final class RouteFinder {
      */
     public static Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
             double maxDetour, Predicate<RoadEdge> passable, Predicate<RoadEdge> avoid) {
+        return find(graph, from, to, extra, maxDetour, passable, avoid, null);
+    }
+
+    /**
+     * @param avoid 조건부 제외할 길 (노인 계단, 휠체어 비포장). null이면 없음
+     * @param aside 그다음으로 조건부 제외할 길 (행사·돌발상황 둘레). null이면 없음
+     */
+    public static Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
+            double maxDetour, Predicate<RoadEdge> passable, Predicate<RoadEdge> avoid, Predicate<RoadEdge> aside) {
         Graph<Long, RoadEdge> usable = mask(graph, passable);
         RoadPath shortest = search(graph, usable, from, to, RoadEdge::lengthM);
         if (shortest == null) {
@@ -71,16 +81,29 @@ public final class RouteFinder {
         double limit = maxDetour > 0 ? shortest.lengthM() * maxDetour : Double.MAX_VALUE;
 
         Graph<Long, RoadEdge> pool = usable;
+        Predicate<RoadEdge> allowed = passable;
         RoadPath base = shortest;
         RoadPath free = shortest;
         if (avoid != null) {
             // 최단 경로에 피할 길이 없어도 피할 길은 뺀다. 빼지 않으면 선호(쉼 곳·밝은 길)를 따라가다 그 길로 갈 수 있다
-            Graph<Long, RoadEdge> without = mask(graph, passable.and(avoid.negate()));
+            Predicate<RoadEdge> clear = passable.and(avoid.negate());
+            Graph<Long, RoadEdge> without = mask(graph, clear);
             free = shortest.edges().stream().anyMatch(avoid)
                     ? search(graph, without, from, to, RoadEdge::lengthM) : shortest;
             if (free != null && free.lengthM() <= limit) {
                 pool = without;
+                allowed = clear;
                 base = free;
+            }
+        }
+        if (aside != null) {
+            Predicate<RoadEdge> clear = allowed.and(aside.negate());
+            Graph<Long, RoadEdge> without = mask(graph, clear);
+            RoadPath away = base.edges().stream().anyMatch(aside)
+                    ? search(graph, without, from, to, RoadEdge::lengthM) : base;
+            if (away != null && away.lengthM() <= limit) {
+                pool = without;
+                base = away;
             }
         }
         if (extra == null) {

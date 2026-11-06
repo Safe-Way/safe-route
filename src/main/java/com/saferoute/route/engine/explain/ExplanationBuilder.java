@@ -1,10 +1,13 @@
 package com.saferoute.route.engine.explain;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.saferoute.route.RouteProperties;
+import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.condition.Conditions;
 import com.saferoute.route.engine.facility.FacilityGroup;
 
@@ -22,9 +25,13 @@ public final class ExplanationBuilder {
     static final String SAME = "가장 짧은 길이 가장 안전한 길입니다";
     static final String CAPPED = "더 안전한 길은 너무 많이 돌아서 가장 짧은 길을 안내합니다";
     static final String NIGHT_REASON = "더 밝고 사람 눈이 닿는 길로 갑니다";
+    static final String SHORTEST = "가장 짧은 길로 갑니다";
 
     /** 문장에 넣는 시설 차이 개수 */
     private static final int MAX_ITEMS = 3;
+
+    /** 가장 짧은 길을 안내한다는 문장. 행사·돌발 둘레를 피해 다른 길로 가면 이 문장은 맞지 않다 */
+    private static final Set<String> SHORTEST_TEXTS = Set.of(DAY, NIGHT_OFF, WHEELCHAIR, SAME, CAPPED);
 
     private ExplanationBuilder() {
     }
@@ -56,10 +63,7 @@ public final class ExplanationBuilder {
         if (same) {
             return capped ? CAPPED : SAME;
         }
-        // 두 경로가 같은 분으로 반올림되면 "(0분)"이 어색하므로 시간은 뺀다
-        String detour = extraM <= 0 ? "같은 거리로"
-                : extraMin > 0 ? "%dm(%d분) 더 돌지만".formatted(extraM, extraMin)
-                : "%dm 더 돌지만".formatted(extraM);
+        String detour = detour(extraM, extraMin);
         if (!cond.night() && phase.note() != null && !phase.note().isBlank()) {
             return detour + " " + phase.note();
         }
@@ -75,5 +79,67 @@ public final class ExplanationBuilder {
         }
         String reason = phase.note() != null && !phase.note().isBlank() ? phase.note() : NIGHT_REASON;
         return detour + " " + reason;
+    }
+
+    /**
+     * 행사·돌발상황을 문장에 더한다 (2026-11-06).
+     * <ul>
+     *   <li>최단 경로가 지나는 피할 행사·돌발을 안전 경로가 피했으면: "120m(2분) 더 돌지만 ○○ 행사 둘레를 피해 갑니다".
+     *       다른 이유로도 돌았으면 끝에 "(○○ 행사 둘레도 피했습니다)"</li>
+     *   <li>안내하는 길이 피할 것을 지나면(피하는 길이 우회 한도를 넘음): "(주의: ○○ 구간을 지납니다. 피해 가는 길은 너무 멉니다)".
+     *       이때 "가장 짧은 길이 가장 안전한 길입니다"는 "가장 짧은 길로 갑니다"로 바꾼다</li>
+     *   <li>지나도 되는 것(일반 모드의 행사, 차 없는 거리 등)을 지나면: "(알림: ○○ 구간을 지납니다)"</li>
+     * </ul>
+     *
+     * @param shortEvents 최단 경로가 지나는 것. 두 경로가 같으면 빈 목록
+     * @param safeEvents  안내하는 경로(safe)가 지나는 것
+     */
+    public static String withEvents(String text, int extraM, int extraMin, List<RouteResult.Event> shortEvents,
+            List<RouteResult.Event> safeEvents) {
+        Set<String> passed = safeEvents.stream().map(ExplanationBuilder::label).collect(Collectors.toSet());
+        String avoided = names(shortEvents.stream().filter(RouteResult.Event::avoid).map(ExplanationBuilder::label)
+                .filter(n -> !passed.contains(n)).toList());
+        StringBuilder out = new StringBuilder(text);
+        if (!avoided.isEmpty()) {
+            if (SHORTEST_TEXTS.contains(text)) {
+                out = new StringBuilder(detour(extraM, extraMin) + " " + avoided + " 둘레를 피해 갑니다");
+            } else {
+                out.append(" (").append(avoided).append(" 둘레도 피했습니다)");
+            }
+        }
+        String warn = names(safeEvents.stream().filter(RouteResult.Event::avoid).map(ExplanationBuilder::label)
+                .toList());
+        if (!warn.isEmpty()) {
+            if (SAME.contentEquals(out)) {
+                out = new StringBuilder(SHORTEST);
+            }
+            out.append(" (주의: ").append(warn).append(" 구간을 지납니다. 피해 가는 길은 너무 멉니다)");
+        }
+        String notice = names(safeEvents.stream().filter(e -> !e.avoid()).map(ExplanationBuilder::label).toList());
+        if (!notice.isEmpty()) {
+            out.append(" (알림: ").append(notice).append(" 구간을 지납니다)");
+        }
+        return out.toString();
+    }
+
+    /** 두 경로가 같은 분으로 반올림되면 "(0분)"이 어색하므로 시간은 뺀다 */
+    private static String detour(int extraM, int extraMin) {
+        return extraM <= 0 ? "같은 거리로"
+                : extraMin > 0 ? "%dm(%d분) 더 돌지만".formatted(extraM, extraMin)
+                : "%dm 더 돌지만".formatted(extraM);
+    }
+
+    /** 돌발은 이름에 종류가 이미 들어 있다 ("무진대로 공사") */
+    static String label(RouteResult.Event e) {
+        return e.title().contains(e.kind()) ? e.title() : e.title() + " " + e.kind();
+    }
+
+    /** 이름 둘까지 잇고 나머지는 "외 n곳" */
+    private static String names(List<String> labels) {
+        List<String> distinct = labels.stream().distinct().toList();
+        if (distinct.size() <= 2) {
+            return String.join(", ", distinct);
+        }
+        return String.join(", ", distinct.subList(0, 2)) + " 외 " + (distinct.size() - 2) + "곳";
     }
 }

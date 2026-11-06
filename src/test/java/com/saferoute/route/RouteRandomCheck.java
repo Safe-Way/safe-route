@@ -211,7 +211,8 @@ class RouteRandomCheck {
             noRoutes.add(where + (anyRoad ? ": 모든 길로는 이어짐 (제외한 길 때문에 끊김)" + why : ": 모든 길로도 안 이어짐"));
             return viaService(service, from, to, mode, cond.night(), "NO_ROUTE(끊김)");
         }
-        RouteResult r = assembler.assemble(cond, profile, phase, f, from, to, a.distanceM() + b.distanceM(), nearby, chosenCov);
+        RouteResult r = assembler.assemble(cond, profile, phase, f, from, to, a.distanceM() + b.distanceM(), nearby, chosenCov,
+                List.of(), e -> false);
         long ms = (System.nanoTime() - started) / 1_000_000;
 
         String tag = where + ": ";

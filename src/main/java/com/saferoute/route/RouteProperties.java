@@ -6,6 +6,7 @@ import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import com.saferoute.route.engine.event.RoadEvent;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.score.Criterion;
@@ -21,6 +22,7 @@ import com.saferoute.route.engine.search.RouteFinder;
  * @param passableSnapExtraM 휠체어가 지날 수 있는 길에 붙일 때, 모든 길 기준보다 이만큼 넘게 멀어지면 붙이지 않는다
  * @param darkStretch 걷는 동안 "앞으로 ○m는 조명이 적습니다" 안내에 쓸 어두운 구간 기준 (FR-31)
  * @param turn        걷는 동안 "80m 앞 왼쪽" 안내에 쓸 꺾는 곳 기준 (FR-34)
+ * @param events      길 위의 행사·돌발상황을 다루는 기준 (2026-11-06)
  */
 @ConfigurationProperties("route")
 public record RouteProperties(
@@ -35,7 +37,32 @@ public record RouteProperties(
         double samePointM,
         double tooFarM,
         DarkStretch darkStretch,
-        Turn turn) {
+        Turn turn,
+        Events events) {
+
+    public RouteProperties {
+        events = events == null ? new Events(List.of()) : events;
+    }
+
+    /**
+     * @param walkFriendly 이 말이 이름에 든 행사는 걷기에 오히려 좋아(차 없는 거리 등) 어느 모드도 피하지 않고 알리기만 한다.
+     *                     띄어쓰기는 무시한다
+     */
+    public record Events(List<String> walkFriendly) {
+
+        public Events {
+            walkFriendly = walkFriendly == null ? List.of() : List.copyOf(walkFriendly);
+        }
+
+        /** 이 사람이 둘레를 조건부로 피할 행사·돌발상황인지. 아니면 지날 때 알리기만 한다 */
+        public boolean avoids(Profile profile, RoadEvent e) {
+            if (!profile.avoidEvents().contains(e.kind())) {
+                return false;
+            }
+            String name = e.title().replace(" ", "");
+            return walkFriendly.stream().noneMatch(w -> name.contains(w.replace(" ", "")));
+        }
+    }
 
     /**
      * @param minAngle 경로 선에서 방향이 이 각도(도)보다 크게 바뀌면 꺾는 곳 (FR-34)
@@ -109,12 +136,15 @@ public record RouteProperties(
      * @param exclude      이 성질이 1(확실히 못 지남)인 길은 아예 뺀다 (휠체어: 계단, 확인된 턱, 못 지나는 육교)
      * @param avoidStairs  계단 조건부 제외: 계단 없는 길이 우회 한도 안에 있으면 계단 길을 뺀다 (노인)
      * @param avoidUnpaved 비포장 조건부 제외: 비포장 없는 길이 우회 한도 안에 있으면 비포장 길을 뺀다 (휠체어, 2026-11-04)
+     * @param avoidEvents  둘레를 조건부로 피할 행사·돌발 종류 (road_event.kind). 피하는 길이 우회 한도 안에 있을 때만 피한다.
+     *                     계단·비포장 피하기를 먼저 지킨다 (2026-11-06)
      */
     public record Profile(double maxDetour, double walkSpeedMPerMin, int nightLeadMin, List<Penalty> exclude,
-            boolean avoidStairs, boolean avoidUnpaved, Phase day, Phase night) {
+            boolean avoidStairs, boolean avoidUnpaved, List<String> avoidEvents, Phase day, Phase night) {
 
         public Profile {
             exclude = exclude == null ? List.of() : List.copyOf(exclude);
+            avoidEvents = avoidEvents == null ? List.of() : List.copyOf(avoidEvents);
             day = day == null ? Phase.SHORTEST : day;
             night = night == null ? Phase.SHORTEST : night;
         }
