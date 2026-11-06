@@ -67,7 +67,7 @@ class RuleBrain {
             if (f.contains(e.getKey()) && !f.contains("112")) {
                 String[] v = e.getValue();
                 unmet.add(t.now.toLocalDate(), mode, t.text, "no_tool", v[0], v[1].replace("을", "").strip());
-                return Outcome.ask(v[0] + "은(는) 아직 못 해요. 대신 " + v[1] + " 알려 드릴까요?");
+                return Outcome.ask(Josa.eun(v[0]) + " 아직 못 해요. 대신 " + v[1] + " 알려 드릴까요?");
             }
         }
         for (String w : OFF_TOPIC) {
@@ -312,7 +312,7 @@ class RuleBrain {
                 return Outcome.ask("가까운 " + other + "을(를) 찾지 못했어요. 다른 이름으로 말씀해 주시겠어요?");
             }
             Place p = f.places().get(0);
-            return Outcome.ask("가까운 " + other + "은(는) " + p.name()
+            return Outcome.ask("가까운 " + Josa.eun(other) + " " + p.name()
                     + (p.address() == null ? "" : "(" + p.address() + ")") + "이에요. 그리로 안내할까요?", YES_NO_GO);
         }
         // 날씨
@@ -338,7 +338,7 @@ class RuleBrain {
                 case "error":
                     return Outcome.ask("지금은 장소 검색이 잘 안 돼요. 잠시 뒤에 다시 말씀해 주세요.");
                 case "outside":
-                    return Outcome.say("'" + f.places().get(0).name() + "'은(는) 광주 밖이에요. 지금은 광주 안에서만 길을 안내해요.");
+                    return Outcome.say(Josa.eun("'" + f.places().get(0).name() + "'") + " 광주 밖이에요. 지금은 광주 안에서만 길을 안내해요.");
                 case "choose":
                     return choosePlace(dest, f.places());
                 default:
@@ -569,7 +569,7 @@ class RuleBrain {
             q.append(remove.isEmpty() ? "고 " : "고 ");
         }
         if (!remove.isEmpty()) {
-            q.append(names(remove)).append("은(는) ");
+            q.append(Josa.eun(names(remove))).append(" ");
             if (add.isEmpty()) {
                 until.ifPresent(d -> q.append(KoreanTime.day(d)).append("까지 "));
             }
