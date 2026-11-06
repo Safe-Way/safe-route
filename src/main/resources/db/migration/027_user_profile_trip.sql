@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS trip_log (
     CONSTRAINT fk_trip_log_profile FOREIGN KEY (guest_id) REFERENCES user_profile (guest_id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '이동 기록 (동의한 게스트만, 최근 200건)';
 
--- 비서가 쓰는 습관 요약 ①: 같은 요일·시간대에 같은 곳을 몇 번 갔나 (3번 넘으면 "이 시간에 ○○ 가세요?" 먼저 제안)
+-- 비서가 쓰는 습관 요약 ①: 같은 요일·시간대에 같은 곳을 몇 번 갔나 (3번 이상이면 "이 시간에 ○○ 가세요?" 먼저 제안)
 CREATE OR REPLACE VIEW trip_habit AS
 SELECT guest_id, weekday, start_slot, to_name, to_lat, to_lon,
        COUNT(*) AS times, MAX(started_on) AS last_on,

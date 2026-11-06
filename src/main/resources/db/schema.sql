@@ -1015,7 +1015,7 @@ CREATE TABLE IF NOT EXISTS trip_log (
     CONSTRAINT fk_trip_log_profile FOREIGN KEY (guest_id) REFERENCES user_profile (guest_id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '이동 기록 (동의한 게스트만, 최근 200건)';
 
--- 비서가 쓰는 습관 요약 ①: 같은 요일·시간대에 같은 곳을 몇 번 갔나 (3번 넘으면 "이 시간에 ○○ 가세요?" 먼저 제안)
+-- 비서가 쓰는 습관 요약 ①: 같은 요일·시간대에 같은 곳을 몇 번 갔나 (3번 이상이면 "이 시간에 ○○ 가세요?" 먼저 제안)
 CREATE OR REPLACE VIEW trip_habit AS
 SELECT guest_id, weekday, start_slot, to_name, to_lat, to_lon,
        COUNT(*) AS times, MAX(started_on) AS last_on,
@@ -1096,6 +1096,32 @@ CREATE OR REPLACE VIEW user_map_layer_now AS
 SELECT u.guest_id, u.layer, l.name, u.shown, u.until, u.reason
 FROM user_map_layer u JOIN map_layer l ON l.layer = u.layer
 WHERE u.until IS NULL OR u.until >= CURDATE();
+
+-- ---------------------------------------------------------------- 보호자 실시간 위치 공유 (029)
+
+-- 걷는 동안만, 마지막 한 점만. 끝나면 위치를 비우고 10분 뒤 서버가 지움. 규칙은 migration/029_guardian_share.sql
+CREATE TABLE IF NOT EXISTS guardian_share (
+    token       CHAR(32)     NOT NULL COMMENT '보호자 링크에 들어가는 무작위 32자 (서버가 만듦)',
+    guest_id    CHAR(36)     NULL     COMMENT '공유한 게스트 번호 (내 기록 지우기 때 같이 지움)',
+    walker_name VARCHAR(30)  NULL     COMMENT '보호자 화면에 보일 이름 (예 "엄마", 사용자가 정함)',
+    dest_name   VARCHAR(100) NULL     COMMENT '가는 곳 이름',
+    dest_lat    DECIMAL(9,6) NULL,
+    dest_lon    DECIMAL(9,6) NULL,
+    mode        VARCHAR(20)  NULL     COMMENT '그때 모드 (보호자 화면 안내 문구용)',
+    started_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at  DATETIME     NOT NULL COMMENT '이때가 지나면 끝 (시작 3시간 뒤)',
+    last_lat    DECIMAL(9,6) NULL     COMMENT '마지막 위치 (한 점만, 끝나면 비움)',
+    last_lon    DECIMAL(9,6) NULL,
+    last_at     DATETIME     NULL     COMMENT '마지막 위치를 받은 시각. 30분 동안 안 오면 끝',
+    remain_m    INT          NULL     COMMENT '남은 거리(m)',
+    eta_min     SMALLINT     NULL     COMMENT '도착까지 남은 시간(분, 내 걸음 속도로)',
+    off_route   TINYINT      NOT NULL DEFAULT 0 COMMENT '1이면 정한 길에서 벗어남 (보호자 화면에 표시)',
+    ended_at    DATETIME     NULL     COMMENT '끝난 시각',
+    end_reason  VARCHAR(10)  NULL     COMMENT 'arrived 도착, stopped 그만둠, expired 만료, sos SOS를 눌러 끝남',
+    PRIMARY KEY (token),
+    KEY idx_guardian_share_guest (guest_id),
+    KEY idx_guardian_share_ended (ended_at)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '보호자 실시간 위치 공유 (걷는 동안만, 마지막 한 점)';
 
 -- ---------------------------------------------------------------- 전체 보기
 
