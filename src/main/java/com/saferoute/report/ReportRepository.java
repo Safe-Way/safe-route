@@ -29,11 +29,20 @@ public class ReportRepository {
 
     /** 신고 한 줄을 넣고 새 번호를 돌려준다. status 는 표 기본값(open) */
     public long insert(NewReport r, Long edgeId) {
+        return insert(r, edgeId, "photo");
+    }
+
+    /**
+     * 신고 한 줄을 넣는다.
+     *
+     * @param via photo 화면에서 사진과 함께, voice 비서에게 말로 (028)
+     */
+    public long insert(NewReport r, Long edgeId, String via) {
         KeyHolder key = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(
-                    "INSERT INTO road_report (report_type, mode, memo, lon, lat, geom, accuracy_m, edge_id)"
-                            + " VALUES (?, ?, ?, ?, ?, ST_SRID(POINT(?, ?), 0), ?, ?)",
+                    "INSERT INTO road_report (report_type, mode, memo, lon, lat, geom, accuracy_m, edge_id, via)"
+                            + " VALUES (?, ?, ?, ?, ?, ST_SRID(POINT(?, ?), 0), ?, ?, ?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, r.type());
             ps.setString(2, r.mode());
@@ -52,6 +61,7 @@ public class ReportRepository {
             } else {
                 ps.setLong(9, edgeId);
             }
+            ps.setString(10, via);
             return ps;
         }, key);
         return key.getKey().longValue();

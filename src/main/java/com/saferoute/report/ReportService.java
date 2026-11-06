@@ -100,6 +100,35 @@ public class ReportService {
         return new ReportCreated(id, "open", r.photos().size());
     }
 
+    /**
+     * 비서에게 말로 한 신고 (사진 없음, via = voice). 비서가 "여기에 공사로 신고할까요?"를 묻고 "네"를 들은 뒤 부른다.
+     *
+     * @param type 유형 코드 (steep, construction, curb, broken, obstacle, accident, other)
+     * @return 새 신고 번호
+     */
+    @Transactional
+    public long createVoice(String type, String mode, String memo, double lat, double lon) {
+        String t = ReportType.known(type) ? type : "other";
+        String m = mode != null && MODES.contains(mode) ? mode : null;
+        String note = blankToNull(memo);
+        if (note != null && note.length() > MAX_MEMO) {
+            note = note.substring(0, MAX_MEMO);
+        }
+        NewReport r = new NewReport(t, m, note, lat, lon, null, List.of());
+        Long edge = null;
+        try {
+            edge = repo.nearestEdge(lat, lon, EDGE_SNAP_M);
+        } catch (DataAccessException e) {
+            log.warn("말 신고 가까운 길 찾기 실패: {}", e.getMostSpecificCause().getMessage());
+        }
+        return repo.insert(r, edge, "voice");
+    }
+
+    /** 유형 코드의 이름 ("construction" → "공사") */
+    public static String typeName(String type) {
+        return ReportType.name(type);
+    }
+
     /** 지도 범위 안 신고 */
     public ReportsResponse within(double west, double south, double east, double north) {
         if (west >= east || south >= north) {
