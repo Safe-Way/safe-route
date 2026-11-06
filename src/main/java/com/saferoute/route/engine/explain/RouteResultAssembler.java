@@ -1,5 +1,6 @@
 package com.saferoute.route.engine.explain;
 
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -13,6 +14,8 @@ import org.springframework.stereotype.Component;
 import com.saferoute.route.RouteProperties;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.condition.Conditions;
+import com.saferoute.route.engine.event.RoadEvent;
+import com.saferoute.route.engine.event.RoadEvents;
 import com.saferoute.route.engine.facility.FacilityCounter;
 import com.saferoute.route.engine.facility.FacilityCounter.Counts;
 import com.saferoute.route.engine.facility.FacilityGroup;
@@ -27,11 +30,13 @@ import com.saferoute.route.engine.search.RouteFinder;
 /**
  * 찾은 두 경로로 응답(요구사항 8.3)을 만든다: 거리·시간, 지나는 시설 수, 인도 쪽, 차이 설명, 지도 아이콘, 데이터 상태.
  * 걷는 동안 안내(2차)에 쓰는 시설 자리(FR-30)·어두운 구간(FR-31)·꺾는 곳(FR-34)·횡단보도 구간도 여기서 붙인다.
+ * 지나는 행사·돌발상황 구간과 그 알림 문장도 붙인다 (2026-11-06).
  */
 @Component
 public class RouteResultAssembler {
 
     private static final String NO_DATA_MESSAGE = "이 지역은 안전 데이터가 부족합니다";
+    private static final DateTimeFormatter ENDS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final FacilityCounter counter;
     private final RouteProperties props;
@@ -48,9 +53,14 @@ public class RouteResultAssembler {
      * @param snapM      출발·도착에서 가장 가까운 길 노드까지 거리의 합
      * @param nearby     이 요청에서 읽은 주변 시설 (점수 계산과 같은 목록)
      */
-    /** @param cov 경로를 고를 때 쓴 커버율. 밤이면 고른 경로의 어두운 구간(FR-31)을 여기서 꺼낸다 */
+    /**
+     * @param cov    경로를 고를 때 쓴 커버율. 밤이면 고른 경로의 어두운 구간(FR-31)을 여기서 꺼낸다
+     * @param events 지금 진행 중인 주변 행사·돌발상황
+     * @param avoids 이 요청에서 둘레를 피하려 한 것 (모드·출발·도착으로 RouteService가 정함). 나머지는 알리기만
+     */
     public RouteResult assemble(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
-            RouteFinder.Found found, double[] start, double[] end, double snapM, Nearby nearby, Coverage cov) {
+            RouteFinder.Found found, double[] start, double[] end, double snapM, Nearby nearby, Coverage cov,
+            List<RoadEvent> events, java.util.function.Predicate<RoadEvent> avoids) {
         boolean same = found.safe().sameAs(found.shortest());
         List<double[]> shortLine = found.shortest().lineFrom(start, end);
         List<double[]> safeLine = found.safe().lineFrom(start, end);
@@ -61,23 +71,27 @@ public class RouteResultAssembler {
         Counts shortCounts = counts.get(0);
         Counts safeCounts = counts.get(1);
 
+        List<RouteResult.Event> shortEvents = events(events, shortLine, avoids);
+        List<RouteResult.Event> safeEvents = events(events, safeLine, avoids);
+
         List<RouteResult.Route> routes = new ArrayList<>();
         if (!same) {
             routes.add(route("shortest", shortM, profile.minutes(shortM), shortLine, shortCounts,
                     Sidewalks.along(found.shortest(), found.shortest().startOffset(start)),
                     dark(cond, found.shortest(), start, cov), turns(found.shortest(), start),
-                    crossings(found.shortest(), start)));
+                    crossings(found.shortest(), start), shortEvents));
         }
         routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts,
                 Sidewalks.along(found.safe(), found.safe().startOffset(start)),
                 dark(cond, found.safe(), start, cov), turns(found.safe(), start),
-                crossings(found.safe(), start)));
+                crossings(found.safe(), start), safeEvents));
 
         int extraM = same ? 0 : safeM - shortM;
         // 반올림을 따로 하면 "22분 / 24분"인데 "(1분) 더"가 나올 수 있어, 두 경로 시간의 차로 구한다
         int extraMin = same ? 0 : profile.minutes(safeM) - profile.minutes(shortM);
         Map<FacilityGroup, Integer> diff = safeCounts.minus(shortCounts);
         String text = ExplanationBuilder.text(cond, profile, phase, same, found.detourCapped(), extraM, extraMin, diff);
+        text = ExplanationBuilder.withEvents(text, extraM, extraMin, same ? List.of() : shortEvents, safeEvents);
 
         return new RouteResult(
                 RouteResult.Conditions.of(cond),
@@ -89,9 +103,25 @@ public class RouteResultAssembler {
 
     private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts,
             List<RouteResult.Sidewalk> sidewalks, List<RouteResult.Stretch> dark, List<RouteResult.Turn> turns,
-            List<RouteResult.Stretch> crossings) {
+            List<RouteResult.Stretch> crossings, List<RouteResult.Event> events) {
         return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()), sidewalks,
-                dark, turns, crossings);
+                dark, turns, crossings, events);
+    }
+
+    /** 경로 선이 영향 반경을 지나는 행사·돌발상황. 들어가는 곳 순서 */
+    private static List<RouteResult.Event> events(List<RoadEvent> events, List<double[]> line,
+            java.util.function.Predicate<RoadEvent> avoids) {
+        List<RouteResult.Event> out = new ArrayList<>();
+        for (RoadEvent e : events) {
+            double[] s = RoadEvents.stretch(e, line);
+            if (s != null) {
+                out.add(new RouteResult.Event(e.kind(), e.title(), e.place(), e.message(),
+                        e.endsAt() == null ? null : e.endsAt().format(ENDS),
+                        (int) Math.round(s[0]), (int) Math.round(s[1]), avoids.test(e)));
+            }
+        }
+        out.sort(Comparator.comparingInt(RouteResult.Event::fromM));
+        return out;
     }
 
     private static List<RouteResult.Stretch> crossings(RoadPath path, double[] start) {

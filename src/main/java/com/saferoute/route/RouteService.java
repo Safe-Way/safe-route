@@ -22,6 +22,8 @@ import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.data.PoiSource;
 import com.saferoute.route.data.RoadGraphSource;
 import com.saferoute.route.engine.condition.Conditions;
+import com.saferoute.route.engine.event.RoadEvent;
+import com.saferoute.route.engine.event.RoadEvents;
 import com.saferoute.route.engine.explain.RouteResultAssembler;
 import com.saferoute.route.engine.facility.Nearby;
 import com.saferoute.route.engine.geo.BBox;
@@ -43,6 +45,7 @@ import com.saferoute.situation.NightResult;
  *   <li>밤 판단: C파트 {@link NightJudge}. 어린이처럼 일몰 몇 분 전부터 밤으로 보는 모드는 여기서 앞당긴다</li>
  *   <li>주변 도로망 읽기, 출발·도착을 길에 붙이기: {@link RoadGraphSource}. 휠체어는 지날 수 있는 길로 이어진 곳에 붙인다</li>
  *   <li>주변 시설을 한 번 읽기: {@link PoiSource}. 점수·설명·지도 아이콘이 같은 목록을 쓴다</li>
+ *   <li>지금 진행 중인 행사·돌발상황 읽기: 모드에 따라 둘레를 조건부로 피하거나({@link RouteProperties.Events}) 지날 때 알린다</li>
  *   <li>모드·낮밤 기준으로 길마다 더할 비용: {@link RouteScorer} (시설 커버율을 요청 때 계산)</li>
  *   <li>최단·안전 경로: {@link RouteFinder}. 못 찾으면 범위를 넓혀 한 번 더 찾는다.
  *       휠체어가 비포장을 지나면 피할 때 얼마나 더 걸리는지 설명에 알린다</li>
@@ -59,6 +62,9 @@ public class RouteService {
 
     private static final Logger log = LoggerFactory.getLogger(RouteService.class);
     private static final ZoneId KOREA = ZoneId.of("Asia/Seoul");
+
+    /** 행사·돌발상황을 읽을 때 도로망 범위 밖으로 더 보는 거리. 영향 반경(행사 300m)보다 크게 */
+    static final double EVENT_MARGIN_M = 500;
 
     /** 경로에 쓰는 시설 종류 (점수·설명·지도 아이콘) */
     static final Set<String> POI_KINDS = Set.of("light", "cctv", "bell", "police", "store", "guard_house",
@@ -109,18 +115,26 @@ public class RouteService {
         Conditions cond = conditions(start, now, option, profile.nightLeadMin());
         RouteProperties.Phase phase = profile.phase(cond.night());
 
+        // 다시 찾을 때의 넓은 범위까지 한 번에 읽는다
+        List<RoadEvent> events = pois.events(BBox.around(List.of(start, end),
+                Math.max(props.searchMarginM(), props.retryMarginM()) + EVENT_MARGIN_M), now.toLocalDateTime());
+        // 출발·도착이 반경 안이면 그 행사에 가는 길이라 피하지 않고 알리기만 한다
+        List<RoadEvent> avoided = events.stream().filter(e -> props.events().avoids(profile, e)
+                && Geo.distance(start, e.point()) > e.radiusM() && Geo.distance(end, e.point()) > e.radiusM())
+                .toList();
+
         Attempt a = attempt(roads.load(BBox.around(List.of(start, end), props.searchMarginM())),
-                start, end, cond, profile, phase, now);
+                start, end, cond, profile, phase, now, avoided);
         if (a == null && props.retryMarginM() > props.searchMarginM()) {
             // 강·철도·큰 도로를 범위 밖 다리로 돌아가야 하는 길. 넓혀 한 번 더 찾는다 (우회 한도 등 규칙은 같다)
             a = attempt(roads.load(BBox.around(List.of(start, end), props.retryMarginM())),
-                    start, end, cond, profile, phase, now);
+                    start, end, cond, profile, phase, now, avoided);
         }
         if (a == null) {
             throw new RouteException(RouteError.NO_ROUTE);
         }
         RouteResult result = assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(), a.nearby(),
-                a.coverage());
+                a.coverage(), events, avoided::contains);
         if (profile.avoidUnpaved()) {
             result = withSurfaceNote(result, a.found(), profile);
         }
@@ -137,7 +151,7 @@ public class RouteService {
 
     /** 이 도로망에서 경로를 찾는다. 길에 붙이지 못하거나 이어지지 않으면 null */
     private Attempt attempt(RoadGraph graph, double[] start, double[] end, Conditions cond,
-            RouteProperties.Profile profile, RouteProperties.Phase phase, ZonedDateTime now) {
+            RouteProperties.Profile profile, RouteProperties.Phase phase, ZonedDateTime now, List<RoadEvent> avoided) {
         RoadGraph.Snap from;
         RoadGraph.Snap to;
         try {
@@ -150,9 +164,11 @@ public class RouteService {
         // 커버율은 한 번만 계산해 경로 고르기와 어두운 구간 안내(FR-31)에 같이 쓴다
         Coverage cov = scorer.coverage(graph, phase, cond.night(), nearby);
         ToDoubleFunction<RoadEdge> extra = scorer.extraCost(cov, phase);
+        Set<Long> zone = RoadEvents.zone(graph, avoided);
+        java.util.function.Predicate<RoadEdge> aside = zone.isEmpty() ? null : e -> zone.contains(e.id());
         try {
             return new Attempt(RouteFinder.find(graph, from.node(), to.node(), extra, profile.maxDetour(),
-                    profile::passable, profile.avoid()), from.distanceM() + to.distanceM(), nearby, "", cov);
+                    profile::passable, profile.avoid(), aside), from.distanceM() + to.distanceM(), nearby, "", cov);
         } catch (RouteException e) {
             if (profile.exclude().isEmpty()) {
                 return null;
@@ -168,7 +184,7 @@ public class RouteService {
                 return null;
             }
             RouteFinder.Found found = RouteFinder.find(graph, f.snap().node(), t.snap().node(), extra,
-                    profile.maxDetour(), profile::passable, profile.avoid());
+                    profile.maxDetour(), profile::passable, profile.avoid(), aside);
             return new Attempt(found, f.snap().distanceM() + t.snap().distanceM(), nearby,
                     placeNote("출발점", f) + placeNote("도착점", t), cov);
         } catch (RouteException e) {

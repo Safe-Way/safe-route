@@ -33,10 +33,28 @@ public record RouteResult(
      * @param dark     밤에 조명이 적은 구간 (FR-31). 낮이면 빈 목록
      * @param turns    꺾는 곳 (FR-34)
      * @param crossings 횡단보도를 건너는 구간. 꺾지 않고 곧장 건너는 곳도 있다
+     * @param events   지나는 행사·돌발상황 영향 구간. 지나지 않으면 빈 목록
      */
     public record Route(String kind, int distanceM, int durationMin, List<double[]> geometry,
             Map<String, Integer> counts, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
-            List<Stretch> crossings) {
+            List<Stretch> crossings, List<Event> events) {
+    }
+
+    /**
+     * 경로가 지나는 행사·돌발상황 (A파트 road_event). 걷는 동안 앱이 "앞에 금남로 행사로 붐벼요"를 만든다.
+     *
+     * @param kind    행사, 공사, 사고, 통제, 재난, 기타
+     * @param title   이름 ("금남로 차 없는 거리 걷자잉", 돌발은 "도로 이름 + 종류")
+     * @param place   장소 설명. 없으면 null
+     * @param message 안내 문구. 없으면 null
+     * @param endsAt  끝나는 때 "2026-11-07 23:59". 모르면 null
+     * @param fromM   출발부터 경로를 따라 영향 반경에 들어가는 곳(m). 시설 along.atM과 같은 기준
+     * @param toM     영향 반경을 나오는 곳(m)
+     * @param avoid   이 모드가 둘레를 피하는 행사·돌발이면 true(앱은 주의로), 지나도 되는 것이면 false(알림만).
+     *                안전 경로에 true가 있으면 피하는 길이 우회 한도를 넘어 지나는 것이다
+     */
+    public record Event(String kind, String title, String place, String message, String endsAt, int fromM, int toM,
+            boolean avoid) {
     }
 
     /**
