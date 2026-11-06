@@ -181,7 +181,8 @@ public record RouteResult(
     }
 
     /**
-     * @param status   OK, PARTIAL(경로 일부가 데이터 없는 곳), NO_DATA
+     * @param status   늘 OK (2026-11-06부터 데이터 부족 알림을 띄우지 않는다. 예전 값 PARTIAL·NO_DATA)
+     * @param message  늘 null
      * @param dataDate 시설 데이터 기준일 "2026-10-28"
      */
     public record DataQuality(String status, String message, String dataDate) {
