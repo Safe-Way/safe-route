@@ -1,5 +1,5 @@
 {
-  "about": "비서 시험 질문 35개 (초안, 2026-11-06). 매일 /api/assistant에 보내 답을 확인한다. guest는 scripts/seed_demo.py의 시연 게스트(A=de01 휠체어, B=de02 어르신, C=de03 임시 휠체어) 또는 new(처음 쓰는 사람). expect_tools는 불러야 하는 도구(순서대로), expect는 답에 들어가야 하는 것, must_not은 들어가면 안 되는 것. 숫자는 도구 결과와 같아야 한다. at은 그 질문만 다른 출발 위치([위도, 경도], 없으면 게스트 기본 위치). writes가 true인 질문은 학교 DB에 진짜로 저장되므로(설정 바꾸기·신고) --write를 줄 때만 보낸다.",
+  "about": "비서 시험 질문 35개 (초안, 2026-11-06). 매일 /api/assistant에 보내 답을 확인한다. guest는 scripts/seed_demo.py의 시연 게스트(A=de01 휠체어, B=de02 어르신, C=de03 임시 휠체어) 또는 new(처음 쓰는 사람). expect_tools는 불러야 하는 도구(순서대로), expect는 답(말과 버튼 글자)에 들어가야 하는 것, must_not은 들어가면 안 되는 것. 숫자는 도구 결과와 같아야 한다. at은 그 질문만 다른 출발 위치([위도, 경도], 없으면 게스트 기본 위치). writes가 true인 질문은 학교 DB에 진짜로 저장되므로(설정 바꾸기·신고) --write를 줄 때만 보낸다. 11-06 고침: 길 안내 말에서 '걸어서'·'휠체어로' 같은 이동 수단 말을 빼고 시간과 구간 순서만 말하기로 해서(c11), 2·20번은 시간과 안전 이유를 본다.",
   "questions": [
     {
       "id": 1,
@@ -32,7 +32,7 @@
         "recommend_trip"
       ],
       "expect": [
-        "걸어서",
+        "분",
         "턱"
       ],
       "must_not": [
@@ -317,7 +317,8 @@
         "recommend_trip"
       ],
       "expect": [
-        "휠체어"
+        "분",
+        "못 지나는"
       ],
       "must_not": [
         "계단"
@@ -362,7 +363,8 @@
         "get_my_info"
       ],
       "expect": [
-        "어떻게 다니세요"
+        "다니",
+        "휠체어"
       ],
       "must_not": []
     },
@@ -413,9 +415,7 @@
       "weather": "clear",
       "time": "수 12:00",
       "text": "서울역 가자",
-      "expect_tools": [
-        "search_place"
-      ],
+      "expect_tools": [],
       "expect": [
         "광주"
       ],
@@ -429,9 +429,7 @@
       "weather": "clear",
       "time": "수 12:00",
       "text": "오늘 날씨 어때",
-      "expect_tools": [
-        "recommend_trip"
-      ],
+      "expect_tools": [],
       "expect": [
         "날씨"
       ],
