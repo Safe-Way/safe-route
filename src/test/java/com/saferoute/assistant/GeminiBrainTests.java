@@ -46,11 +46,12 @@ class GeminiBrainTests {
     final MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
     final FacilityRepository facilities = mock(FacilityRepository.class);
     final MemoryRepository memory = mock(MemoryRepository.class);
+    final KakaoLocalClient kakao = mock(KakaoLocalClient.class);
     AssistantService service;
 
     @BeforeEach
     void setUp() {
-        AssistantTools tools = new AssistantTools(mock(KakaoLocalClient.class), mock(TripRecommender.class),
+        AssistantTools tools = new AssistantTools(kakao, mock(TripRecommender.class),
                 facilities, memory, mock(ReportService.class), mock(WeatherDustService.class), new NightJudge());
         JsonMapper json = JsonMapper.builder().build();
         GeminiBrain brain = new GeminiBrain(new GeminiClient(builder, "test-key", "gemini-test"), tools, json);
@@ -89,6 +90,29 @@ class GeminiBrainTests {
         assertThat(r.tools()).containsExactly("find_nearby");
         assertThat(r.place().name()).isEqualTo("문화전당 장애인화장실");
         server.verify();
+    }
+
+    @Test
+    void foundPlacesAlwaysComeAsButtonsWithDistance() {
+        when(kakao.search(org.mockito.ArgumentMatchers.eq("서점"), any(), any())).thenReturn(List.of(
+                new com.saferoute.place.Place("2", "먼서점", "광주 동구", 35.151, 126.927, 410),
+                new com.saferoute.place.Place("1", "월계수서점", "광주 동구", 35.149, 126.926, 250),
+                new com.saferoute.place.Place("3", "새벽서점", "광주 동구", 35.150, 126.925, 1230)));
+        server.expect(requestTo(URL)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[
+                  {"functionCall":{"name":"search_place","args":{"query":"서점"}}}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("월계수서점 (250m)")))
+                .andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"가까운 서점은 월계수서점이에요."}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        AssistantReply r = ask("가까운 서점");
+        assertThat(r.ai()).isTrue();
+        assertThat(r.choices()).extracting(AssistantReply.Choice::label)
+                .containsExactly("월계수서점 · 250m", "먼서점 · 410m", "새벽서점 · 1.2km");
+        assertThat(r.choices()).extracting(AssistantReply.Choice::value).containsExactly("0", "1", "2");
+        assertThat(r.ask()).isNotNull();
     }
 
     @Test
