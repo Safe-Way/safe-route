@@ -20,6 +20,25 @@ permissions:
   contents: read
 
 jobs:
+  # 배포 규칙 지키기 (결정 55): main으로 오는 PR은 develop에서만 받는다.
+  # 기능 브랜치를 main으로 바로 보내면 테스트 서버(develop)를 거치지 않고 배포되고, develop과 main이 갈라진다.
+  # 이 검사가 빨갛게 되면 PR 화면에서 base를 develop으로 바꾸면 된다.
+  # (Settings > Branches에서 main의 필수 검사로 'main은 develop에서만'을 넣으면 머지 버튼도 막힌다)
+  main-from-develop:
+    name: main은 develop에서만
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR이 develop에서 왔는지 보기
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$HEAD_REF" != "develop" ]; then
+            echo "::error::main으로는 develop에서만 PR을 보내요(결정 55). 지금 PR은 '$HEAD_REF' → main 이에요. PR 화면 위쪽 base를 develop으로 바꿔 주세요."
+            exit 1
+          fi
+          echo "develop → main 이라 괜찮아요"
+
   test:
     name: 서버 빌드·테스트
     runs-on: ubuntu-latest
