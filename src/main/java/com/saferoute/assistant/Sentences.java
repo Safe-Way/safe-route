@@ -14,6 +14,28 @@ final class Sentences {
     private Sentences() {
     }
 
+    private static final java.util.regex.Pattern WALK_MIN = java.util.regex.Pattern.compile("걸어서 (\\d+)분");
+
+    /**
+     * 나가기 전 문장 다듬기 (규칙 문장·AI 문장 모두): "을(를)" 같은 두 갈래 조사를 하나로,
+     * "드리겠어요" → "드릴게요", 휠체어 사용자에게 "걸어서 N분" → "휠체어로 N분" (비서 점검 11/06).
+     */
+    static String polish(String s, String mode) {
+        if (s == null) {
+            return null;
+        }
+        String out = Josa.fix(s).replace("드리겠어요", "드릴게요").replace("드리겠습니다", "드릴게요");
+        if ("wheelchair".equals(mode)) {
+            out = WALK_MIN.matcher(out).replaceAll("휠체어로 $1분");
+        }
+        return out;
+    }
+
+    /** "걸어서", 휠체어면 "휠체어로" */
+    static String go(String mode) {
+        return "wheelchair".equals(mode) ? "휠체어로" : "걸어서";
+    }
+
     /** recommend_trip 결과를 말로 */
     static String trip(Turn t) {
         TripRecommender.Plan plan = t.plan;
@@ -29,14 +51,20 @@ final class Sentences {
         if (!walk && (w.rain() || w.heat() || w.cold() || w.dustBad())) {
             sb.append("오늘은 ").append(TripScorer.weatherWord(ctx(w))).append(" 대중교통을 추천해요. ");
         }
+        boolean heavy = "wheelchair".equals(mode) || "senior".equals(mode);
+        boolean bad = w.rain() || w.heat() || w.cold() || w.dustBad();
         if (walk) {
-            sb.append(dest).append("까지 걸어서 ").append(best.minutes()).append("분이에요.");
+            sb.append(dest).append("까지 ").append(go(mode)).append(' ').append(best.minutes()).append("분이에요.");
             if ("wheelchair".equals(mode)) {
-                sb.append(" 휠체어로 못 지나는 곳과 확인된 턱을 피한 길이에요.");
+                sb.append(" 휠체어가 못 지나는 곳과 확인된 턱을 피한 길이에요.");
+            }
+            if (bad && heavy && plan.scored().others().stream().noneMatch(o -> "transit".equals(o.type()))) {
+                sb.append(" 지금은 버스 길을 찾지 못해서 ").append(go(mode).equals("휠체어로") ? "휠체어로 가는" : "걷는")
+                        .append(" 길을 알려 드려요.");
             }
         } else {
             String how = best.summary().replaceAll(", \\d+분$", "");
-            sb.append(dest).append("까지 ").append(how).append("(으)로 ").append(best.minutes()).append("분이에요.");
+            sb.append(dest).append("까지 ").append(Josa.ro(how)).append(' ').append(best.minutes()).append("분이에요.");
             if (best.firstBus() != null) {
                 sb.append(" ").append(best.firstBus()).append("에 와요.");
             }
@@ -68,8 +96,12 @@ final class Sentences {
         }
         if (t.convo.bodyNote() != null) {
             sb.append(" 몸이 불편하시다고 해서 덜 걷는 쪽을 먼저 봤어요. 힘드시면 '쉴 곳 어디 있어'라고 물어보세요.");
+        } else if ("senior".equals(mode) && walk && best.rest() != null && best.rest() > 0) {
+            sb.append(" 가는 길에 쉴 곳(쉼터·화장실)이 ").append(best.rest()).append("곳 있어요. 힘드시면 쉬어 가세요.");
         } else if ("senior".equals(mode) && walk) {
             sb.append(" 힘드시면 중간에 쉬어 가세요. '쉴 곳 어디 있어'라고 물으시면 가까운 쉼터를 알려 드려요.");
+        } else if ("senior".equals(mode)) {
+            sb.append(" 정류장까지 걷다가 힘드시면 '쉴 곳 어디 있어'라고 물어보세요.");
         }
         sb.append(weatherTail(w));
         return sb.toString().strip();

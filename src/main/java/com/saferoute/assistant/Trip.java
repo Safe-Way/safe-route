@@ -20,8 +20,16 @@ import com.saferoute.route.api.RouteResult;
  * @param events    걷는 길이 지나는 행사·돌발 (원일님 엔진 routes[].events). 대중교통은 빈 목록
  * @param lowFloor  대중교통 첫 버스 중 곧 오는 저상버스가 있으면 true
  * @param firstBus  대중교통 첫 버스 번호와 몇 분 뒤 (예: "30번 5분 뒤"). 모르면 null
+ * @param rest      걷는 길 주변 지금 쉴 수 있는 곳(쉼터·화장실) 수 (원일님 counts.rest). 대중교통·모르면 null
  */
 public record Trip(String type, int minutes, int walkM, int transfers, int reports, String summary,
                    Map<String, Object> request, String route, Map<String, Integer> diff,
-                   List<RouteResult.Event> events, boolean lowFloor, String firstBus) {
+                   List<RouteResult.Event> events, boolean lowFloor, String firstBus, Integer rest) {
+
+    public Trip(String type, int minutes, int walkM, int transfers, int reports, String summary,
+                Map<String, Object> request, String route, Map<String, Integer> diff,
+                List<RouteResult.Event> events, boolean lowFloor, String firstBus) {
+        this(type, minutes, walkM, transfers, reports, summary, request, route, diff, events, lowFloor, firstBus,
+                null);
+    }
 }

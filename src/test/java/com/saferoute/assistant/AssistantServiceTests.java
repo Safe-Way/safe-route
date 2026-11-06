@@ -238,7 +238,7 @@ class AssistantServiceTests {
         when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
                 List.of()), WeatherDust.unknown(), false, null));
         AssistantReply r = ask(A, "문화전당 가자", null);
-        assertThat(r.say()).contains("걸어서", "턱", "휠체어").doesNotContain("계단");
+        assertThat(r.say()).contains("휠체어로 9분", "턱").doesNotContain("계단", "걸어서");
     }
 
     @Test
@@ -254,6 +254,80 @@ class AssistantServiceTests {
                 new AssistantRequest.Test("clear", "월 08:20", null), null));
         assertThat(r.say()).contains("8시 반", "문화전당");
         assertThat(r.tools()).containsExactly("get_my_info", "recommend_trip");
+    }
+
+    // ───── 비서 점검 11/06 (학교 서버 33개 중 실패한 것) ─────
+
+    void seniorUser() {
+        when(memory.profile(A)).thenReturn(new Profile("senior", null, false, null, null, "senior", 1, 1, true, true));
+    }
+
+    @Test
+    void eval5StreetNameGoesToThatStreetNotShops() {
+        wheelchairUser();
+        when(kakao.search(eq("충장로"), any(), any())).thenReturn(List.of(
+                new Place("1", "충장당구장", "광주 동구 충장로 100", 35.1490, 126.9150, 300),
+                new Place("2", "노래방 충장점", "광주 동구 충장로 120", 35.1500, 126.9160, 350),
+                new Place("3", "충장사진관", "광주 동구 충장로3가 12", 35.1510, 126.9170, 400)));
+        Trip walk = new Trip("walk", 9, 600, 0, 0, "휠체어로 9분, 600m", Map.of(), "safe", Map.of(), List.of(), false,
+                null);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of()), WeatherDust.unknown(), false, null));
+        AssistantReply r = ask(A, "충장로 쪽으로 가 줘", null);
+        assertThat(r.say()).startsWith("충장로까지 휠체어로 9분이에요.").doesNotContain("당구장");
+        assertThat(r.tools()).containsExactly("search_place", "recommend_trip");
+        ArgumentCaptor<TripRecommender.Ask> a = ArgumentCaptor.forClass(TripRecommender.Ask.class);
+        verify(trips).recommend(a.capture());
+        assertThat(a.getValue().dest().lat()).isCloseTo(35.15, org.assertj.core.data.Offset.offset(0.0001));
+    }
+
+    @Test
+    void eval11SeniorWalkTellsRestCount() {
+        seniorUser();
+        when(kakao.search(eq("남광주시장"), any(), any())).thenReturn(List.of(
+                new Place("1", "남광주시장", "광주 동구 천변우로", 35.139, 126.929, null)));
+        Trip walk = new Trip("walk", 15, 900, 0, 0, "걸어서 15분, 900m", Map.of(), "safe", Map.of(), List.of(), false,
+                null, 3);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of()), WeatherDust.unknown(), false, null));
+        AssistantReply r = ask(A, "남광주시장 가자", null);
+        assertThat(r.say()).contains("가는 길에 쉴 곳(쉼터·화장실)이 3곳 있어요");
+    }
+
+    @Test
+    void eval11SeniorBusStillMentionsRest() {
+        seniorUser();
+        when(kakao.search(eq("남광주시장"), any(), any())).thenReturn(List.of(
+                new Place("1", "남광주시장", "광주 동구 천변우로", 35.139, 126.929, null)));
+        Trip bus = new Trip("transit", 15, 200, 0, 0, "버스 59번, 15분", Map.of(), null, Map.of(), List.of(), false,
+                null);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(bus, List.of(),
+                List.of()), WeatherDust.unknown(), false, null));
+        AssistantReply r = ask(A, "남광주시장 가자", null);
+        assertThat(r.say()).contains("버스 59번으로 15분이에요", "쉴 곳").doesNotContain("(으)");
+    }
+
+    @Test
+    void eval1RainyWheelchairWithoutBusSaysSo() {
+        wheelchairUser();
+        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+                new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
+        Trip walk = new Trip("walk", 22, 1500, 0, 0, "휠체어로 22분, 1,500m", Map.of(), "safe", Map.of(), List.of(),
+                false, null);
+        WeatherDust rain = new WeatherDust(true, false, false, 12.0, true, false, true);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of()), rain, false, null));
+        AssistantReply r = ask(A, "문화전당 가야 해", null);
+        assertThat(r.say()).contains("지금은 버스 길을 찾지 못해서 휠체어로 가는 길을 알려 드려요");
+    }
+
+    @Test
+    void polishFixesJosaPoliteEndingAndWheelchairWords() {
+        assertThat(Sentences.polish("엘리베이터 육교을(를) 지도에 보여 드리겠어요. 걸어서 22분이에요.", "wheelchair"))
+                .isEqualTo("엘리베이터 육교를 지도에 보여 드릴게요. 휠체어로 22분이에요.");
+        assertThat(Sentences.polish("'충장로'(으)로 3곳, 지팡이(으)로, 장애인 화장실을(를), 카페이(가)", "adult"))
+                .isEqualTo("'충장로'로 3곳, 지팡이로, 장애인 화장실을, 카페가");
+        assertThat(Sentences.polish("걸어서 12분이에요.", "senior")).isEqualTo("걸어서 12분이에요.");
     }
 
     @Test
@@ -285,7 +359,7 @@ class AssistantServiceTests {
         when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
                 List.of()), WeatherDust.unknown(), false, null));
         AssistantReply second = ask(A, "응", first.conversationId());
-        assertThat(second.say()).contains("충장약국까지 걸어서 5분");
+        assertThat(second.say()).contains("충장약국까지 휠체어로 5분");
     }
 
     @Test
@@ -311,7 +385,7 @@ class AssistantServiceTests {
                 List.of()), WeatherDust.unknown(), false, null));
         AssistantReply third = service.answer(new AssistantRequest(A, "", LAT, LON, null, second.conversationId(),
                 "0", null, null, null));
-        assertThat(third.say()).contains("월계수식당까지 걸어서 4분");
+        assertThat(third.say()).contains("월계수식당까지 휠체어로 4분");
     }
 
     @Test

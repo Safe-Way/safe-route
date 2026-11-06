@@ -51,7 +51,7 @@ final class RuleReader {
         }
         List<String> kept = new ArrayList<>();
         for (String word : raw.strip().split("\\s+")) {
-            if (word.isEmpty() || isModeWord(word) || isFiller(word)) {
+            if (word.isEmpty() || isModeWord(word) || isFiller(word) || isFiller(stripParticle(word))) {
                 continue;
             }
             if (kept.isEmpty() && WITH.matcher(word).matches() && word.length() > 1 && isPersonish(word)) {
@@ -82,7 +82,8 @@ final class RuleReader {
     }
 
     private static boolean isFiller(String w) {
-        return List.of("나", "저", "우리", "지금", "오늘", "같이", "좀", "빨리", "길", "알려줘", "알려", "주세요", "싶어", "싶어요")
+        return List.of("나", "저", "우리", "지금", "오늘", "같이", "좀", "빨리", "길", "알려줘", "알려", "주세요", "싶어", "싶어요",
+                "쪽", "쪽으로", "쪽에", "방향", "방면")
                 .contains(w);
     }
 

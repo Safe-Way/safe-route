@@ -28,6 +28,8 @@ public class TripScorer {
     static final int EVENT_MIN = 10;
     /** 평소 대중교통을 좋아하는 사람(prefer_transit 2)이면 대중교통을 몇 분만큼 좋게 볼지, 걷기를 좋아하면(0) 반대 */
     static final int HABIT_MIN = 3;
+    /** 휠체어·어르신이 날씨 속에 밖에 있는 시간을 몇 배로 볼지 (비 오는 날 휠체어 22분 걷기를 고르던 문제, 점검 1·30) */
+    static final int HEAVY_WEATHER_X = 2;
     static final int MAX_REASONS = 3;
 
     /**
@@ -56,11 +58,16 @@ public class TripScorer {
 
     double points(Trip t, Context ctx) {
         double p = t.minutes();
+        boolean heavy = "senior".equals(ctx.mode()) || "wheelchair".equals(ctx.mode());
         if (ctx.badWeather() || ctx.bodyNote() != null) {
-            p += (double) t.walkM() / OUTSIDE_SPEED; // 날씨 속·아픈 몸으로 걷는 시간을 한 번 더 센다
+            // 날씨 속·아픈 몸으로 걷는 시간을 한 번 더 센다. 휠체어·어르신이 날씨 속이면 그만큼 더
+            double outside = (double) t.walkM() / OUTSIDE_SPEED;
+            p += heavy && ctx.badWeather() ? outside * HEAVY_WEATHER_X : outside;
+        }
+        if ("wheelchair".equals(ctx.mode()) && t.lowFloor()) {
+            p -= HABIT_MIN; // 휠체어는 곧 오는 저상버스가 있으면 조금 더 좋게
         }
         p += t.reports() * REPORT_MIN;
-        boolean heavy = "senior".equals(ctx.mode()) || "wheelchair".equals(ctx.mode());
         p += t.transfers() * TRANSFER_MIN * (heavy ? 2 : 1);
         p += avoided(t).size() * EVENT_MIN;
         if (ctx.preferTransit() != null && ctx.preferTransit() != 1) {
@@ -109,7 +116,7 @@ public class TripScorer {
             out.add("엘리베이터로 들어갈 수 있는 역만");
         }
         if (walk && other != null && best.minutes() < other.minutes()) {
-            out.add("걸어서 " + best.minutes() + "분으로 " + (other.minutes() - best.minutes()) + "분 더 빨라요");
+            out.add(Sentences.go(ctx.mode()) + " " + best.minutes() + "분으로 " + (other.minutes() - best.minutes()) + "분 더 빨라요");
         }
         if (walk && best.reports() == 0) {
             int avoidedReports = all.stream().filter(t -> "walk".equals(t.type())).mapToInt(Trip::reports).max().orElse(0);
