@@ -34,7 +34,8 @@ public record RoadEdge(long id, long from, long to, double lengthM, String highw
      * 길 하나의 성질 (road_edge·edge_stat에서 읽은 계단·확인된 턱·못 지나는 육교).
      *
      * @param values         성질별 값. 1 = 확실히 해당, 없거나 모르면 0
-     * @param dataGap        그 지역에 시설 데이터가 부족한 길인지. 감점에는 쓰지 않고 "확인 안 됨" 표시에만 쓴다 (NFR-04)
+     * @param dataGap        그 지역에 시설 데이터가 부족한 길인지 (edge_stat.data_gap). 감점에도 응답에도 쓰지 않는다
+     *                       (2026-11-06 데이터 부족 알림을 없앰)
      * @param wheelchairRamp 계단의 휠체어 경사로 (road_edge.wheelchair_ramp). true 있음, false 없음, null 모름
      */
     public record EdgePenalty(Map<Penalty, Double> values, boolean dataGap, Boolean wheelchairRamp) {

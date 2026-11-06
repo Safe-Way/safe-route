@@ -2,6 +2,7 @@ package com.saferoute.assistant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -77,7 +78,7 @@ class AssistantServiceTests {
     }
 
     AssistantReply ask(String guest, String text, String convo) {
-        return service.answer(new AssistantRequest(guest, text, LAT, LON, null, convo, null, null, null));
+        return service.answer(new AssistantRequest(guest, text, LAT, LON, null, convo, null, null, null, null));
     }
 
     @Test
@@ -86,6 +87,29 @@ class AssistantServiceTests {
         assertThat(r.ask()).contains("어떻게 다니세요");
         assertThat(r.tools()).containsExactly("get_my_info");
         assertThat(r.choices()).extracting(AssistantReply.Choice::label).contains("휠체어");
+    }
+
+    @Test
+    void appModeSkipsSetupWhenServerDoesNotKnowMe() {
+        String guest = "00000000-0000-4000-8000-000000000998";
+        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+                new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
+        Trip walk = new Trip("walk", 12, 700, 0, 0, "걸어서 12분, 700m", Map.of(), "safe", Map.of(), List.of(), false,
+                null);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of()), WeatherDust.unknown(), false, null));
+        AssistantReply r = service.answer(new AssistantRequest(guest, "문화전당 가자", LAT, LON, null, null, null, null,
+                null, "senior"));
+        assertThat(r.say()).doesNotContain("처음 오셨네요");
+        assertThat(r.tools()).contains("recommend_trip");
+        verify(trips).recommend(argThat(a -> "senior".equals(a.mode())));
+    }
+
+    @Test
+    void unknownAppModeStillAsksSetup() {
+        AssistantReply r = service.answer(new AssistantRequest("00000000-0000-4000-8000-000000000997", "길 좀 찾아 줘",
+                LAT, LON, null, null, null, null, null, "flying"));
+        assertThat(r.ask()).contains("어떻게 다니세요");
     }
 
     @Test
@@ -227,7 +251,7 @@ class AssistantServiceTests {
         when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
                 List.of()), WeatherDust.unknown(), false, null));
         AssistantReply r = service.answer(new AssistantRequest(A, "(오늘 제안)", LAT, LON, null, null, null, null,
-                new AssistantRequest.Test("clear", "월 08:20", null)));
+                new AssistantRequest.Test("clear", "월 08:20", null), null));
         assertThat(r.say()).contains("8시 반", "문화전당");
         assertThat(r.tools()).containsExactly("get_my_info", "recommend_trip");
     }
@@ -240,7 +264,7 @@ class AssistantServiceTests {
         when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
                 List.of()), WeatherDust.unknown(), false, null));
         AssistantReply r = service.answer(new AssistantRequest(A, "집에 가자", LAT, LON, null, null, null,
-                List.of(new AssistantRequest.Favorite("집", 35.15, 126.91)), null));
+                List.of(new AssistantRequest.Favorite("집", 35.15, 126.91)), null, null));
         assertThat(r.say()).contains("집").doesNotContain("주소를 알려");
         verify(kakao, never()).search(anyString(), any(), any());
     }
