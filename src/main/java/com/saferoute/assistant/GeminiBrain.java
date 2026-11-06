@@ -41,7 +41,9 @@ class GeminiBrain {
             너는 광주의 보행 길찾기 앱 '세잎지도'의 길찾기 비서다. 어린이·어르신·휠체어 사용자가 안전하게 걷도록 돕는다.
             [도구]
             - 목적지를 말하면 search_place 로 찾고, 하나로 정해지면 recommend_trip 을 한 번만 부른다. 경로·날씨·행사는 recommend_trip 안에 다 들어 있다.
-            - 가까운 화장실·쉴 곳 등은 find_nearby. 모드는 묻지 말고 서버가 정한 지금 모드를 쓴다.
+            - 음식점·카페·약국 같은 가게는 search_place 로 찾는다 ("가까운 카페" → query "카페"). 찾은 곳이 여럿이면 서버가 이름과 거리를 버튼으로 보여 주니, 이름을 늘어놓지 말고 "어디로 갈까요?"처럼 짧게 묻는다.
+            - 무엇을 먹을지 정하지 않았으면 "추천 기능 없어요"라고 거절하지 말고 어떤 종류(국밥·카페·분식 등)가 좋은지 묻는다.
+            - 가까운 화장실·쉼터·경찰서·편의점·비상벨·지하철역·지킴이집만 find_nearby. 카페·음식점은 find_nearby 가 아니라 search_place. 모드는 묻지 말고 서버가 정한 지금 모드를 쓴다.
             - 사용자에 대해 되묻기 전에 get_my_info 로 이미 아는지 본다. 처음 쓰는 사람이면 어떻게 다니는지(걸어서·지팡이·휠체어·유모차) 한 번에 하나씩 묻는다.
             - 몸 상태가 잠깐 바뀌면(다쳐서 휠체어) 언제까지인지 꼭 묻고 update_my_info(temp_mode, temp_until). 모른다고 하면 오늘부터 7일로 한다.
             - 지도에 보일 것을 바꾸면 set_map_layers, 길의 문제를 말하면 report_problem.
@@ -97,7 +99,7 @@ class GeminiBrain {
                 }
             }
             if (calls.isEmpty()) {
-                return finish(t, text.toString().strip(), facts.toString());
+                return withPlaceButtons(t, finish(t, text.toString().strip(), facts.toString()));
             }
             contents.add(json.convertValue(content, Map.class));
             List<Object> responses = new ArrayList<>();
@@ -119,6 +121,23 @@ class GeminiBrain {
             contents.add(Map.of("role", "user", "parts", responses));
         }
         return null;
+    }
+
+    /**
+     * 고를 장소가 남아 있으면(search_place 결과가 여럿) 버튼을 붙인다 (앱 요청 11/06: 찾은 곳은 늘 버튼으로).
+     * 제미나이 말이 검사에서 떨어졌으면 규칙 문장으로 묻는다.
+     */
+    static Outcome withPlaceButtons(Turn t, Outcome o) {
+        List<Place> cand = t.convo.candidates();
+        if (!"place".equals(t.convo.asked()) || cand.isEmpty()) {
+            return o;
+        }
+        List<AssistantReply.Choice> buttons = AssistantTools.placeChoices(t, cand);
+        if (o == null) {
+            return Outcome.ask(cand.size() + "곳을 찾았어요. 어디로 갈까요?", buttons);
+        }
+        String q = o.ask() != null ? o.ask() : o.say();
+        return new Outcome(o.say(), q, buttons, o.ai());
     }
 
     /** 제미나이 마지막 말을 검사한다. 숫자가 도구 결과에 없거나 하지 않은 일을 했다고 하면 규칙 문장으로 */
@@ -200,7 +219,8 @@ class GeminiBrain {
                 r.put("status", f.status());
                 List<String> names = new ArrayList<>();
                 for (Place p : f.places()) {
-                    names.add(p.address() == null ? p.name() : p.name() + " (" + p.address() + ")");
+                    names.add(t.located() ? AssistantTools.label(t, p).replace(" · ", " (") + ")"
+                            : p.address() == null ? p.name() : p.name() + " (" + p.address() + ")");
                 }
                 r.put("places", names);
                 if ("outside".equals(f.status())) {

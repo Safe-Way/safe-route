@@ -32,8 +32,15 @@ public record Conversation(List<Turn> turns, Place destination, List<Place> cand
     public record Turn(String role, String text) {
     }
 
-    /** 장소 하나 */
-    public record Place(String name, String address, double lat, double lon) {
+    /**
+     * 장소 하나.
+     *
+     * @param distanceM 장소 검색이 알려 준 지금 위치에서의 거리(m). 모르면 null (버튼 글에 씀)
+     */
+    public record Place(String name, String address, double lat, double lon, Integer distanceM) {
+        public Place(String name, String address, double lat, double lon) {
+            this(name, address, lat, lon, null);
+        }
     }
 
     /**
