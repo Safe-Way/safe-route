@@ -47,6 +47,8 @@ public class FacilityCounter {
             case CCTV -> radius.cctv();
             case BELL -> radius.bell();
             case HELP -> radius.help();
+            case REST -> radius.rest();
+            case SCHOOL -> radius.school();
         };
     }
 

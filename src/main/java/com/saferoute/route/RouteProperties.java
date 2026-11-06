@@ -79,7 +79,8 @@ public record RouteProperties(
     public record DarkStretch(double mergeGapM, double minM) {
     }
 
-    public record CountRadius(double light, double cctv, double bell, double help) {
+    /** 경로에서 이 거리 안이면 "지나는 시설"로 센다. rest·school은 노인·어린이 낮 경로 기준과 같은 반경 */
+    public record CountRadius(double light, double cctv, double bell, double help, double rest, double school) {
     }
 
     /**
