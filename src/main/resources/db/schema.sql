@@ -1123,6 +1123,29 @@ CREATE TABLE IF NOT EXISTS guardian_share (
     KEY idx_guardian_share_ended (ended_at)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '보호자 실시간 위치 공유 (걷는 동안만, 마지막 한 점)';
 
+-- ---------------------------------------------------------------- 비서가 못 한 요청 (030)
+
+-- 도구가 없어 못 한 요청을 주제별로 모아 다음 기능 후보로. 게스트 번호·위치·시각은 남기지 않음
+CREATE TABLE IF NOT EXISTS assistant_unmet (
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    asked_on    DATE         NOT NULL COMMENT '요청한 날짜 (시각은 남기지 않음)',
+    mode        VARCHAR(20)  NULL     COMMENT '그때 모드',
+    text        VARCHAR(200) NOT NULL COMMENT '요청 말 (전화번호·이름처럼 보이는 것은 지운 것)',
+    kind        VARCHAR(20)  NOT NULL COMMENT 'no_tool 할 도구가 없음, off_topic 길찾기와 상관없음, not_understood 못 알아들음',
+    topic       VARCHAR(30)  NULL     COMMENT '비서가 붙인 짧은 주제 (택시, 병원 예약, 약국 영업시간 등). 같은 주제끼리 셈',
+    offered     VARCHAR(100) NULL     COMMENT '대신 제안한 것 (예: 가까운 택시 타는 곳)',
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_assistant_unmet_topic (topic, asked_on)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '비서가 못 한 요청 (다음 기능 후보)';
+
+-- 다음에 만들 도구 후보: 주제별로 몇 번 나왔나
+CREATE OR REPLACE VIEW assistant_unmet_top AS
+SELECT topic, kind, COUNT(*) AS times, MIN(asked_on) AS first_on, MAX(asked_on) AS last_on
+FROM assistant_unmet
+WHERE topic IS NOT NULL
+GROUP BY topic, kind;
+
 -- ---------------------------------------------------------------- 전체 보기
 
 -- 모든 시설을 한 번에 볼 때 쓰는 뷰. 종류별 표의 공통 칸만 이어 붙인다.

@@ -1,4 +1,4 @@
-"""비서 시험 질문 30개(docs/assistant/eval_questions.json)를 비서 창구에 보내고 답을 점검한다 (A파트 매일 점검).
+"""비서 시험 질문 35개(docs/assistant/eval_questions.json)를 비서 창구에 보내고 답을 점검한다 (A파트 매일 점검).
 
 - 시연 게스트(scripts/seed_demo.py)로 보낸다: A = …de01 휠체어, B = …de02 어르신, C = …de03 임시 휠체어.
   new는 매번 새 무작위 번호(처음 쓰는 사람).
