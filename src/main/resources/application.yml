@@ -37,8 +37,9 @@ api-keys:
 
 # 길찾기 비서 (C 파트, POST /api/assistant). 제미나이 키(GEMINI_API_KEY)가 없으면 규칙만으로 답한다
 assistant:
-  gemini-model: gemini-2.5-flash
-  timeout-ms: 6000
+  # 모델은 .env의 GEMINI_MODEL로 바꿀 수 있다 (새 AI Studio 키는 3 이후 모델을 쓴다)
+  gemini-model: ${GEMINI_MODEL:}
+  timeout-ms: 10000
   report-near-m: 30
 
 # 대중교통 길찾기 (FR-37, C 파트). ODsay 는 하루 부를 수 있는 수가 적어 서버가 직접 세고 넘으면 부르지 않는다.
