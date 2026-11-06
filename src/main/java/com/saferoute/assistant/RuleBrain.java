@@ -82,12 +82,80 @@ class RuleBrain {
                 return Outcome.say("천만에요. 또 가실 곳이 있으면 언제든 말씀해 주세요.");
             }
         }
+        Outcome food = food(t, f);
+        if (food != null) {
+            return food;
+        }
         if (f.contains("뭐할수있") || f.contains("뭘할수있") || f.contains("무슨기능") || f.equals("도움말")) {
             return Outcome.ask("길 찾기, 가까운 화장실·쉴 곳 찾기, 길 문제 신고, 지도에 보일 것 바꾸기를 할 수 있어요. 무엇을 할까요?",
                     List.of(new Choice("문화전당 가자", "문화전당 가자"), new Choice("화장실 어디야", "화장실 어디야"),
                             new Choice("여기 공사 중이야", "여기 공사 중이야")));
         }
         return null;
+    }
+
+    /** 먹을 곳을 찾을 때 고르는 종류 버튼 (value 는 장소 검색어) */
+    static final List<Choice> FOOD_CHOICES = List.of(new Choice("국밥", "국밥"), new Choice("카페", "카페"),
+            new Choice("분식", "분식"), new Choice("한식", "한식"), new Choice("중식", "중국집"));
+    /** 먹을 곳을 찾는 말 */
+    private static final List<String> FOOD_WORDS = List.of("점심", "저녁", "아침", "밥먹", "먹을", "먹으러", "맛집",
+            "식당", "배고", "끼니", "간식", "커피마시");
+    /** 이미 종류를 말했으면 되묻지 않고 장소 검색으로 간다 */
+    private static final List<String> FOOD_KINDS = List.of("국밥", "카페", "커피", "분식", "김밥", "떡볶이", "한식",
+            "중식", "중국집", "짜장", "짬뽕", "일식", "초밥", "돈가스", "국수", "냉면", "칼국수", "치킨", "피자", "햄버거",
+            "빵", "베이커리", "죽", "백반", "고기", "삼겹살", "갈비", "순대", "설렁탕", "편의점", "패스트푸드", "양식");
+
+    /**
+     * "점심 먹을 데 추천해 줘" → 거절하지 않고 종류를 버튼으로 되묻는다 (앱 요청 11/06).
+     * 종류를 이미 말했으면 null (장소 검색으로).
+     */
+    Outcome food(Turn t, String flat) {
+        boolean eat = FOOD_WORDS.stream().anyMatch(flat::contains);
+        String kind = FOOD_KINDS.stream().filter(flat::contains).findFirst().orElse(null);
+        if (kind != null && !"편의점".equals(kind)
+                && (eat || AssistantTools.wantsNear(t.text) || flat.contains("어디"))) {
+            // "가까운 카페", "국밥 먹으러 가자" → AI에 맡기지 않고 가까운 3곳을 버튼으로 (AI가 편의점으로 잘못 고르는 일 막기)
+            return nearKind(t, kind);
+        }
+        if (!eat || kind != null) {
+            return null;
+        }
+        t.convo = t.convo.asked("food");
+        return Outcome.ask("어떤 걸 드시고 싶으세요? 고르시면 가까운 곳을 찾아 드릴게요.", FOOD_CHOICES);
+    }
+
+    /** 먹을 종류를 고른 답 → 가까운 곳 3곳을 버튼으로 */
+    private Outcome foodKind(Turn t) {
+        t.convo = t.convo.asked(null);
+        String kind = t.req.choice() != null && !t.req.choice().isBlank() ? t.req.choice().strip() : null;
+        if (kind == null) {
+            String flat = t.text.replace(" ", "");
+            for (String k : FOOD_KINDS) {
+                if (flat.contains(k)) {
+                    kind = k;
+                    break;
+                }
+            }
+        }
+        if (kind == null) {
+            return run(t);
+        }
+        return nearKind(t, kind);
+    }
+
+    /** 가게 종류로 가까운 3곳을 찾아 버튼으로 */
+    private Outcome nearKind(Turn t, String kind) {
+        if (!t.located()) {
+            return Outcome.ask("지금 계신 곳을 알아야 가까운 곳을 찾을 수 있어요. 위치 켜기를 눌러 주세요.");
+        }
+        String word = "중식".equals(kind) ? "중국집" : kind;
+        AssistantTools.Found f = tools.searchKind(t, word);
+        return switch (f.status()) {
+            case "choose" -> Outcome.ask("가까운 " + word + " " + f.places().size() + "곳이에요. 어디로 갈까요?",
+                    AssistantTools.placeChoices(t, f.places()));
+            case "error" -> Outcome.ask("지금은 장소 검색이 잘 안 돼요. 잠시 뒤에 다시 말씀해 주세요.");
+            default -> Outcome.ask("가까운 곳에서 " + Josa.iGa(word) + " 안 보여요. 다른 걸 골라 보시겠어요?", FOOD_CHOICES);
+        };
     }
 
     // ───────────────────────── 정해진 흐름 (AI가 있어도 규칙으로) ─────────────────────────
@@ -166,6 +234,7 @@ class RuleBrain {
             case "elevator" -> elevator(t);
             case "place" -> place(t);
             case "go_near" -> goNear(t);
+            case "food" -> foodKind(t);
             default -> null;
         };
     }
@@ -307,13 +376,17 @@ class RuleBrain {
             if (!t.located()) {
                 return Outcome.ask("지금 계신 곳을 알아야 찾을 수 있어요. 위치 켜기를 눌러 주세요.");
             }
-            AssistantTools.Found f = tools.searchNear(t, other);
+            AssistantTools.Found f = tools.searchKind(t, other);
+            if ("error".equals(f.status())) {
+                return Outcome.ask("지금은 장소 검색이 잘 안 돼요. 잠시 뒤에 다시 말씀해 주세요.");
+            }
             if (f.places().isEmpty()) {
                 return Outcome.ask("가까운 " + other + "을(를) 찾지 못했어요. 다른 이름으로 말씀해 주시겠어요?");
             }
-            Place p = f.places().get(0);
-            return Outcome.ask("가까운 " + Josa.eun(other) + " " + p.name()
-                    + (p.address() == null ? "" : "(" + p.address() + ")") + "이에요. 그리로 안내할까요?", YES_NO_GO);
+            // 찾은 곳은 늘 버튼으로 (앱 요청 11/06). 가장 가까운 곳을 말로도 알려 줌
+            List<Choice> buttons = AssistantTools.placeChoices(t, f.places());
+            return Outcome.ask("가까운 " + Josa.eun(other) + " " + buttons.get(0).label().replace(" · ", ", ")
+                    + "예요. 어디로 갈까요?", buttons);
         }
         // 날씨
         if (flat.contains("날씨") || flat.contains("비와") || flat.contains("비오") || flat.contains("미세먼지")) {
@@ -340,7 +413,7 @@ class RuleBrain {
                 case "outside":
                     return Outcome.say(Josa.eun("'" + f.places().get(0).name() + "'") + " 광주 밖이에요. 지금은 광주 안에서만 길을 안내해요.");
                 case "choose":
-                    return choosePlace(dest, f.places());
+                    return choosePlace(t, dest, f.places());
                 default:
                     break;
             }
@@ -525,7 +598,9 @@ class RuleBrain {
                     break;
                 }
             }
-            if (picked == null && (t.text.startsWith("첫") || t.text.startsWith("1"))) {
+            if (picked == null && (t.text.startsWith("첫") || t.text.startsWith("1")
+                    || Boolean.TRUE.equals(yesNo(t.text, c)))) {
+                // "응" = 말로 알려 준 첫째 곳 (가장 가까운 곳)
                 picked = cand.isEmpty() ? null : cand.get(0);
             }
         }
@@ -591,13 +666,9 @@ class RuleBrain {
         return String.join(", ", n);
     }
 
-    private static Outcome choosePlace(String query, List<Place> cand) {
-        List<Choice> choices = new ArrayList<>();
-        for (int i = 0; i < cand.size(); i++) {
-            Place d = cand.get(i);
-            choices.add(new Choice(String.valueOf(i), d.name() + (d.address() == null ? "" : " (" + d.address() + ")")));
-        }
-        return Outcome.ask("'" + query + "'(으)로 " + cand.size() + "곳을 찾았어요. 어디로 갈까요?", choices);
+    static Outcome choosePlace(Turn t, String query, List<Place> cand) {
+        return Outcome.ask("'" + query + "'(으)로 " + cand.size() + "곳을 찾았어요. 어디로 갈까요?",
+                AssistantTools.placeChoices(t, cand));
     }
 
     // ───────────────────────── 낱말 ─────────────────────────

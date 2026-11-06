@@ -277,6 +277,8 @@ class AssistantServiceTests {
                 new Place("1", "충장약국", "광주 동구", 35.148, 126.926, 300)));
         AssistantReply first = ask(A, "약국 어디야", null);
         assertThat(first.say()).contains("약국", "충장약국", "300m").doesNotContain("못 해요");
+        assertThat(first.choices()).extracting(AssistantReply.Choice::label)
+                .containsExactly("충장약국 · 300m", "온누리약국 · 420m");
         assertThat(first.tools()).containsExactly("search_place");
         Trip walk = new Trip("walk", 5, 300, 0, 0, "걸어서 5분, 300m", Map.of(), "safe", Map.of(), List.of(), false,
                 null);
@@ -284,6 +286,57 @@ class AssistantServiceTests {
                 List.of()), WeatherDust.unknown(), false, null));
         AssistantReply second = ask(A, "응", first.conversationId());
         assertThat(second.say()).contains("충장약국까지 걸어서 5분");
+    }
+
+    @Test
+    void lunchAskWithoutKindGetsKindButtonsThenNearestThree() {
+        wheelchairUser();
+        AssistantReply first = ask(A, "점심 먹을 데 추천해 줘", null);
+        assertThat(first.say()).doesNotContain("없어요", "못 해요");
+        assertThat(first.choices()).extracting(AssistantReply.Choice::value)
+                .containsExactly("국밥", "카페", "분식", "한식", "중식");
+        when(kakao.search(eq("국밥"), any(), any())).thenReturn(List.of(
+                new Place("1", "나주곰탕", "광주 동구", 35.150, 126.928, 620),
+                new Place("2", "월계수식당", "광주 동구", 35.149, 126.927, 250),
+                new Place("3", "부산국밥", "광주 동구", 35.151, 126.929, 480),
+                new Place("4", "먼국밥", "광주 동구", 35.160, 126.940, 1900)));
+        AssistantReply second = service.answer(new AssistantRequest(A, "", LAT, LON, null, first.conversationId(),
+                "국밥", null, null, null));
+        assertThat(second.ask()).contains("가까운 국밥 3곳");
+        assertThat(second.choices()).extracting(AssistantReply.Choice::label)
+                .containsExactly("월계수식당 · 250m", "부산국밥 · 480m", "나주곰탕 · 620m");
+        Trip walk = new Trip("walk", 4, 250, 0, 0, "걸어서 4분, 250m", Map.of(), "safe", Map.of(), List.of(), false,
+                null);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of()), WeatherDust.unknown(), false, null));
+        AssistantReply third = service.answer(new AssistantRequest(A, "", LAT, LON, null, second.conversationId(),
+                "0", null, null, null));
+        assertThat(third.say()).contains("월계수식당까지 걸어서 4분");
+    }
+
+    @Test
+    void nearCafeGoesStraightToThreeButtonsWithoutAi() {
+        wheelchairUser();
+        when(kakao.search(eq("카페"), any(), any())).thenReturn(List.of(
+                new Place("1", "먼카페", "광주 동구", 35.150, 126.928, 700),
+                new Place("2", "월계수카페", "광주 동구", 35.149, 126.927, 120)));
+        AssistantReply r = ask(A, "가까운 카페", null);
+        assertThat(r.ai()).isFalse();
+        assertThat(r.tools()).containsExactly("search_place");
+        assertThat(r.choices()).extracting(AssistantReply.Choice::label)
+                .containsExactly("월계수카페 · 120m", "먼카페 · 700m");
+        assertThat(r.place()).isNull();
+        when(kakao.search(eq("국밥"), any(), any())).thenReturn(List.of(
+                new Place("3", "부산국밥", "광주 동구", 35.151, 126.929, 480)));
+        assertThat(ask(A, "국밥 먹으러 가자", null).choices()).extracting(AssistantReply.Choice::label)
+                .containsExactly("부산국밥 · 480m");
+    }
+
+    @Test
+    void distanceWords() {
+        assertThat(AssistantTools.distanceWord(3)).isEqualTo("10m");
+        assertThat(AssistantTools.distanceWord(247)).isEqualTo("250m");
+        assertThat(AssistantTools.distanceWord(1234)).isEqualTo("1.2km");
     }
 
     @Test

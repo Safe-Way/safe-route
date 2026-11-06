@@ -92,8 +92,9 @@ public class AssistantTools {
         if (q.isEmpty()) {
             return new Found("none", List.of());
         }
-        // 1. 휴대폰의 자주 가는 곳
-        if (t.req.favorites() != null) {
+        boolean near = wantsNear(t.text);
+        // 1. 휴대폰의 자주 가는 곳 ("가까운 카페"처럼 가까운 곳을 찾을 때는 건너뜀)
+        if (!near && t.req.favorites() != null) {
             for (AssistantRequest.Favorite f : t.req.favorites()) {
                 if (f != null && f.name() != null && f.lat() != null && f.lon() != null
                         && (f.name().contains(q) || q.contains(f.name()))) {
@@ -102,7 +103,7 @@ public class AssistantTools {
             }
         }
         // 2. 다녀온 곳 (동의한 사람만 기록이 있음, 도착지는 약 100m 단위)
-        if (t.guestId != null) {
+        if (!near && t.guestId != null) {
             try {
                 List<Place> v = memory.visited(t.guestId, q);
                 if (!v.isEmpty()) {
@@ -120,35 +121,89 @@ public class AssistantTools {
             log.warn("비서 장소 검색 실패: {}", e.getMessage());
             return new Found("error", List.of());
         }
-        List<Place> cand = found.stream().limit(MAX_CANDIDATES)
-                .map(p -> new Place(p.name(), p.address(), p.lat(), p.lon())).toList();
+        List<com.saferoute.place.Place> ordered = new ArrayList<>(found);
+        if (near) {
+            ordered.sort(AssistantTools::byDistance); // "가까운 카페", "근처 국밥집" → 가까운 순
+        }
+        List<Place> cand = ordered.stream().limit(MAX_CANDIDATES)
+                .map(p -> new Place(p.name(), p.address(), p.lat(), p.lon(), p.distanceM())).toList();
         return decide(t, cand, q);
     }
 
     /**
-     * 우리 시설 목록에 없는 곳(약국, 은행 등)을 카카오에서 지금 위치 가까운 순으로 찾는다 (no_tool_policy ①).
-     * 가장 가까운 곳을 도착지 후보로 기억해서 "네"를 들으면 그리로 안내한다.
+     * 가게 종류("국밥", "카페")로 지금 위치에서 가까운 곳 3곳을 찾는다. 하나뿐이어도 고르게 한다 (버튼으로 보여 주려고).
+     * 고르면 그곳이 도착지가 된다 (asked = place).
      */
-    Found searchNear(Turn t, String what) {
+    Found searchKind(Turn t, String kind) {
         t.tools.add("search_place");
         List<com.saferoute.place.Place> found;
         try {
-            found = kakao.search(what, t.lat, t.lon);
+            found = kakao.search(kind, t.lat, t.lon);
         } catch (PlaceSearchException e) {
             log.warn("비서 장소 검색 실패: {}", e.getMessage());
             return new Found("error", List.of());
         }
         List<com.saferoute.place.Place> near = new ArrayList<>(found);
-        near.sort((a, b) -> Integer.compare(a.distanceM() == null ? Integer.MAX_VALUE : a.distanceM(),
-                b.distanceM() == null ? Integer.MAX_VALUE : b.distanceM()));
-        if (near.isEmpty()) {
-            return new Found("none", List.of());
+        near.sort(AssistantTools::byDistance);
+        List<Place> cand = near.stream().map(p -> new Place(p.name(), p.address(), p.lat(), p.lon(), p.distanceM()))
+                .filter(AssistantTools::inGwangju).limit(MAX_CANDIDATES).toList();
+        if (cand.isEmpty()) {
+            return new Found(near.isEmpty() ? "none" : "outside", List.of());
         }
-        com.saferoute.place.Place p = near.get(0);
-        String where = p.distanceM() == null ? p.address() : p.distanceM() + "m";
-        Place d = new Place(p.name(), where, p.lat(), p.lon());
-        t.convo = t.convo.withCandidates(List.of(d)).asked("go_near");
-        return new Found("found", List.of(d));
+        t.convo = t.convo.withCandidates(cand).asked("place");
+        return new Found("choose", cand);
+    }
+
+    /** "가까운", "근처", "주변" 이 들어 있으면 가까운 순으로 보여 준다 */
+    static boolean wantsNear(String text) {
+        String f = text == null ? "" : text.replace(" ", "");
+        return f.contains("가까운") || f.contains("근처") || f.contains("주변") || f.contains("가까이");
+    }
+
+    private static int byDistance(com.saferoute.place.Place a, com.saferoute.place.Place b) {
+        return Integer.compare(a.distanceM() == null ? Integer.MAX_VALUE : a.distanceM(),
+                b.distanceM() == null ? Integer.MAX_VALUE : b.distanceM());
+    }
+
+    /**
+     * 버튼 글: 위치를 알면 "월계수식당 · 250m", 모르면 "월계수식당 (주소)".
+     * 거리는 장소 검색이 준 거리, 없으면 지금 위치에서 곧게 잰 거리 (걷는 거리는 길찾기에서 따로 나옴).
+     */
+    static String label(Turn t, Place d) {
+        if (d.distanceM() != null) {
+            return d.name() + " · " + distanceWord(d.distanceM());
+        }
+        if (t.located()) {
+            return d.name() + " · " + distanceWord(straightM(t.lat, t.lon, d.lat(), d.lon()));
+        }
+        return d.name() + (d.address() == null ? "" : " (" + d.address() + ")");
+    }
+
+    /** 250m, 1.2km (m 는 10m 단위) */
+    static String distanceWord(int m) {
+        if (m < 1000) {
+            return Math.max(10, Math.round(m / 10.0) * 10) + "m";
+        }
+        return String.format(java.util.Locale.ROOT, "%.1fkm", m / 1000.0);
+    }
+
+    /** 두 점 사이 곧은 거리(m) */
+    static int straightM(double lat1, double lon1, double lat2, double lon2) {
+        double r = 6_371_000;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1))
+                * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return (int) Math.round(2 * r * Math.asin(Math.sqrt(a)));
+    }
+
+    /** 고를 후보를 버튼으로 (value = 0부터 번호) */
+    static List<AssistantReply.Choice> placeChoices(Turn t, List<Place> cand) {
+        List<AssistantReply.Choice> out = new ArrayList<>();
+        for (int i = 0; i < cand.size(); i++) {
+            out.add(new AssistantReply.Choice(String.valueOf(i), label(t, cand.get(i))));
+        }
+        return out;
     }
 
     private Found decide(Turn t, List<Place> cand, String q) {

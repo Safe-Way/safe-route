@@ -66,3 +66,7 @@ management:
   endpoint:
     health:
       show-details: never
+
+# 보호자 위치 공유 (C 파트, /api/guardian/shares, 029 표). 보호자 링크 = public-url + /s/{공유 번호}
+guardian:
+  public-url: ${GUARDIAN_PUBLIC_URL:https://safe-route.java21.net}
