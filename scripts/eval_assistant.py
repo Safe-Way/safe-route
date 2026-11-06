@@ -2,7 +2,8 @@
 
 - 시연 게스트(scripts/seed_demo.py)로 보낸다: A = …de01 휠체어, B = …de02 어르신, C = …de03 임시 휠체어.
   new는 매번 새 무작위 번호(처음 쓰는 사람).
-- 점검: expect의 말이 답(say·ask)에 모두 들어 있는지, must_not의 말이 하나도 없는지.
+- 점검: expect의 말이 답(say·ask·버튼 글자)에 모두 들어 있는지, must_not의 말이 하나도 없는지.
+  제미나이는 같은 뜻을 매번 조금 다르게 말하므로 expect에는 꼭 들어가야 하는 짧은 말만 둔다.
   서버가 응답에 tools(부른 도구 이름 목록)를 넣어 주면 expect_tools 순서도 본다(없으면 건너뜀).
 - "context": "N번 바로 뒤"인 질문은 같은 대화로 이어 보낸다(서버가 conversationId를 돌려주면 그대로 씀).
 - 날씨·시각(weather, time)은 서버가 시험용으로 받아 주면 쓴다(body의 test 칸). 안 받으면 지금 날씨로 답한다.
@@ -53,7 +54,9 @@ def post(base, body):
 
 
 def check(q, status, ans):
-    text = " ".join(str(ans.get(k) or "") for k in ("say", "ask"))
+    # 사용자가 보는 것: 말(say·ask)과 버튼 글자(choices.label, 예 "동구종로약국 · 120m")
+    labels = [str(c.get("label") or "") for c in ans.get("choices") or [] if isinstance(c, dict)]
+    text = " ".join([str(ans.get(k) or "") for k in ("say", "ask")] + labels)
     miss = [w for w in q.get("expect", []) if w not in text]
     bad = [w for w in q.get("must_not", []) if w in text]
     tools_ok = None
@@ -90,7 +93,8 @@ def main():
             convo[who] = ans["conversationId"]
         ok, miss, bad, tools_ok, text = check(q, status, ans)
         results.append({"id": q["id"], "ok": ok, "status": status, "missing": miss, "forbidden": bad,
-                        "tools_ok": tools_ok, "answer": text[:300], "question": q["text"]})
+                        "tools_ok": tools_ok, "tools": ans.get("tools"), "answer": text[:300],
+                        "question": q["text"]})
         mark = "통과" if ok else "실패"
         why = "" if ok else f"  빠진 말 {miss}" * bool(miss) + f"  없어야 할 말 {bad}" * bool(bad) + \
             ("  도구 순서 다름" if tools_ok is False else "") + (f"  HTTP {status}" if status != 200 else "")
