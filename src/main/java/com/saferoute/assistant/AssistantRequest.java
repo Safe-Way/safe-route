@@ -14,9 +14,12 @@ import java.util.List;
  * @param choice         지난번 답의 choices 버튼을 눌렀으면 그 value
  * @param favorites      휴대폰에 저장한 자주 가는 곳 (집·학교 등). 집 좌표는 휴대폰에만 있어서 앱이 보내 준다
  * @param test           시험용 날씨·시각·AI 끄기 (scripts/eval_assistant.py). 앱은 보내지 않는다
+ * @param mode           앱에서 지금 고른 모드 (adult·child·senior·wheelchair). 서버에 내 정보가 없으면 이 값을 지금 모드로 쓰고
+ *                       처음 설정 질문을 건너뛴다 (민수 요청 11/06). 내 정보가 있으면 내 정보가 먼저
  */
 public record AssistantRequest(String guestId, String text, Double lat, Double lon, String now,
-                               String conversationId, String choice, List<Favorite> favorites, Test test) {
+                               String conversationId, String choice, List<Favorite> favorites, Test test,
+                               String mode) {
 
     /** 자주 가는 곳 하나 */
     public record Favorite(String name, Double lat, Double lon) {
@@ -31,6 +34,6 @@ public record AssistantRequest(String guestId, String text, Double lat, Double l
     }
 
     static AssistantRequest empty() {
-        return new AssistantRequest(null, null, null, null, null, null, null, null, null);
+        return new AssistantRequest(null, null, null, null, null, null, null, null, null, null);
     }
 }

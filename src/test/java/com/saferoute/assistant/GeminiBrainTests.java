@@ -65,7 +65,7 @@ class GeminiBrainTests {
     }
 
     AssistantReply ask(String text) {
-        return service.answer(new AssistantRequest(A, text, 35.148, 126.926, null, null, null, null, null));
+        return service.answer(new AssistantRequest(A, text, 35.148, 126.926, null, null, null, null, null, null));
     }
 
     @Test

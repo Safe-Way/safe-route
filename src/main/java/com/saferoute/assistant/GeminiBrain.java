@@ -167,7 +167,11 @@ class GeminiBrain {
         if (p != null && p.tempActive()) {
             sb.append("(잠깐, ").append(p.tempUntil()).append("까지, 평소 ").append(p.mode()).append(')');
         }
-        sb.append(" / 처음 설정: ").append(p == null || !p.setupDone() ? "안 함" : "끝남");
+        if (p == null && t.appMode != null) {
+            sb.append(" / 처음 설정: 앱에서 모드를 골라 둠 (설정 질문 하지 말 것)");
+        } else {
+            sb.append(" / 처음 설정: ").append(p == null || !p.setupDone() ? "안 함" : "끝남");
+        }
         if (t.convo.destination() != null) {
             sb.append(" / 정해진 목적지: ").append(t.convo.destination().name());
         }
@@ -268,7 +272,11 @@ class GeminiBrain {
             }
             case "get_my_info" -> {
                 Profile p = tools.getMyInfo(t);
-                if (p == null) {
+                if (p == null && t.appMode != null) {
+                    r.put("known", false);
+                    r.put("mode_now", t.appMode);
+                    r.put("note", "앱에서 고른 모드예요. 처음 설정 질문은 하지 말고 이 모드로 도와주세요.");
+                } else if (p == null) {
                     r.put("known", false);
                     r.put("note", "처음 쓰는 사람이에요. 어떻게 다니는지(걸어서·지팡이·휠체어·유모차) 물으세요.");
                 } else {
