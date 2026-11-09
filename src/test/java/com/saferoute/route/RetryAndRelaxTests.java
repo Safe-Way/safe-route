@@ -103,7 +103,7 @@ class RetryAndRelaxTests {
     void wheelchairNeverRelaxesStairsEvenWithUnknownRamp() {
         for (Boolean ramp : new Boolean[] {null, false}) {
             RouteService s = service(new InMemoryRoadGraphSource(oneEdge(
-                    new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), false, ramp))));
+                    new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), ramp))));
 
             assertThatThrownBy(() -> s.route(request("wheelchair"))).isInstanceOfSatisfying(RouteException.class,
                     e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
@@ -113,7 +113,7 @@ class RetryAndRelaxTests {
     @Test
     void wheelchairUnpavedWithNoWayAroundSaysSo() {
         RouteResult r = service(new InMemoryRoadGraphSource(oneEdge(
-                new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0), false)))).route(request("wheelchair"));
+                new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0))))).route(request("wheelchair"));
 
         assertThat(r.explanation().text()).contains("비포장길 약 364m를 지납니다").contains("비포장을 피하는 길은 없습니다");
     }
@@ -122,7 +122,7 @@ class RetryAndRelaxTests {
     static RoadGraph unpavedOrAround(double northM) {
         double[] n = north(new double[] {126.932, LAT}, northM);
         return new RoadGraph(Map.of(1L, S, 2L, T, 3L, n), List.of(
-                edge(1, 1, 2, S, T, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0), false)),
+                edge(1, 1, 2, S, T, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0))),
                 edge(2, 1, 3, S, n, EdgePenalty.NONE), edge(3, 3, 2, n, T, EdgePenalty.NONE)));
     }
 
@@ -164,7 +164,7 @@ class RetryAndRelaxTests {
         double[] d = north(T, dNorthM);
         return new RoadGraph(Map.of(1L, S, 2L, T, 3L, p, 4L, d), List.of(
                 edge(1, 1, 2, S, T, EdgePenalty.NONE),
-                edge(2, 2, 3, T, p, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), false)),
+                edge(2, 2, 3, T, p, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0))),
                 edge(3, 3, 4, p, d, EdgePenalty.NONE)));
     }
 

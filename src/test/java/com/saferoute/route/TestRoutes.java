@@ -51,8 +51,8 @@ final class TestRoutes {
     static final double[] M_P = {126.93110, LAT};
     static final double[] T_P = {126.93220, LAT};
 
-    static final EdgePenalty DARK = new EdgePenalty(
-            Map.of(Penalty.LIGHT, 1.0, Penalty.CCTV, 1.0, Penalty.HELP, 1.0), false);
+    /** 어두운 길: 길 성질은 없고, 등이 없는 쪽이라 어둡다 (밝기는 poi로 계산) */
+    static final EdgePenalty DARK = EdgePenalty.NONE;
 
     private TestRoutes() {
     }

@@ -52,10 +52,12 @@ public final class Availability {
                 || holidays.contains(day);
         boolean inSeason = inSeason(p.seasonFrom(), p.seasonTo(), day.format(MONTH_DAY));
 
-        if (inSeason && p.openFrom() != null && !("평일".equals(p.openDays()) && offDay)) {
+        // 시간 칸이 반만 차 있으면 시간을 모르는 것으로 본다
+        if (inSeason && p.openFrom() != null && p.openTo() != null && !("평일".equals(p.openDays()) && offDay)) {
             return within(p.openFrom(), p.openTo(), now) ? Status.AVAILABLE : Status.CLOSED;
         }
-        if (p.bizFrom() != null && !("평일".equals(p.bizDays()) && offDay) && within(p.bizFrom(), p.bizTo(), now)) {
+        if (p.bizFrom() != null && p.bizTo() != null && !("평일".equals(p.bizDays()) && offDay)
+                && within(p.bizFrom(), p.bizTo(), now)) {
             return Status.AVAILABLE;
         }
         if (p.bizFrom() != null) {

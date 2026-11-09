@@ -65,9 +65,11 @@ public record RouteResult(
      * @param toM     영향 반경을 나오는 곳(m)
      * @param avoid   이 모드가 둘레를 피하는 행사·돌발이면 true(앱은 주의로), 지나도 되는 것이면 false(알림만).
      *                안전 경로에 true가 있으면 피하는 길이 우회 한도를 넘어 지나는 것이다
+     * @param near    출발·도착이 영향 범위 안이면 start·end·both (그 행사장에서 출발하거나 그리로 가는 길). 경로 중간에서만 지나면 null.
+     *                near가 있으면 "지나간다"가 아니라 "근처에서 열리고 있다"로 알린다 (2026-11-09)
      */
     public record Event(String kind, String title, String place, String message, String endsAt, int fromM, int toM,
-            boolean avoid) {
+            boolean avoid, String near) {
     }
 
     /**
@@ -117,15 +119,6 @@ public record RouteResult(
             return new Explanation(text.toString(), summary, List.copyOf(notes), extraM, extraMin, diff);
         }
 
-        /** 주의·알림을 뒤에 더한다 */
-        public Explanation with(List<Note> more) {
-            if (more.isEmpty()) {
-                return this;
-            }
-            List<Note> all = new java.util.ArrayList<>(notes);
-            all.addAll(more);
-            return of(summary, all, extraM, extraMin, diff);
-        }
     }
 
     /**

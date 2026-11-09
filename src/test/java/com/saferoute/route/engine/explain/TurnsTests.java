@@ -78,7 +78,7 @@ class TurnsTests {
         double[] f = {126.9311, 35.1399};          // B 남쪽 약 11m
         double[] g = {126.9322, 35.1399};          // F 동쪽
         RoadEdge bf = new RoadEdge(10, 2, 6, Geo.length(List.of(B, f)), "footway", List.of(B, f),
-                new EdgePenalty(Map.of(Penalty.CROSSWALK, 1.0), false));
+                new EdgePenalty(Map.of(Penalty.CROSSWALK, 1.0)));
         RoadEdge fg = edge(11, 6, 7, f, g);
         List<double[]> line = List.of(A, B, f, g);
         RoadPath p = new RoadPath(List.of(AB, bf, fg), line, AB.lengthM() + bf.lengthM() + fg.lengthM());
@@ -115,7 +115,7 @@ class TurnsTests {
         double[] k = {126.9322, 35.140036};       // j 동쪽
         RoadEdge bj = edge(20, 2, 9, B, j);
         RoadEdge jk = new RoadEdge(21, 9, 10, Geo.length(List.of(j, k)), "footway", List.of(j, k),
-                new EdgePenalty(Map.of(Penalty.CROSSWALK, 1.0), false));
+                new EdgePenalty(Map.of(Penalty.CROSSWALK, 1.0)));
         RoadPath p = new RoadPath(List.of(AB, bj, jk), List.of(A, B, j, k), AB.lengthM() + bj.lengthM() + jk.lengthM());
 
         assertThat(Turns.along(p, 0, 45, 15, 20)).isEmpty();

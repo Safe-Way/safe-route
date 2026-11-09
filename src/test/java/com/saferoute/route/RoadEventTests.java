@@ -114,8 +114,33 @@ class RoadEventTests {
         assertThat(safe.events()).singleElement().satisfies(e -> {
             assertThat(e.avoid()).isFalse();
             assertThat(e.endsAt()).isNull();
+            assertThat(e.near()).isEqualTo("end");
         });
-        assertThat(r.explanation().text()).doesNotContain("피해").endsWith("(알림: 충장축제 행사 구간을 지납니다)");
+        // "지난다"가 아니라 행사장 근처라고 한 번만 알린다 (2026-11-09)
+        assertThat(r.explanation().notes()).singleElement()
+                .isEqualTo(RouteResult.Note.info("event", "도착지 근처에서 충장축제 행사가 열리고 있어요"));
+        assertThat(r.explanation().text()).doesNotContain("피해", "구간을 지납니다");
+    }
+
+    @Test
+    void festivalNearStartOrBothEndsIsToldOnce() {
+        RoadEvent atStart = new RoadEvent(3, "행사", "충장축제", null, null, S_P[0], S_P[1], 30, null);
+        RouteResult start = route("adult", 12, atStart);
+        assertThat(start.routes().get(0).events()).singleElement().satisfies(e -> assertThat(e.near()).isEqualTo("start"));
+        assertThat(start.explanation().notes()).extracting(RouteResult.Note::text)
+                .containsExactly("출발지 근처에서 충장축제 행사가 열리고 있어요");
+
+        // 반경이 출발·도착을 모두 덮으면 한 줄
+        RoadEvent wide = new RoadEvent(4, "행사", "충장축제", null, null, M_P[0], M_P[1], 150, null);
+        RouteResult both = route("adult", 12, wide);
+        assertThat(both.explanation().notes()).extracting(RouteResult.Note::text)
+                .containsExactly("출발지와 도착지 근처에서 충장축제 행사가 열리고 있어요");
+
+        // 경로 중간에서만 지나면 지금처럼 "구간을 지납니다"
+        RouteResult middle = route("adult", 12, event("행사", "충장축제"));
+        assertThat(middle.routes().get(0).events()).singleElement().satisfies(e -> assertThat(e.near()).isNull());
+        assertThat(middle.explanation().notes()).extracting(RouteResult.Note::text)
+                .containsExactly("충장축제 행사 구간을 지납니다");
     }
 
     @Test

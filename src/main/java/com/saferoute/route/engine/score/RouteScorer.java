@@ -69,15 +69,25 @@ public class RouteScorer {
                 case LIGHT -> p -> p.kind().equals("light");
                 case CCTV -> p -> p.kind().equals("cctv");
                 case SCHOOL -> p -> p.kind().equals("school_zone");
-                case HELP -> p -> HELP_KINDS.contains(p.kind()) && (!night || nightHelp(p))
-                        && Availability.usable(p, nearby.at(), nearby.holidays());
-                case REST -> p -> REST_KINDS.contains(p.kind()) && Availability.usable(p, nearby.at(), nearby.holidays());
+                case HELP -> p -> HELP_KINDS.contains(p.kind()) && usableNow(p, night, nearby);
+                case REST -> p -> REST_KINDS.contains(p.kind()) && usableNow(p, night, nearby);
             };
             List<double[]> points = all.stream().filter(keep).map(Poi::point).toList();
             boolean alongRoad = c == Criterion.LIGHT || c == Criterion.CCTV;
             layers.put(c, new Coverage.Layer(points, radius(c, phase), alongRoad));
         }
         return Coverage.compute(graph, layers, settings.snapToRoadM(), settings.sampleM());
+    }
+
+    /**
+     * 지금 쓸 수 있는 시설인지. 도움 시설은 밤이면 {@link #nightHelp}도 보고, 도움 시설·쉼 곳은 운영 시간을 본다.
+     * 등·CCTV·보호구역은 늘 참. 경로 고르기와 응답의 시설 수(counts)가 같은 기준을 쓴다
+     */
+    public static boolean usableNow(Poi p, boolean night, Nearby nearby) {
+        if (HELP_KINDS.contains(p.kind())) {
+            return (!night || nightHelp(p)) && Availability.usable(p, nearby.at(), nearby.holidays());
+        }
+        return !REST_KINDS.contains(p.kind()) || Availability.usable(p, nearby.at(), nearby.holidays());
     }
 
     /** 밤에도 도움을 청할 수 있는 종류: 지킴이집(가게)과 건물·화장실 안 비상벨은 뺀다 */

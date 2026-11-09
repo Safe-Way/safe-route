@@ -20,10 +20,12 @@ import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteRequest.Place;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.data.PoiSource;
+import com.saferoute.route.data.PreferenceSource;
 import com.saferoute.route.data.RoadGraphSource;
 import com.saferoute.route.engine.condition.Conditions;
 import com.saferoute.route.engine.event.RoadEvent;
 import com.saferoute.route.engine.event.RoadEvents;
+import com.saferoute.route.engine.explain.ExplanationBuilder;
 import com.saferoute.route.engine.explain.RouteResultAssembler;
 import com.saferoute.route.engine.facility.Nearby;
 import com.saferoute.route.engine.geo.BBox;
@@ -42,6 +44,7 @@ import com.saferoute.situation.NightResult;
  * 경로 엔진의 입구 (요구사항 8.1). 순서만 정하고, 각 단계는 맡은 클래스가 한다.
  * <ol>
  *   <li>요청 검사 (SAME_POINT, TOO_FAR, OUT_OF_AREA)</li>
+ *   <li>모드 기준에 그 사람 선호(계단·우회 한도·쉬는 간격)를 덮기: {@link PreferenceSource}. 요청에 guestId가 있을 때만</li>
  *   <li>밤 판단: C파트 {@link NightJudge}. 어린이처럼 일몰 몇 분 전부터 밤으로 보는 모드는 여기서 앞당긴다</li>
  *   <li>주변 도로망 읽기, 출발·도착을 길에 붙이기: {@link RoadGraphSource}. 휠체어는 지날 수 있는 길로 이어진 곳에 붙인다</li>
  *   <li>주변 시설을 한 번 읽기: {@link PoiSource}. 점수·설명·지도 아이콘이 같은 목록을 쓴다</li>
@@ -77,9 +80,18 @@ public class RouteService {
     private final RouteResultAssembler assembler;
     private final RouteProperties props;
     private final Clock clock;
+    private final PreferenceSource preferences;
 
+    /** 선호를 읽지 않는 엔진 (테스트·점검 도구용) */
     public RouteService(RoadGraphSource roads, PoiSource pois, NightJudge nightJudge, RouteScorer scorer,
             RouteResultAssembler assembler, RouteProperties props, Clock clock) {
+        this(roads, pois, nightJudge, scorer, assembler, props, clock, PreferenceSource.NONE);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RouteService(RoadGraphSource roads, PoiSource pois, NightJudge nightJudge, RouteScorer scorer,
+            RouteResultAssembler assembler, RouteProperties props, Clock clock, PreferenceSource preferences) {
+        this.preferences = preferences;
         this.roads = roads;
         this.pois = pois;
         this.nightJudge = nightJudge;
@@ -108,8 +120,9 @@ public class RouteService {
         double[] start = point(req.origin());
         double[] end = point(req.destination());
         NightOption option = NightOption.from(req.night());
-        RouteProperties.Profile profile = props.profile(req.mode());
+        RouteProperties.Profile base = props.profile(req.mode());
         validate(start, end);
+        RouteProperties.Profile profile = base.personalized(preferences.find(req.guestId()));
 
         ZonedDateTime now = ZonedDateTime.now(clock).withZoneSameInstant(KOREA);
         Conditions cond = conditions(start, now, option, profile.nightLeadMin());
@@ -134,16 +147,33 @@ public class RouteService {
             throw new RouteException(RouteError.NO_ROUTE);
         }
         RouteResult result = assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(), a.nearby(),
-                a.coverage(), events, avoided::contains);
+                a.coverage(), events, a.avoided()::contains);
         if (profile.avoidUnpaved()) {
             result = withNotes(result, surfaceNotes(a.found(), profile));
         }
         return withNotes(result, a.snapNotes());
     }
 
-    /** 한 도로망에서 찾은 결과. snapNotes: 휠체어가 가장 가까운 길이 아닌 곳에 붙었을 때 주의 (없으면 빈 목록) */
+    /**
+     * 한 도로망에서 찾은 결과. snapNotes: 휠체어가 가장 가까운 길이 아닌 곳에 붙었을 때 주의 (없으면 빈 목록).
+     * avoided: 실제로 둘레를 피하려 한 행사·돌발
+     */
     private record Attempt(RouteFinder.Found found, double snapM, Nearby nearby, List<RouteResult.Note> snapNotes,
-            Coverage coverage) {
+            Coverage coverage, List<RoadEvent> avoided) {
+    }
+
+    /**
+     * 출발·도착을 붙인 길 점이 반경 안인 행사는 피하지 않는다. 그 점에 닿는 길이 모두 막혀 피하는 길을 못 찾고,
+     * 틀린 "피해 가는 길은 너무 멉니다"가 붙는다 (요청 좌표는 반경 밖이어도 붙인 점은 안일 수 있음)
+     */
+    private static List<RoadEvent> reachable(RoadGraph graph, List<RoadEvent> avoided, long from, long to) {
+        return avoided.stream().filter(e -> Geo.distance(graph.point(from), e.point()) > e.radiusM()
+                && Geo.distance(graph.point(to), e.point()) > e.radiusM()).toList();
+    }
+
+    private static java.util.function.Predicate<RoadEdge> aside(RoadGraph graph, List<RoadEvent> events) {
+        Set<Long> zone = RoadEvents.zone(graph, events);
+        return zone.isEmpty() ? null : e -> zone.contains(e.id());
     }
 
     /** 길에 붙인 곳. moved: 모든 길 기준으로 가장 가까운 곳이 아닌 곳에 붙였는지 (휠체어) */
@@ -165,11 +195,11 @@ public class RouteService {
         // 커버율은 한 번만 계산해 경로 고르기와 어두운 구간 안내(FR-31)에 같이 쓴다
         Coverage cov = scorer.coverage(graph, phase, cond.night(), nearby);
         ToDoubleFunction<RoadEdge> extra = scorer.extraCost(cov, phase);
-        Set<Long> zone = RoadEvents.zone(graph, avoided);
-        java.util.function.Predicate<RoadEdge> aside = zone.isEmpty() ? null : e -> zone.contains(e.id());
+        List<RoadEvent> av = reachable(graph, avoided, from.node(), to.node());
         try {
             return new Attempt(RouteFinder.find(graph, from.node(), to.node(), extra, profile.maxDetour(),
-                    profile::passable, profile.avoid(), aside), from.distanceM() + to.distanceM(), nearby, List.of(), cov);
+                    profile::passable, profile.avoid(), aside(graph, av)), from.distanceM() + to.distanceM(), nearby,
+                    List.of(), cov, av);
         } catch (RouteException e) {
             if (profile.exclude().isEmpty()) {
                 return null;
@@ -184,11 +214,12 @@ public class RouteService {
             if (!f.moved() && !t.moved()) {
                 return null;
             }
+            List<RoadEvent> moved = reachable(graph, avoided, f.snap().node(), t.snap().node());
             RouteFinder.Found found = RouteFinder.find(graph, f.snap().node(), t.snap().node(), extra,
-                    profile.maxDetour(), profile::passable, profile.avoid(), aside);
+                    profile.maxDetour(), profile::passable, profile.avoid(), aside(graph, moved));
             return new Attempt(found, f.snap().distanceM() + t.snap().distanceM(), nearby,
-                    java.util.stream.Stream.of(placeNote("출발점", f), placeNote("도착점", t))
-                            .flatMap(java.util.Optional::stream).toList(), cov);
+                    java.util.stream.Stream.of(placeNote("출발점", f, profile), placeNote("도착점", t, profile))
+                            .flatMap(java.util.Optional::stream).toList(), cov, moved);
         } catch (RouteException e) {
             return null;
         }
@@ -230,8 +261,13 @@ public class RouteService {
         if (notes.isEmpty()) {
             return r;
         }
-        return new RouteResult(r.conditions(), r.routes(), r.explanation().with(notes), r.facilities(),
-                r.dataQuality());
+        RouteResult.Explanation e = r.explanation();
+        List<RouteResult.Note> all = new ArrayList<>(e.notes());
+        all.addAll(notes);
+        // 주의가 생기면 "가장 짧은 길이 가장 안전한 길입니다"는 맞지 않다
+        return new RouteResult(r.conditions(), r.routes(), RouteResult.Explanation.of(
+                ExplanationBuilder.withWarnings(e.summary(), all), all, e.extraM(), e.extraMin(), e.diff()),
+                r.facilities(), r.dataQuality());
     }
 
     private static double lengthOf(com.saferoute.route.engine.search.RoadPath p,
@@ -299,10 +335,12 @@ public class RouteService {
     }
 
     /** 옆 길에 붙였으면 남은 거리를 알린다. 계단으로만 드나드는 곳이라 휠체어 길이 확인되지 않은 구간이다 */
-    private static java.util.Optional<RouteResult.Note> placeNote(String which, Placed p) {
+    private static java.util.Optional<RouteResult.Note> placeNote(String which, Placed p,
+            RouteProperties.Profile profile) {
+        String way = profile.onlyStairsExcluded() ? "계단 없이" : "휠체어로";
         return p.moved() ? java.util.Optional.of(RouteResult.Note.warn("snap",
-                "%s 근처 약 %dm는 휠체어로 이어진 길이 확인되지 않았습니다".formatted(which,
-                        Math.round(p.snap().distanceM())))) : java.util.Optional.empty();
+                "%s 근처 약 %dm는 %s 이어진 길이 확인되지 않았습니다".formatted(which,
+                        Math.round(p.snap().distanceM()), way))) : java.util.Optional.empty();
     }
 
     /** {경도, 위도} */
