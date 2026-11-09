@@ -1,5 +1,6 @@
 package com.saferoute.route.engine.graph;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -17,9 +18,15 @@ import com.saferoute.route.engine.geo.Geo;
 /** 범위 안의 보행 도로망. 노드는 OSM 번호, 길은 {@link RoadEdge} */
 public final class RoadGraph {
 
-    /** 가장 가까운 노드와 그 거리 */
+    /** 출발·도착을 붙인 길 위 노드와 그 거리. 길 중간이면 그 요청에만 있는 임시 노드(음수 번호) */
     public record Snap(long node, double distanceM) {
     }
+
+    /** 수직의 발이 길 끝 노드에서 이보다 가까우면 길을 나누지 않고 그 노드에 붙인다 */
+    static final double SPLIT_MIN_M = 1.0;
+
+    /** 길을 나눌 때 새로 만드는 노드·길 번호. OSM 번호(양수)와 겹치지 않게 음수 */
+    private long nextVirtual = -1;
 
     private final Graph<Long, RoadEdge> graph = new WeightedPseudograph<>(RoadEdge.class);
     private final Map<Long, double[]> nodes = new HashMap<>();
@@ -59,14 +66,21 @@ public final class RoadGraph {
     private Set<Long> main;
 
     /**
-     * 가장 가까운 노드. 가장 큰 연결 덩어리 안에서만 고른다.
+     * 가장 가까운 길 위 지점(수직의 발)에 붙인다. 가장 큰 연결 덩어리 안의 길에서만 고른다.
      * 도로망에는 다른 길과 이어지지 않은 조각(지하광장 계단 등)이 있어, 그 조각에 붙으면 경로를 못 찾는다.
+     * 길 중간이면 그 길을 둘로 나눠 임시 노드를 넣는다 (예전엔 가장 가까운 노드에 붙여, 도착지를 지나쳐 길 끝까지 갔다
+     * 되돌아오는 경로가 됐다. 해오름관 정류장 442m → 392m, 2026-11-09)
      */
     public Snap nearest(double lon, double lat) {
+        return nearest(lon, lat, e -> true);
+    }
+
+    /** usable: 수직의 발을 찾을 길 (휠체어는 지날 수 있는 길만. 계단 중간에 붙으면 휠체어 길이 끊긴다) */
+    public Snap nearest(double lon, double lat, Predicate<RoadEdge> usable) {
         if (main == null) {
             main = largest(graph);
         }
-        return nearest(lon, lat, main);
+        return nearest(lon, lat, main, usable);
     }
 
     /**
@@ -106,22 +120,105 @@ public final class RoadGraph {
         return r;
     }
 
-    /** within 안에서 가장 가까운 노드. 없으면 null */
-    public Snap nearest(double lon, double lat, Set<Long> within) {
-        long best = -1;
-        double bestM = Double.MAX_VALUE;
+    /**
+     * within 안에서 가장 가까운 노드를 찾고, 그 노드에 이어진 usable 길 위의 수직의 발이 더 가까우면 그 길 중간에 붙인다
+     * (휠체어는 지날 수 있는 길만). 없으면 null.
+     * 노드에 이어진 길만 보는 것은, 직선으로 더 가까운 다른 길(담장 안 단지 길·막다른 길)에 붙어 크게 도는 것을 막으려는 것이다.
+     * 길을 나눠 생긴 새 노드도 within에 넣는다
+     */
+    public Snap nearest(double lon, double lat, Set<Long> within, Predicate<RoadEdge> usable) {
+        double[] p = {lon, lat};
+        Long near = null;
+        double nearM = Double.MAX_VALUE;
         for (Map.Entry<Long, double[]> n : nodes.entrySet()) {
-            double m = Geo.distance(lon, lat, n.getValue()[0], n.getValue()[1]);
-            if (m < bestM && within.contains(n.getKey())) {
-                best = n.getKey();
-                bestM = m;
+            double m = Geo.distance(p, n.getValue());
+            if (m < nearM && within.contains(n.getKey())) {
+                near = n.getKey();
+                nearM = m;
             }
         }
-        return best < 0 ? null : new Snap(best, bestM);
+        if (near == null) {
+            return null;
+        }
+        RoadEdge best = null;
+        int bestSeg = 0;
+        double bestT = 0;
+        double bestM = nearM;
+        for (RoadEdge e : graph.edgesOf(near)) {
+            if (!usable.test(e) || !within.contains(e.from()) || !within.contains(e.to())) {
+                continue;
+            }
+            List<double[]> g = e.geometry();
+            for (int i = 1; i < g.size(); i++) {
+                double t = foot(p, g.get(i - 1), g.get(i));
+                double m = Geo.distance(p, lerp(g.get(i - 1), g.get(i), t));
+                if (m < bestM) {
+                    best = e;
+                    bestSeg = i;
+                    bestT = t;
+                    bestM = m;
+                }
+            }
+        }
+        if (best == null) {
+            return new Snap(near, nearM);
+        }
+        long node = split(best, bestSeg, bestT);
+        within.add(node);
+        // 길 끝 노드에 붙였으면(나누지 않음) 그 노드까지 거리
+        return new Snap(node, node < 0 ? bestM : Geo.distance(p, nodes.get(node)));
+    }
+
+    /**
+     * 길 e를 geometry의 seg번째 선분(seg-1 → seg) 안 t 위치에서 둘로 나누고 그 노드를 돌려준다.
+     * 길 끝 노드에서 {@link #SPLIT_MIN_M} 안이면 나누지 않고 그 끝 노드를 돌려준다
+     */
+    private long split(RoadEdge e, int seg, double t) {
+        List<double[]> g = e.geometry();
+        double[] at = lerp(g.get(seg - 1), g.get(seg), t);
+        List<double[]> head = new ArrayList<>(g.subList(0, seg));
+        head.add(at);
+        List<double[]> tail = new ArrayList<>();
+        tail.add(at);
+        tail.addAll(g.subList(seg, g.size()));
+        double headM = Geo.length(head);
+        double total = headM + Geo.length(tail);
+        if (headM < SPLIT_MIN_M) {
+            return e.from();
+        }
+        if (total - headM < SPLIT_MIN_M) {
+            return e.to();
+        }
+        long node = nextVirtual--;
+        nodes.put(node, at);
+        graph.addVertex(node);
+        graph.removeEdge(e);
+        // 저장된 길이를 선 길이 비율로 나눈다 (성질·인도 쪽은 그대로)
+        double share = total == 0 ? 0.5 : headM / total;
+        graph.addEdge(e.from(), node, new RoadEdge(nextVirtual--, e.from(), node, e.lengthM() * share, e.highway(),
+                head, e.penalty(), e.sidewalk()));
+        graph.addEdge(node, e.to(), new RoadEdge(nextVirtual--, node, e.to(), e.lengthM() * (1 - share), e.highway(),
+                tail, e.penalty(), e.sidewalk()));
+        return node;
+    }
+
+    /** 선분 a-b에 점 p의 수직의 발이 있는 위치 (0~1, 선분 밖이면 가까운 끝) */
+    private static double foot(double[] p, double[] a, double[] b) {
+        double k = Math.cos(Math.toRadians(p[1]));
+        double ax = (a[0] - p[0]) * k;
+        double ay = a[1] - p[1];
+        double dx = (b[0] - a[0]) * k;
+        double dy = b[1] - a[1];
+        double len2 = dx * dx + dy * dy;
+        return len2 == 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2));
+    }
+
+    private static double[] lerp(double[] a, double[] b, double t) {
+        return new double[] {a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t};
     }
 
     private static Set<Long> largest(Graph<Long, RoadEdge> g) {
-        return new ConnectivityInspector<>(g).connectedSets().stream()
-                .max(java.util.Comparator.comparingInt(Set::size)).orElse(Set.of());
+        return new java.util.HashSet<>(new ConnectivityInspector<>(g).connectedSets().stream()
+                .max(java.util.Comparator.comparingInt(Set::size)).orElse(Set.of()));
     }
 }

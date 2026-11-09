@@ -25,6 +25,7 @@ import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.data.PoiSource;
 import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.geo.BBox;
+import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge.EdgePenalty;
 import com.saferoute.route.engine.graph.RoadGraph;
 
@@ -209,11 +210,42 @@ class RouteServiceTests {
     }
 
     @Test
+    void endsAtTheFootOnTheRoadInsteadOfOvershootingToTheNextNode() {
+        // 200m 길 하나(S–T). 도착은 길 한가운데(출발에서 100m)에서 북쪽 약 11m. 예전엔 길 끝 노드에 붙어 지나쳤다 돌아옴
+        // 99는 시험 지도 범위를 북쪽으로 넓히려는 길 없는 점
+        RoadGraph g = new RoadGraph(Map.of(S, S_P, T, T_P, 99L, new double[] {S_P[0], LAT + 0.0005}),
+                List.of(edge(1, S, T, S_P, T_P, EdgePenalty.NONE)));
+        RouteService s = TestRoutes.service(g, facilities(List.of()), 12);
+
+        RouteResult r = s.route(new RouteRequest(new Place(LAT, S_P[0], null), new Place(LAT + 0.0001, M_P[0], null),
+                null));
+        assertThat(r.routes().get(0).distanceM()).isBetween(105, 115);
+
+        // 출발·도착이 같은 길 중간이면 그 사이만 걷는다 (약 11 + 100 + 11m)
+        RouteResult both = s.route(new RouteRequest(new Place(LAT + 0.0001, S_P[0] + 0.0006, null),
+                new Place(LAT + 0.0001, S_P[0] + 0.0017, null), null));
+        assertThat(both.routes().get(0).distanceM()).isBetween(115, 130);
+    }
+
+    @Test
+    void wheelchairNextToTheMiddleOfStairsSnapsToThePassableEndWithoutWarning() {
+        // S–M 보통 길, M–T 계단. 휠체어 도착은 계단 아래쪽(M에서 약 30m) 계단 바로 옆: 계단을 나눠 붙지 않고 M에 붙어 주의가 없다
+        RoadGraph g = new RoadGraph(Map.of(S, S_P, M, M_P, T, T_P, 99L, new double[] {S_P[0], LAT + 0.0005}),
+                List.of(edge(1, S, M, S_P, M_P, EdgePenalty.NONE),
+                        edge(2, M, T, M_P, T_P, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0)))));
+        RouteResult r = TestRoutes.service(g, facilities(List.of()), 12).route(new RouteRequest(
+                new Place(LAT, S_P[0], null), new Place(LAT + 0.00005, 126.93140, null), null, "wheelchair"));
+
+        assertThat(r.explanation().notes()).noneMatch(n -> n.kind().equals("snap"));
+        assertThat(r.routes().get(0).stairs()).isEmpty();
+    }
+
+    @Test
     void pointTooFarFromAnyRoadIsNoRoute() {
         RouteService s = TestRoutes.service(diamond(0.0006), facilities(List.of()), 21, props("route.snap-max-m=5"));
 
-        // 도로망 범위 안이지만 가장 가까운 노드에서 약 60m 떨어진 출발점 (마름모 한가운데)
-        assertError(() -> s.route(new RouteRequest(new Place(LAT + 0.0003, 126.93055, null), new Place(LAT, 126.93220, null), null)),
+        // 도로망 범위 안이지만 가장 가까운 길에서도 약 28m 떨어진 출발점 (마름모 안쪽, 길은 노드가 아니라 선으로 잰다)
+        assertError(() -> s.route(new RouteRequest(new Place(LAT + 0.0003, 126.93110, null), new Place(LAT, 126.93220, null), null)),
                 RouteError.NO_ROUTE);
     }
 
