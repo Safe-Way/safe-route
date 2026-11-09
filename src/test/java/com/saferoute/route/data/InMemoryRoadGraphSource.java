@@ -22,8 +22,9 @@ public class InMemoryRoadGraphSource implements RoadGraphSource {
         return area.contains(lon, lat);
     }
 
+    /** 요청마다 출발·도착 자리에서 길을 나누므로 복사본을 준다 */
     @Override
     public RoadGraph load(BBox box) {
-        return graph;
+        return new RoadGraph(graph.nodes(), new java.util.ArrayList<>(graph.graph().edgeSet()));
     }
 }

@@ -112,7 +112,7 @@ class GeminiBrainTests {
         assertThat(r.choices()).extracting(AssistantReply.Choice::label)
                 .containsExactly("월계수서점 · 250m", "먼서점 · 410m", "새벽서점 · 1.2km");
         assertThat(r.choices()).extracting(AssistantReply.Choice::value).containsExactly("0", "1", "2");
-        assertThat(r.ask()).isNotNull();
+        assertThat(r.choices()).isNotEmpty();
     }
 
     @Test
@@ -136,9 +136,25 @@ class GeminiBrainTests {
                   {"functionCall":{"name":"set_map_layers","args":{"remove":["씨씨티비"]}}}]}}]}
                 """, MediaType.APPLICATION_JSON));
         AssistantReply r = ask("방범카메라 표시 좀 치워");
-        assertThat(r.ask()).contains("CCTV", "맞으세요");
+        assertThat(question(r)).contains("CCTV", "맞으세요");
+        // 같은 문장은 한 번만: say 에만 있고 ask 는 비움, 예/아니요 버튼은 그대로
+        assertThat(r.say()).contains("CCTV", "맞으세요");
+        assertThat(r.ask()).isNull();
+        assertThat(r.choices()).isNotEmpty();
         assertThat(r.tools()).containsExactly("set_map_layers");
         verify(memory, never()).saveLayer(anyString(), anyString(), anyBoolean(), any(), any());
+    }
+
+    @Test
+    void tempModeQuestionAlwaysSaysWeWillAskAgain() {
+        // 오늘(11/06)부터 7일 = 일주일. 제미나이가 말을 빼먹어도 서버 확인 질문에 들어감
+        server.expect(requestTo(URL)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[
+                  {"functionCall":{"name":"update_my_info","args":{"temp_mode":"wheelchair","temp_until":"2026-11-13"}}}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        AssistantReply r = ask("다리 다쳐서 당분간 휠체어 타");
+        assertThat(question(r)).contains("일주일 동안", "11월 13일", "그때 다시 여쭤볼게요.");
+        assertThat(r.tools()).containsExactly("update_my_info");
     }
 
     @Test
@@ -178,5 +194,10 @@ class GeminiBrainTests {
                 """, MediaType.APPLICATION_OCTET_STREAM));
         AssistantReply r = ask("화장실 급해");
         assertThat(r.ai()).isTrue();
+    }
+
+    /** 앱이 보는 질문: say와 ask가 같으면 say 하나만 온다 (c10) */
+    static String question(AssistantReply r) {
+        return r.ask() != null ? r.ask() : r.say();
     }
 }

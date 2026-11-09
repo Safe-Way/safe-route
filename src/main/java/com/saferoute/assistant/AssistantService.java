@@ -131,6 +131,13 @@ public class AssistantService {
         String mode = t.mode();
         String say = Sentences.polish(o.say(), mode);
         String ask = Sentences.polish(o.ask(), mode);
+        if (o.ai()) {
+            say = mustSay(say, mode, pick);
+        }
+        if (ask != null && say != null && ask.strip().equals(say.strip())) {
+            // 같은 문장을 두 번 보내지 않는다 (비서 점검 c10). 버튼(choices)은 그대로 간다
+            ask = null;
+        }
         if (pick != null) {
             pick = new Pick(pick.type(), pick.request(), Sentences.polish(pick.summary(), mode), pick.minutes(),
                     pick.route());
@@ -144,6 +151,22 @@ public class AssistantService {
         }
         return new AssistantReply(say, pick, others, because, ask, o.choices(), t.spot,
                 codec.encode(next), List.copyOf(called), o.ai(), situation);
+    }
+
+    static final String WHEELCHAIR_WHY = "확인된 턱과 못 지나는 곳을 피한 길이에요.";
+
+    /**
+     * 제미나이가 말을 바꿔도 꼭 들어가야 하는 문장을 서버가 붙인다 (비서 점검 c10).
+     * 휠체어로 걷는 길을 추천했으면 왜 이 길인지 한 줄.
+     */
+    static String mustSay(String say, String mode, Pick pick) {
+        if (say == null) {
+            return null;
+        }
+        if ("wheelchair".equals(mode) && pick != null && "walk".equals(pick.type()) && !say.contains("피한 길")) {
+            return say.strip() + " " + WHEELCHAIR_WHY;
+        }
+        return say;
     }
 
     /** 시험 날씨 → 판단 결과 (clear, rain, heat, cold, dust) */

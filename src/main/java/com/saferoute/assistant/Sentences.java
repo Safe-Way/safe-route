@@ -22,13 +22,14 @@ final class Sentences {
 
     /**
      * 나가기 전 문장 다듬기 (규칙 문장·AI 문장 모두): "을(를)" 같은 두 갈래 조사를 하나로,
-     * "드리겠어요" → "드릴게요", 휠체어 사용자에게 "걸어서 N분" → "N분" (비서 점검 11/06, 이동 수단 말 없이 시간만).
+     * "드리겠어요"·"드리릴게요"(제미나이 오타) → "드릴게요", 휠체어 사용자에게 "걸어서 N분" → "N분" (비서 점검 11/06, 이동 수단 말 없이 시간만).
      */
     static String polish(String s, String mode) {
         if (s == null) {
             return null;
         }
-        String out = Josa.fix(s).replace("드리겠어요", "드릴게요").replace("드리겠습니다", "드릴게요");
+        String out = Josa.fix(s).replace("드리겠어요", "드릴게요").replace("드리겠습니다", "드릴게요")
+                .replace("드리릴게요", "드릴게요");
         if ("wheelchair".equals(mode)) {
             out = WALK_MIN.matcher(out).replaceAll("$1분");
         }

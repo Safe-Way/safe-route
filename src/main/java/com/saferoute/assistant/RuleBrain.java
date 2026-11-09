@@ -535,7 +535,7 @@ class RuleBrain {
         if (u.isEmpty()) {
             head = "그럼 일주일 동안(" + KoreanTime.day(until) + "까지) " + modeWord(m) + " 안내하고, 그때 다시 여쭤볼게요.";
         } else {
-            head = KoreanTime.day(until) + "까지 " + modeWord(m) + " 안내할게요.";
+            head = KoreanTime.day(until) + "까지 " + modeWord(m) + " 안내하고, 그때 다시 여쭤볼게요.";
         }
         Pending more = null;
         String extra = "";
