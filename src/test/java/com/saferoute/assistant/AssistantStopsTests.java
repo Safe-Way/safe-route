@@ -74,6 +74,7 @@ class AssistantStopsTests {
     void errandsOnTheWayHome() {
         AssistantReply r = ask("퇴근길에 다이소 들르고 택배 찾고 집 갈래", null);
         assertThat(r.tools()).contains("plan_stops");
+        assertThat(r.usage()).isEqualTo(AssistantReply.Usage.NONE); // 규칙만 썼으면 제미나이 토큰 0
         assertThat(r.say()).contains("들렀다 집까지", "분 걸려요", "바로 가는 것보다", "더 걸려요", "GS25 충장점(택배)");
         assertThat(r.stops()).extracting(AssistantReply.Stop::name).containsExactly("GS25 충장점", "다이소 충장로점");
         assertThat(r.say()).contains("순서를 바꾸면", "GS25 충장점부터");

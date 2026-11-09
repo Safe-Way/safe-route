@@ -48,7 +48,12 @@ public class AssistantService {
     public AssistantReply answer(AssistantRequest req) {
         Turn t = turn(req == null ? AssistantRequest.empty() : req);
         Outcome o = think(t);
-        return reply(t, o);
+        AssistantReply r = reply(t, o);
+        AssistantReply.Usage u = r.usage();
+        // 말 원문·게스트 번호는 남기지 않는다 (R1)
+        log.info("비서 토큰 합: 모델 {} 왕복 {} 입력 {} 출력 {} 보낸 도구 {} 다시 물음 {}",
+                t.usage.model() == null ? "-" : t.usage.model(), u.rounds(), u.prompt(), u.output(), u.tools(), u.retried());
+        return r;
     }
 
     private Turn turn(AssistantRequest req) {
@@ -162,7 +167,8 @@ public class AssistantService {
             called.add(name.replace(":confirm", ""));
         }
         return new AssistantReply(say, pick, others, because, ask, o.choices(), t.spot,
-                codec.encode(next), List.copyOf(called), o.ai(), situation, stops);
+                codec.encode(next.withLastTools(called)), List.copyOf(called), o.ai(), situation, stops,
+                t.usage.snapshot(t.toolsSent, t.toolsRetried));
     }
 
     static final String WHEELCHAIR_WHY = "확인된 턱과 못 지나는 곳을 피한 길이에요.";

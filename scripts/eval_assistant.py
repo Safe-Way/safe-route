@@ -13,7 +13,8 @@
 - writes가 true인 질문(설정 바꾸기 확인, 신고 확인)은 학교 DB에 진짜로 저장되므로 --write를 줄 때만 보낸다.
 - 결과는 표로 찍고 data/raw/eval/assistant_<날짜시각>.json에 남긴다. 실패한 것만 다시 보려면 --only 3,7
 
-실행: python3 scripts/eval_assistant.py [--base https://safe-route.java21.net] [--only 1,2,3] [--write]
+실행: python3 scripts/eval_assistant.py [--base https://safe-route.java21.net] [--only 1,2,3] [--write] [--all-tools]
+- --all-tools: 도구를 고르지 않고 7개 다 보냄 (비서 토큰 줄이기 전과 입력 토큰을 비교할 때)
 비서 창구(POST /api/assistant)가 아직 없으면 404로 알려 주고 멈춘다.
 """
 import json
@@ -70,6 +71,7 @@ def main():
     base = arg("--base", "https://safe-route.java21.net")
     only = {int(x) for x in arg("--only", "").split(",") if x}
     write = "--write" in sys.argv
+    all_tools = "--all-tools" in sys.argv  # 도구 7개 다 보내기 (토큰 줄이기 전 기준값 재기)
     qs = json.load(open(QUESTIONS, encoding="utf-8"))["questions"]
     results, convo, new_guest = [], {}, str(uuid.uuid4())
     for q in qs:
@@ -83,7 +85,8 @@ def main():
         lat, lon = q.get("at") or WHERE.get(who, WHERE["new"])
         body = {"guestId": guest, "text": q["text"], "lat": lat, "lon": lon,
                 "now": datetime.now().isoformat(timespec="minutes"), "favorites": FAVORITES.get(who, []),
-                "test": {"weather": q.get("weather"), "time": q.get("time"), "ai": q.get("ai")}}
+                "test": {"weather": q.get("weather"), "time": q.get("time"),
+                         "ai": q.get("ai") or ("all_tools" if all_tools else None)}}
         if q.get("context") and who in convo:
             body["conversationId"] = convo[who]
         status, ans = post(base, body)
@@ -94,17 +97,27 @@ def main():
         ok, miss, bad, tools_ok, text = check(q, status, ans)
         results.append({"id": q["id"], "ok": ok, "status": status, "missing": miss, "forbidden": bad,
                         "tools_ok": tools_ok, "tools": ans.get("tools"), "answer": text[:300],
-                        "question": q["text"]})
+                        "question": q["text"], "usage": ans.get("usage")})
         mark = "통과" if ok else "실패"
         why = "" if ok else f"  빠진 말 {miss}" * bool(miss) + f"  없어야 할 말 {bad}" * bool(bad) + \
             ("  도구 순서 다름" if tools_ok is False else "") + (f"  HTTP {status}" if status != 200 else "")
         print(f"{q['id']:>2} {mark} [{who}] {q['text'][:28]:<28} → {text[:50]}{why}")
     passed = sum(r["ok"] for r in results)
     print(f"\n통과 {passed}/{len(results)}")
+    # 비서 토큰 줄이기 R1: 입력 토큰 합·평균 (30% 줄이기 기준). 규칙이 먼저 답해 제미나이를 안 부른 질문(0)도 셈에 넣음
+    used = [r["usage"] for r in results if r.get("usage")]
+    tokens = {"questions": len(used), "prompt": sum(u.get("prompt", 0) for u in used),
+              "output": sum(u.get("output", 0) for u in used), "rounds": sum(u.get("rounds", 0) for u in used),
+              "ai_questions": sum(1 for u in used if u.get("rounds", 0) > 0),
+              "retried": sum(1 for u in used if u.get("retried"))}
+    if used:
+        print(f"제미나이 토큰: 입력 {tokens['prompt']:,} (질문당 {tokens['prompt'] // len(used):,}) · "
+              f"출력 {tokens['output']:,} · 왕복 {tokens['rounds']} · 제미나이를 부른 질문 {tokens['ai_questions']}/{len(used)}"
+              f" · 7개로 다시 물음 {tokens['retried']}")
     os.makedirs(OUT_DIR, exist_ok=True)
     path = os.path.join(OUT_DIR, f"assistant_{datetime.now():%Y%m%d%H%M}.json")
     json.dump({"base": base, "at": datetime.now().isoformat(timespec="seconds"), "passed": passed,
-               "total": len(results), "results": results}, open(path, "w", encoding="utf-8"), ensure_ascii=False,
+               "total": len(results), "tokens": tokens, "results": results}, open(path, "w", encoding="utf-8"), ensure_ascii=False,
               indent=1)
     print("기록:", os.path.relpath(path, ROOT))
     sys.exit(0 if passed == len(results) else 1)

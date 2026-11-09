@@ -28,7 +28,8 @@ public record AssistantRequest(String guestId, String text, Double lat, Double l
     /**
      * @param weather clear, rain, heat, cold, dust 중 하나. 주면 진짜 날씨 대신 이 값
      * @param time    "화 08:25"(이번 주 그 요일) 또는 "11-30 09:00". 주면 지금 시각 대신 이 값
-     * @param ai      "down"이면 AI를 부르지 않고 규칙만으로 답함 (AI가 멈췄을 때 시험)
+     * @param ai      "down"이면 AI를 부르지 않고 규칙만으로 답함 (AI가 멈췄을 때 시험).
+     *                "all_tools"면 말에 맞는 도구만 고르지 않고 7개 다 보냄 (토큰 줄이기 전과 비교)
      */
     public record Test(String weather, String time, String ai) {
     }

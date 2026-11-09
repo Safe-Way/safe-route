@@ -200,4 +200,74 @@ class GeminiBrainTests {
     static String question(AssistantReply r) {
         return r.ask() != null ? r.ask() : r.say();
     }
+
+    @Test
+    void sendsOnlyToolsThatFitTheWords() {
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"name\":\"find_nearby\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("\"name\":\"report_problem\""))))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("\"name\":\"set_map_layers\""))))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"role":"model","parts":[
+                          {"functionCall":{"name":"find_nearby","args":{"kind":"toilet"}}}]}}],
+                         "usageMetadata":{"promptTokenCount":900,"candidatesTokenCount":10,"totalTokenCount":910}}
+                        """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"문화전당 장애인화장실이 50m에 있어요."}]}}],
+                 "usageMetadata":{"promptTokenCount":950,"candidatesTokenCount":20,"totalTokenCount":970}}
+                """, MediaType.APPLICATION_JSON));
+        AssistantReply r = ask("화장실 어디야");
+        server.verify();
+        assertThat(r.ai()).isTrue();
+        assertThat(r.usage()).isEqualTo(new AssistantReply.Usage(1850, 30, 2, List.of("search_place", "find_nearby"), false));
+    }
+
+    @Test
+    void wrongPickAsksAgainWithAllSeven() {
+        // "공사"만 보고 신고 도구만 보냈는데, 제미나이가 보내지 않은 도구(search_place)를 부름 → 7개로 다시
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("\"name\":\"find_nearby\""))))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"role":"model","parts":[
+                          {"functionCall":{"name":"search_place","args":{"query":"공사"}}}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"name\":\"find_nearby\"")))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"role":"model","parts":[{"text":"공사 소식은 따로 알려 드릴 수 있어요."}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+        AssistantReply r = ask("공사 소식 알려 줘");
+        server.verify();
+        assertThat(r.tools()).isEmpty();
+        assertThat(r.usage().retried()).isTrue(); // 7개로 다시 물음
+        assertThat(r.usage().tools()).isEqualTo(ToolPicker.ALL);
+        assertThat(r.usage().prompt()).isZero(); // 가짜 답에 usageMetadata 가 없음
+    }
+
+    @Test
+    void sayingItCannotOnFirstAnswerAsksAgain() {
+        server.expect(requestTo(URL)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"그건 할 수 없어요."}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"name\":\"update_my_info\"")))
+                .andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"어떤 신고인지 말씀해 주시겠어요?"}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        AssistantReply r = ask("신고 좀");
+        server.verify();
+        assertThat(r.say()).contains("어떤 신고");
+    }
+
+    @Test
+    void allToolsTestFlagSendsSeven() {
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"name\":\"report_problem\"")))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"role":"model","parts":[{"text":"어디로 가세요?"}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+        service.answer(new AssistantRequest(A, "화장실 어디야", 35.148, 126.926, null, null, null, null,
+                new AssistantRequest.Test(null, null, "all_tools"), null));
+        server.verify();
+    }
 }
