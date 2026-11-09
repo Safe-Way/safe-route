@@ -84,7 +84,7 @@ class AssistantServiceTests {
     @Test
     void newPersonIsAskedHowTheyMove() {
         AssistantReply r = ask("00000000-0000-4000-8000-000000000999", "길 좀 찾아 줘", null);
-        assertThat(r.ask()).contains("어떻게 다니세요");
+        assertThat(question(r)).contains("어떻게 다니세요");
         assertThat(r.tools()).containsExactly("get_my_info");
         assertThat(r.choices()).extracting(AssistantReply.Choice::label).contains("휠체어");
     }
@@ -109,7 +109,7 @@ class AssistantServiceTests {
     void unknownAppModeStillAsksSetup() {
         AssistantReply r = service.answer(new AssistantRequest("00000000-0000-4000-8000-000000000997", "길 좀 찾아 줘",
                 LAT, LON, null, null, null, null, null, "flying"));
-        assertThat(r.ask()).contains("어떻게 다니세요");
+        assertThat(question(r)).contains("어떻게 다니세요");
     }
 
     @Test
@@ -127,7 +127,7 @@ class AssistantServiceTests {
     void mapLayersAreSavedOnlyAfterYes() {
         wheelchairUser();
         AssistantReply first = ask(A, "엘베 있는 육교도 보여 주고 CCTV는 빼 줘", null);
-        assertThat(first.ask()).contains("엘리베이터 육교", "CCTV", "맞으세요");
+        assertThat(question(first)).contains("엘리베이터 육교", "CCTV", "맞으세요");
         assertThat(first.say()).doesNotContain("바꿨어요");
         verify(memory, never()).saveLayer(anyString(), anyString(), anyBoolean(), any(), any());
 
@@ -142,7 +142,7 @@ class AssistantServiceTests {
     void voiceReportAsksFirstThenSends() {
         wheelchairUser();
         AssistantReply first = ask(A, "여기 공사 중이라 못 지나가", null);
-        assertThat(first.ask()).contains("공사", "신고할까요");
+        assertThat(question(first)).contains("공사", "신고할까요");
         AssistantReply second = ask(A, "응 사진은 안 찍을래", first.conversationId());
         assertThat(second.say()).contains("신고했어요", "다시");
         verify(reports).createVoice(eq("construction"), eq("wheelchair"), anyString(), eq(LAT), eq(LON));
@@ -152,7 +152,7 @@ class AssistantServiceTests {
     void noSaveWhenUserSaysNo() {
         wheelchairUser();
         AssistantReply first = ask(A, "여기 사고 났어", null);
-        assertThat(first.ask()).contains("사고", "신고할까요");
+        assertThat(question(first)).contains("사고", "신고할까요");
         AssistantReply second = ask(A, "아니 괜찮아", first.conversationId());
         assertThat(second.say()).contains("바꾸지 않을게요");
         verify(reports, never()).createVoice(anyString(), any(), any(), anyDouble(), anyDouble());
@@ -162,9 +162,9 @@ class AssistantServiceTests {
     void injuredAsksUntilWhenAndUnknownMeansAWeek() {
         String g = "00000000-0000-4000-8000-000000000777";
         AssistantReply first = ask(g, "다리를 다쳐서 휠체어 타고 다녀", null);
-        assertThat(first.ask()).contains("언제까지");
+        assertThat(question(first)).contains("언제까지");
         AssistantReply second = ask(g, "잘 모르겠어", first.conversationId());
-        assertThat(second.ask()).contains("일주일", "다시 여쭤", "11월 13일", "장애인 화장실");
+        assertThat(question(second)).contains("일주일", "다시 여쭤", "11월 13일", "장애인 화장실");
         AssistantReply third = ask(g, "네", second.conversationId());
         assertThat(third.tools()).containsExactly("update_my_info", "set_map_layers");
         @SuppressWarnings("unchecked")
@@ -178,14 +178,14 @@ class AssistantServiceTests {
     @Test
     void layersUntilEndOfMonth() {
         AssistantReply r = ask(A, "장애인 화장실이랑 보도턱 낮춘 횡단보도 보여 줘 이번 달까지", null);
-        assertThat(r.ask()).contains("장애인 화장실", "보도턱", "11월 30일", "맞으세요");
+        assertThat(question(r)).contains("장애인 화장실", "보도턱", "11월 30일", "맞으세요");
     }
 
     @Test
     void urgentWordsAskAbout112First() {
         wheelchairUser();
         AssistantReply r = ask(A, "넘어졌어 도와줘", null);
-        assertThat(r.ask()).contains("112", "보호자");
+        assertThat(question(r)).contains("112", "보호자");
         assertThat(r.choices()).extracting(AssistantReply.Choice::value).contains("call_112", "call_guardian");
         assertThat(r.tools()).isEmpty();
     }
@@ -204,7 +204,7 @@ class AssistantServiceTests {
     void ambiguousElevatorAsksWhich() {
         wheelchairUser();
         AssistantReply r = ask(A, "엘베 있는 데로 가자", null);
-        assertThat(r.ask()).contains("지하철", "육교", "?");
+        assertThat(question(r)).contains("지하철", "육교", "?");
         assertThat(r.tools()).isEmpty();
     }
 
@@ -328,6 +328,20 @@ class AssistantServiceTests {
         assertThat(Sentences.polish("'충장로'(으)로 3곳, 지팡이(으)로, 장애인 화장실을(를), 카페이(가)", "adult"))
                 .isEqualTo("'충장로'로 3곳, 지팡이로, 장애인 화장실을, 카페가");
         assertThat(Sentences.polish("걸어서 12분이에요.", "senior")).isEqualTo("걸어서 12분이에요.");
+        assertThat(Sentences.polish("길을 찾아 드리릴게요.", "adult")).isEqualTo("길을 찾아 드릴게요.");
+    }
+
+    @Test
+    void serverAddsWheelchairReasonWhenGeminiDropsIt() {
+        AssistantReply.Pick walk = new AssistantReply.Pick("walk", null, "22분, 1.4km", 22, null);
+        assertThat(AssistantService.mustSay("문화전당까지 22분 걸려요.", "wheelchair", walk))
+                .isEqualTo("문화전당까지 22분 걸려요. 확인된 턱과 못 지나는 곳을 피한 길이에요.");
+        // 이미 있으면 두 번 붙이지 않음, 다른 모드·대중교통은 그대로
+        assertThat(AssistantService.mustSay("22분 걸려요. 확인된 턱과 못 지나는 곳을 피한 길이에요.", "wheelchair", walk))
+                .isEqualTo("22분 걸려요. 확인된 턱과 못 지나는 곳을 피한 길이에요.");
+        assertThat(AssistantService.mustSay("22분 걸려요.", "senior", walk)).isEqualTo("22분 걸려요.");
+        AssistantReply.Pick bus = new AssistantReply.Pick("transit", null, "버스 59번", 18, null);
+        assertThat(AssistantService.mustSay("18분 걸려요.", "wheelchair", bus)).isEqualTo("18분 걸려요.");
     }
 
     @Test
@@ -376,7 +390,7 @@ class AssistantServiceTests {
                 new Place("4", "먼국밥", "광주 동구", 35.160, 126.940, 1900)));
         AssistantReply second = service.answer(new AssistantRequest(A, "", LAT, LON, null, first.conversationId(),
                 "국밥", null, null, null));
-        assertThat(second.ask()).contains("가까운 국밥 3곳");
+        assertThat(question(second)).contains("가까운 국밥 3곳");
         assertThat(second.choices()).extracting(AssistantReply.Choice::label)
                 .containsExactly("월계수식당 · 250m", "부산국밥 · 480m", "나주곰탕 · 620m");
         Trip walk = new Trip("walk", 4, 250, 0, 0, "걸어서 4분, 250m", Map.of(), "safe", Map.of(), List.of(), false,
@@ -455,5 +469,10 @@ class AssistantServiceTests {
         AssistantReply r = ask(null, "", "%%%이상한값");
         assertThat(r.say()).isNotBlank();
         verify(memory, never()).saveProfile(anyString(), any());
+    }
+
+    /** 앱이 보는 질문: say와 ask가 같으면 say 하나만 온다 (c10) */
+    static String question(AssistantReply r) {
+        return r.ask() != null ? r.ask() : r.say();
     }
 }
