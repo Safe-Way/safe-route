@@ -53,7 +53,7 @@ class GraphTests {
         var part = g.mainPart(e -> !RouteFinder.isStairs(e));
 
         assertThat(part).containsExactlyInAnyOrder(S, M);
-        assertThat(g.nearest(T_P[0], T_P[1], part).node()).isEqualTo(M);
+        assertThat(g.nearest(T_P[0], T_P[1], part, e -> !RouteFinder.isStairs(e)).node()).isEqualTo(M);
         assertThat(g.nearest(T_P[0], T_P[1]).node()).isEqualTo(T);
     }
 

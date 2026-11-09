@@ -186,8 +186,8 @@ public class RouteService {
         RoadGraph.Snap from;
         RoadGraph.Snap to;
         try {
-            from = snap(graph, start);
-            to = snap(graph, end);
+            from = snap(graph, start, profile);
+            to = snap(graph, end, profile);
         } catch (RouteException e) {
             return null;
         }
@@ -209,8 +209,8 @@ public class RouteService {
         // 대부분의 요청은 위에서 찾으므로 연결 덩어리 계산은 못 찾았을 때만 한다
         Set<Long> part = graph.mainPart(profile::passable);
         try {
-            Placed f = place(graph, start, from, part);
-            Placed t = place(graph, end, to, part);
+            Placed f = place(graph, start, from, part, profile);
+            Placed t = place(graph, end, to, part, profile);
             if (!f.moved() && !t.moved()) {
                 return null;
             }
@@ -310,8 +310,8 @@ public class RouteService {
     }
 
     /** 가장 가까운 길 노드. 너무 멀면 길 위가 아니라고 본다 */
-    private RoadGraph.Snap snap(RoadGraph graph, double[] p) {
-        RoadGraph.Snap s = graph.nearest(p[0], p[1]);
+    private RoadGraph.Snap snap(RoadGraph graph, double[] p, RouteProperties.Profile profile) {
+        RoadGraph.Snap s = graph.nearest(p[0], p[1], profile::passable);
         if (s == null || s.distanceM() > props.snapMaxM()) {
             throw new RouteException(RouteError.NO_ROUTE);
         }
@@ -323,11 +323,12 @@ public class RouteService {
      * 가장 가까운 길이 계단으로만 드나드는 구역이면 옆 길에 붙는데, 모든 길 기준보다
      * passable-snap-extra-m(50m) 넘게 멀어지면 붙이지 않는다 (2026-11-04)
      */
-    private Placed place(RoadGraph graph, double[] p, RoadGraph.Snap any, Set<Long> part) {
+    private Placed place(RoadGraph graph, double[] p, RoadGraph.Snap any, Set<Long> part,
+            RouteProperties.Profile profile) {
         if (part.contains(any.node())) {
             return new Placed(any, false);
         }
-        RoadGraph.Snap s = graph.nearest(p[0], p[1], part);
+        RoadGraph.Snap s = graph.nearest(p[0], p[1], part, profile::passable);
         if (s == null || s.distanceM() - any.distanceM() > props.passableSnapExtraM()) {
             throw new RouteException(RouteError.NO_ROUTE);
         }
