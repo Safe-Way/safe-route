@@ -70,6 +70,20 @@ class GeminiBrainTests {
     }
 
     @Test
+    void hurtLegAsksUntilWhenWithoutGeminiThenSevenDays() {
+        // 비서 점검 24·25번: 제미나이를 부르지 않고 규칙이 "언제까지?"를 묻고, "잘 모르겠어"면 일주일
+        String N = "00000000-0000-4000-8000-00000000de99";
+        AssistantReply first = service.answer(new AssistantRequest(N, "다리를 다쳐서 휠체어 타고 다녀", 35.148, 126.926,
+                null, null, null, null, null, null));
+        assertThat(first.ai()).isFalse();
+        assertThat(question(first)).contains("언제까지").doesNotContain("맞으세요");
+        AssistantReply second = service.answer(new AssistantRequest(N, "잘 모르겠어", 35.148, 126.926, null,
+                first.conversationId(), null, null, null, null));
+        assertThat(question(second)).contains("일주일", "11월 13일까지", "다시 여쭤").doesNotContain("어떻게 다니세요");
+        server.verify(); // 제미나이를 한 번도 안 부름
+    }
+
+    @Test
     void geminiPicksFindNearbyThenSpeaks() {
         server.expect(requestTo(URL)).andExpect(header("x-goog-api-key", "test-key"))
                 .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("35.148"))))
@@ -152,7 +166,7 @@ class GeminiBrainTests {
                 {"candidates":[{"content":{"role":"model","parts":[
                   {"functionCall":{"name":"update_my_info","args":{"temp_mode":"wheelchair","temp_until":"2026-11-13"}}}]}}]}
                 """, MediaType.APPLICATION_JSON));
-        AssistantReply r = ask("다리 다쳐서 당분간 휠체어 타");
+        AssistantReply r = ask("당분간 휠체어 탈게"); // "다쳐서"가 있으면 규칙이 먼저 언제까지 물음
         assertThat(question(r)).contains("일주일 동안", "11월 13일", "그때 다시 여쭤볼게요.");
         assertThat(r.tools()).containsExactly("update_my_info");
     }

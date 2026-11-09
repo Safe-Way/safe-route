@@ -95,6 +95,11 @@ public class AssistantService {
         if (stops != null) {
             return stops;
         }
+        // ⑤ 몸 상태가 잠깐 바뀜 ("다쳐서 휠체어 타고 다녀"). 끝나는 날을 꼭 물어야 해서 규칙이 먼저 "언제까지?"
+        Outcome temp = rules.tempBody(t);
+        if (temp != null) {
+            return temp;
+        }
         // ⑤ 도구가 없는 요청 (못 하는 일·상관없는 말·인사). AI 비용을 아끼고 했다고 지어내지 않게 규칙이 먼저
         Outcome noTool = rules.noTool(t);
         if (noTool != null) {
