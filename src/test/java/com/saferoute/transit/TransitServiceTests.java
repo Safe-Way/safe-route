@@ -3,6 +3,7 @@ package com.saferoute.transit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -14,6 +15,7 @@ import java.time.ZoneId;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import com.saferoute.bus.BusArrival;
 import com.saferoute.bus.BusNearbyResponse;
@@ -130,6 +132,19 @@ class TransitServiceTests {
         assertThat(subwayLeg.way()).isEqualTo("녹동");
         assertThat(subwayLeg.stops()).isEmpty();
         assertThat(r.hiddenForWheelchair()).isZero();
+    }
+
+    @Test
+    void walkLegsCarryGuestIdForPersonalPreferences() {
+        when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("문화전당"));
+        stubLive(true);
+
+        service.search(new RouteRequest(HOME, GOAL, null, "senior", "guest-1"));
+
+        // 걷는 구간 길찾기마다 같은 게스트 번호를 넘겨야 원일님 엔진이 계단·우회·쉼 간격 선호를 씀
+        ArgumentCaptor<RouteRequest> sent = ArgumentCaptor.forClass(RouteRequest.class);
+        verify(route, atLeastOnce()).route(sent.capture());
+        assertThat(sent.getAllValues()).isNotEmpty().allMatch(r -> "guest-1".equals(r.guestId()));
     }
 
     @Test

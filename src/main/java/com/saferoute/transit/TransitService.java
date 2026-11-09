@@ -81,7 +81,7 @@ public class TransitService {
         String mode = mode(req.mode());
 
         List<OdsayPath> all = paths(from, to);
-        Lookups look = new Lookups();
+        Lookups look = new Lookups(req.guestId());
         List<OdsayPath> usable = new ArrayList<>();
         int hidden = 0;
         for (OdsayPath p : all) {
@@ -229,9 +229,15 @@ public class TransitService {
 
     /** 한 요청 안에서만 쓰는 기억 (같은 역·정류장·걷는 길을 여러 경로가 같이 씀) */
     private final class Lookups {
+        /** 걷는 구간 길찾기에 넘기는 게스트 번호 (있으면 그 사람의 계단·우회·쉼 간격 선호가 들어감). 없으면 null */
+        private final String guestId;
         private final Map<String, Optional<StationTrains>> stations = new HashMap<>();
         private final Map<String, Optional<StopArrivals>> stops = new HashMap<>();
         private final Map<String, Optional<RouteResult.Route>> walks = new HashMap<>();
+
+        Lookups(String guestId) {
+            this.guestId = guestId == null || guestId.isBlank() ? null : guestId;
+        }
 
         Optional<StationTrains> station(OdsayPath.Place at) {
             if (at == null) {
@@ -274,7 +280,7 @@ public class TransitService {
             return walks.computeIfAbsent(k, x -> {
                 try {
                     RouteResult r = route.route(new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), a.name()),
-                            new RouteRequest.Place(b.lat(), b.lon(), b.name()), night, mode));
+                            new RouteRequest.Place(b.lat(), b.lon(), b.name()), night, mode, guestId));
                     // 맞춤 경로는 "safe" (최단과 같으면 하나만 옴)
                     return r.routes().stream().filter(rt -> "safe".equals(rt.kind())).findFirst()
                             .or(() -> r.routes().stream().findFirst());
