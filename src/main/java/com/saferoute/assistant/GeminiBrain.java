@@ -80,8 +80,47 @@ class GeminiBrain {
         return gemini.available();
     }
 
-    /** 제미나이로 답한다. 실패하면 null (규칙 비서가 대신함) */
+    /**
+     * 제미나이로 답한다. 실패하면 null (규칙 비서가 대신함).
+     * 말에 맞는 도구만 보내고(R2), 제미나이가 보내지 않은 도구를 부르거나 첫 답에서 못 한다고 하면 7개로 한 번 다시 묻는다(R5).
+     */
     Outcome run(Turn t) {
+        // 시험: test.ai = "all_tools" 면 고르지 않고 7개 다 (점검 스크립트 --all-tools, 줄이기 전과 비교용)
+        boolean allTools = t.req.test() != null && "all_tools".equals(t.req.test().ai());
+        List<String> picked = allTools ? ToolPicker.ALL : ToolPicker.pick(t);
+        t.toolsSent = picked;
+        if (picked.size() < ToolPicker.ALL.size()) {
+            Conversation before = t.convo;
+            Outcome o = run(t, ToolPicker.declarations(DECLARATIONS, picked), picked);
+            if (o != RETRY) {
+                return o;
+            }
+            // 잘못 고름: 대화·부른 도구를 처음으로 되돌리고 7개로 다시
+            t.convo = before;
+            t.tools.clear();
+            t.confirm = null;
+            t.plan = null;
+            t.planDest = null;
+            t.stopPlan = null;
+            t.spot = null;
+            t.spotKindName = null;
+            t.spotMessage = null;
+            t.done.clear();
+            t.toolsRetried = true;
+            t.toolsSent = ToolPicker.ALL;
+        }
+        Outcome o = run(t, DECLARATIONS, ToolPicker.ALL);
+        return o == RETRY ? null : o;
+    }
+
+    /** 도구를 잘못 골랐다는 표시 (밖으로 나가지 않음) */
+    static final Outcome RETRY = new Outcome("", null, List.of(), true);
+
+    /** 할 수 없다는 말 (첫 답에서 도구를 안 부르고 이렇게 말하면 도구가 모자란 것으로 봄) */
+    private static final List<String> CANT = List.of("할 수 없", "못 해요", "못해요", "기능이 없", "도와드릴 수 없", "지원하지 않");
+
+    private Outcome run(Turn t, List<Map<String, Object>> declarations, List<String> sent) {
+        boolean narrowed = sent.size() < ToolPicker.ALL.size();
         tools.loadProfile(t);
         List<Object> contents = new ArrayList<>();
         for (Conversation.Turn c : t.convo.turns()) {
@@ -90,7 +129,7 @@ class GeminiBrain {
         contents.add(Map.of("role", "user", "parts", List.of(Map.of("text", context(t) + "\n" + t.text))));
         StringBuilder facts = new StringBuilder(t.text).append(' ').append(context(t));
         for (int round = 0; round < MAX_ROUNDS; round++) {
-            JsonNode content = gemini.chat(SYSTEM, contents, DECLARATIONS);
+            JsonNode content = gemini.chat(SYSTEM, contents, declarations, t.usage);
             if (content == null) {
                 return null;
             }
@@ -104,7 +143,14 @@ class GeminiBrain {
                 }
             }
             if (calls.isEmpty()) {
-                return withPlaceButtons(t, finish(t, text.toString().strip(), facts.toString()));
+                String said = text.toString().strip();
+                if (narrowed && round == 0 && CANT.stream().anyMatch(said::contains)) {
+                    return RETRY;
+                }
+                return withPlaceButtons(t, finish(t, said, facts.toString()));
+            }
+            if (narrowed && calls.stream().anyMatch(c -> !sent.contains(c.path("name").asString("")))) {
+                return RETRY; // 보내지 않은 도구를 부름
             }
             contents.add(json.convertValue(content, Map.class));
             List<Object> responses = new ArrayList<>();

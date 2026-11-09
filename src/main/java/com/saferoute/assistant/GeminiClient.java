@@ -81,6 +81,11 @@ public class GeminiClient {
      * @return content ({role:"model", parts:[...]}). 키 없음·실패·빈 답이면 null
      */
     public JsonNode chat(String system, List<Object> contents, List<Map<String, Object>> tools) {
+        return chat(system, contents, tools, null);
+    }
+
+    /** chat 과 같고, 쓴 토큰을 usage 에 더한다 (null 이면 로그만) */
+    public JsonNode chat(String system, List<Object> contents, List<Map<String, Object>> tools, TokenUsage usage) {
         if (!available()) {
             return null;
         }
@@ -93,7 +98,7 @@ public class GeminiClient {
                         "contents", contents,
                         "tools", List.of(Map.of("functionDeclarations", tools)),
                         "generationConfig", generationConfig(m));
-                JsonNode content = ask(m, body);
+                JsonNode content = ask(m, body, usage, tools.size());
                 working = at;
                 return content;
             } catch (RestClientResponseException e) {
@@ -135,7 +140,7 @@ public class GeminiClient {
                         "systemInstruction", Map.of("parts", List.of(Map.of("text", system))),
                         "contents", contents,
                         "generationConfig", config);
-                JsonNode content = ask(m, body);
+                JsonNode content = ask(m, body, null, 0);
                 working = at;
                 if (content == null) {
                     return null;
@@ -160,8 +165,8 @@ public class GeminiClient {
         return null;
     }
 
-    /** 모델 하나에 묻는다. 빈 답이면 null */
-    private JsonNode ask(String m, Map<String, Object> body) {
+    /** 모델 하나에 묻는다. 빈 답이면 null. 쓴 토큰(usageMetadata)은 로그에 남기고 usage 에 더한다 */
+    private JsonNode ask(String m, Map<String, Object> body, TokenUsage usage, int toolCount) {
         // 받은 바이트를 그대로 UTF-8 글자로 읽는다. 구글(또는 중간 프록시)이 종류를 application/octet-stream 으로
         // 보내는 경우가 있어서, 종류 표시에 기대는 변환기를 쓰지 않는다.
         String raw = rest.post()
@@ -180,6 +185,7 @@ public class GeminiClient {
                     return new String(bytes, StandardCharsets.UTF_8);
                 });
         JsonNode res = raw == null ? null : JSON.readTree(raw);
+        countTokens(res, m, usage, toolCount);
         JsonNode content = res == null ? null : res.path("candidates").path(0).path("content");
         if (content == null || content.isMissingNode() || !content.path("parts").isArray()) {
             log.warn("제미나이 답이 비었음 (모델 {}, 끝난 이유 {})", m,
@@ -187,6 +193,25 @@ public class GeminiClient {
             return null;
         }
         return content;
+    }
+
+    /**
+     * 답의 usageMetadata (promptTokenCount 입력, candidatesTokenCount 출력, thoughtsTokenCount 생각, totalTokenCount 합)를
+     * 로그에 남기고 usage 에 더한다 (비서 토큰 줄이기 R1). 칸이 없으면 아무것도 안 함
+     */
+    static void countTokens(JsonNode res, String model, TokenUsage usage, int toolCount) {
+        JsonNode u = res == null ? null : res.path("usageMetadata");
+        if (u == null || u.isMissingNode() || !u.isObject()) {
+            return;
+        }
+        int in = u.path("promptTokenCount").asInt(0);
+        int out = u.path("candidatesTokenCount").asInt(0);
+        int thought = u.path("thoughtsTokenCount").asInt(0);
+        int total = u.path("totalTokenCount").asInt(in + out + thought);
+        log.info("제미나이 토큰: 입력 {} 출력 {} 생각 {} 합 {} (모델 {}, 도구 {}개)", in, out, thought, total, model, toolCount);
+        if (usage != null) {
+            usage.add(model, in, out, thought);
+        }
     }
 
     /** 구글 오류 본문 {"error":{"message":...}} 에서 설명만 꺼낸다 */

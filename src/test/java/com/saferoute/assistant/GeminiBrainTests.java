@@ -70,6 +70,20 @@ class GeminiBrainTests {
     }
 
     @Test
+    void hurtLegAsksUntilWhenWithoutGeminiThenSevenDays() {
+        // 비서 점검 24·25번: 제미나이를 부르지 않고 규칙이 "언제까지?"를 묻고, "잘 모르겠어"면 일주일
+        String N = "00000000-0000-4000-8000-00000000de99";
+        AssistantReply first = service.answer(new AssistantRequest(N, "다리를 다쳐서 휠체어 타고 다녀", 35.148, 126.926,
+                null, null, null, null, null, null));
+        assertThat(first.ai()).isFalse();
+        assertThat(question(first)).contains("언제까지").doesNotContain("맞으세요");
+        AssistantReply second = service.answer(new AssistantRequest(N, "잘 모르겠어", 35.148, 126.926, null,
+                first.conversationId(), null, null, null, null));
+        assertThat(question(second)).contains("일주일", "11월 13일까지", "다시 여쭤").doesNotContain("어떻게 다니세요");
+        server.verify(); // 제미나이를 한 번도 안 부름
+    }
+
+    @Test
     void geminiPicksFindNearbyThenSpeaks() {
         server.expect(requestTo(URL)).andExpect(header("x-goog-api-key", "test-key"))
                 .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("35.148"))))
@@ -152,7 +166,7 @@ class GeminiBrainTests {
                 {"candidates":[{"content":{"role":"model","parts":[
                   {"functionCall":{"name":"update_my_info","args":{"temp_mode":"wheelchair","temp_until":"2026-11-13"}}}]}}]}
                 """, MediaType.APPLICATION_JSON));
-        AssistantReply r = ask("다리 다쳐서 당분간 휠체어 타");
+        AssistantReply r = ask("당분간 휠체어 탈게"); // "다쳐서"가 있으면 규칙이 먼저 언제까지 물음
         assertThat(question(r)).contains("일주일 동안", "11월 13일", "그때 다시 여쭤볼게요.");
         assertThat(r.tools()).containsExactly("update_my_info");
     }
@@ -199,5 +213,75 @@ class GeminiBrainTests {
     /** 앱이 보는 질문: say와 ask가 같으면 say 하나만 온다 (c10) */
     static String question(AssistantReply r) {
         return r.ask() != null ? r.ask() : r.say();
+    }
+
+    @Test
+    void sendsOnlyToolsThatFitTheWords() {
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"name\":\"find_nearby\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("\"name\":\"report_problem\""))))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("\"name\":\"set_map_layers\""))))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"role":"model","parts":[
+                          {"functionCall":{"name":"find_nearby","args":{"kind":"toilet"}}}]}}],
+                         "usageMetadata":{"promptTokenCount":900,"candidatesTokenCount":10,"totalTokenCount":910}}
+                        """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"문화전당 장애인화장실이 50m에 있어요."}]}}],
+                 "usageMetadata":{"promptTokenCount":950,"candidatesTokenCount":20,"totalTokenCount":970}}
+                """, MediaType.APPLICATION_JSON));
+        AssistantReply r = ask("화장실 어디야");
+        server.verify();
+        assertThat(r.ai()).isTrue();
+        assertThat(r.usage()).isEqualTo(new AssistantReply.Usage(1850, 30, 2, List.of("search_place", "find_nearby"), false));
+    }
+
+    @Test
+    void wrongPickAsksAgainWithAllSeven() {
+        // "공사"만 보고 신고 도구만 보냈는데, 제미나이가 보내지 않은 도구(search_place)를 부름 → 7개로 다시
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("\"name\":\"find_nearby\""))))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"role":"model","parts":[
+                          {"functionCall":{"name":"search_place","args":{"query":"공사"}}}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"name\":\"find_nearby\"")))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"role":"model","parts":[{"text":"공사 소식은 따로 알려 드릴 수 있어요."}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+        AssistantReply r = ask("공사 소식 알려 줘");
+        server.verify();
+        assertThat(r.tools()).isEmpty();
+        assertThat(r.usage().retried()).isTrue(); // 7개로 다시 물음
+        assertThat(r.usage().tools()).isEqualTo(ToolPicker.ALL);
+        assertThat(r.usage().prompt()).isZero(); // 가짜 답에 usageMetadata 가 없음
+    }
+
+    @Test
+    void sayingItCannotOnFirstAnswerAsksAgain() {
+        server.expect(requestTo(URL)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"그건 할 수 없어요."}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"name\":\"update_my_info\"")))
+                .andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"어떤 신고인지 말씀해 주시겠어요?"}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        AssistantReply r = ask("신고 좀");
+        server.verify();
+        assertThat(r.say()).contains("어떤 신고");
+    }
+
+    @Test
+    void allToolsTestFlagSendsSeven() {
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"name\":\"report_problem\"")))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"role":"model","parts":[{"text":"어디로 가세요?"}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+        service.answer(new AssistantRequest(A, "화장실 어디야", 35.148, 126.926, null, null, null, null,
+                new AssistantRequest.Test(null, null, "all_tools"), null));
+        server.verify();
     }
 }

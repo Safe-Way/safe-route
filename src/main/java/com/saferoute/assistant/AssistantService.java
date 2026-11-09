@@ -48,7 +48,12 @@ public class AssistantService {
     public AssistantReply answer(AssistantRequest req) {
         Turn t = turn(req == null ? AssistantRequest.empty() : req);
         Outcome o = think(t);
-        return reply(t, o);
+        AssistantReply r = reply(t, o);
+        AssistantReply.Usage u = r.usage();
+        // 말 원문·게스트 번호는 남기지 않는다 (R1)
+        log.info("비서 토큰 합: 모델 {} 왕복 {} 입력 {} 출력 {} 보낸 도구 {} 다시 물음 {}",
+                t.usage.model() == null ? "-" : t.usage.model(), u.rounds(), u.prompt(), u.output(), u.tools(), u.retried());
+        return r;
     }
 
     private Turn turn(AssistantRequest req) {
@@ -89,6 +94,11 @@ public class AssistantService {
         Outcome stops = rules.stops(t);
         if (stops != null) {
             return stops;
+        }
+        // ⑤ 몸 상태가 잠깐 바뀜 ("다쳐서 휠체어 타고 다녀"). 끝나는 날을 꼭 물어야 해서 규칙이 먼저 "언제까지?"
+        Outcome temp = rules.tempBody(t);
+        if (temp != null) {
+            return temp;
         }
         // ⑤ 도구가 없는 요청 (못 하는 일·상관없는 말·인사). AI 비용을 아끼고 했다고 지어내지 않게 규칙이 먼저
         Outcome noTool = rules.noTool(t);
@@ -162,7 +172,8 @@ public class AssistantService {
             called.add(name.replace(":confirm", ""));
         }
         return new AssistantReply(say, pick, others, because, ask, o.choices(), t.spot,
-                codec.encode(next), List.copyOf(called), o.ai(), situation, stops);
+                codec.encode(next.withLastTools(called)), List.copyOf(called), o.ai(), situation, stops,
+                t.usage.snapshot(t.toolsSent, t.toolsRetried));
     }
 
     static final String WHEELCHAIR_WHY = "확인된 턱과 못 지나는 곳을 피한 길이에요.";

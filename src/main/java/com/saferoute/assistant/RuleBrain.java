@@ -297,11 +297,14 @@ class RuleBrain {
 
     // ───────────────────────── 보통 말 ─────────────────────────
 
-    Outcome run(Turn t) {
+    /**
+     * 몸 상태가 잠깐 바뀜 ("다리를 다쳐서 휠체어 타고 다녀"). 해당 없으면 null.
+     * 끝나는 날을 꼭 정해야 해서(그날 "다리는 괜찮아지셨어요?" 하고 먼저 물음) 제미나이보다 먼저 규칙이 "언제까지?"를 묻는다.
+     * 제미나이에게 맡기면 묻지 않고 7일로 바로 확인을 받아, 다음 말 "잘 모르겠어"가 처음 설정으로 새던 문제(비서 점검 24·25번).
+     */
+    Outcome tempBody(Turn t) {
         String text = t.text;
         String flat = text.replace(" ", "");
-
-        // 몸 상태가 잠깐 바뀜 ("다리를 다쳐서 휠체어 타고 다녀")
         if ((flat.contains("다쳐") || flat.contains("다쳤") || flat.contains("깁스") || flat.contains("수술"))
                 && RuleReader.mode(text) != null) {
             String m = RuleReader.mode(text);
@@ -312,6 +315,18 @@ class RuleBrain {
             }
             return Outcome.ask("많이 불편하시겠어요. 언제까지 " + modeWord(m).replace("로", "를").replace("으를", "를")
                     + " 타세요? 날짜나 '이번 달까지'처럼 말씀해 주세요.");
+        }
+        return null;
+    }
+
+    Outcome run(Turn t) {
+        String text = t.text;
+        String flat = text.replace(" ", "");
+
+        // 몸 상태가 잠깐 바뀜 ("다리를 다쳐서 휠체어 타고 다녀")
+        Outcome temp = tempBody(t);
+        if (temp != null) {
+            return temp;
         }
         // 다 나음
         if (flat.contains("다나았") || flat.contains("나았어") || flat.contains("이제괜찮") || flat.contains("다시걸")) {
