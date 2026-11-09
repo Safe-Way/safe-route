@@ -140,10 +140,23 @@ class TransitViaTests {
                 .setControllerAdvice(new ApiErrorHandler()).build();
         mvc.perform(post("/api/transit").contentType(MediaType.APPLICATION_JSON).content("""
                         {"origin":{"lat":35.144,"lon":126.932},"destination":{"lat":35.16,"lon":126.88},
-                         "via":[{"lat":35.147,"lon":126.919,"name":"다이소"}],"mode":"adult"}"""))
+                         "stops":[{"name":"다이소","lat":35.147,"lon":126.919}],"mode":"adult"}"""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths[0].legs[3].type").value("stop"))
                 .andExpect(jsonPath("$.paths[0].legs[3].from.name").value("다이소"));
         verify(odsay, times(2)).search(anyDouble(), anyDouble(), anyDouble(), anyDouble());
+    }
+
+    @Test
+    void oldNameViaStillWorks() throws Exception {
+        stubLive();
+        when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(bus());
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new TransitController(service))
+                .setControllerAdvice(new ApiErrorHandler()).build();
+        mvc.perform(post("/api/transit").contentType(MediaType.APPLICATION_JSON).content("""
+                        {"origin":{"lat":35.144,"lon":126.932},"destination":{"lat":35.16,"lon":126.88},
+                         "via":[{"lat":35.147,"lon":126.919,"name":"다이소"}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths[0].legs[3].to.name").value("다이소"));
     }
 }

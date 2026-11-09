@@ -126,7 +126,7 @@ public class TransitService {
         }
         RouteRequest.Place from = checkPlace(req.origin(), "origin");
         RouteRequest.Place to = checkPlace(req.destination(), "destination");
-        RouteRequest.Place stop = checkPlace(via.get(0), "via");
+        RouteRequest.Place stop = checkPlace(via.get(0), "stops");
         String mode = mode(req.mode());
         Lookups look = new Lookups(req.guestId());
 

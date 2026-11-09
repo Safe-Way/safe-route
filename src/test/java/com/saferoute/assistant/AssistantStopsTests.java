@@ -78,7 +78,7 @@ class AssistantStopsTests {
         assertThat(r.stops()).extracting(AssistantReply.Stop::name).containsExactly("GS25 충장점", "다이소 충장로점");
         assertThat(r.say()).contains("순서를 바꾸면", "GS25 충장점부터");
         assertThat(r.pick().type()).isEqualTo("walk");
-        assertThat(r.pick().request()).containsKey("via");
+        assertThat(r.pick().request()).containsKey("stops");
         assertThat(r.pick().summary()).contains("GS25 충장점(택배) → 다이소 충장로점");
     }
 

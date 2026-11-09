@@ -59,7 +59,7 @@ public class StopPlanner {
      * @param distanceM 다 합친 거리(m)
      * @param directMin 들르지 않고 바로 갈 때 시간. 못 셌으면 null
      * @param savedMin  말한 순서 대신 바꾼 순서로 가서 줄어든 시간. 순서를 안 바꿨거나 줄지 않으면 null
-     * @param request   [이 길로 출발] 때 앱이 보낼 값 (/api/route 모양 + via 들를 곳 차례대로)
+     * @param request   [이 길로 출발] 때 앱이 보낼 값 (/api/route 모양 + stops 들를 곳 차례대로, 앱 feat/route-stops 와 같은 칸)
      * @param failText  못 찾았을 때 할 말. 찾았으면 null
      */
     public record Plan(List<Stop> stops, List<Leg> legs, int minutes, int distanceM, Integer directMin,
@@ -138,7 +138,7 @@ public class StopPlanner {
         for (Stop s : best) {
             via.add(Map.of("lat", s.lat(), "lon", s.lon(), "name", s.name()));
         }
-        request.put("via", List.copyOf(via));
+        request.put("stops", List.copyOf(via));
         return new Plan(best, w.legs(), w.minutes(), w.distanceM(), direct, saved, request, null);
     }
 
