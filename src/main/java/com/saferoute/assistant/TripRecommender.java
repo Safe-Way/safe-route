@@ -88,7 +88,8 @@ public class TripRecommender {
     public Plan recommend(Ask a) {
         CompletableFuture<WeatherDust> wdFuture = a.weather() == null ? weatherDust.start(a.lat(), a.lon()) : null;
         RouteRequest req = new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), "지금 위치"),
-                new RouteRequest.Place(a.dest().lat(), a.dest().lon(), a.dest().name()), a.night(), a.mode());
+                new RouteRequest.Place(a.dest().lat(), a.dest().lon(), a.dest().name()), a.night(), a.mode(),
+                blankToNull(a.guestId()));
 
         List<Trip> trips = new ArrayList<>();
         boolean night = "on".equals(a.night());
@@ -236,6 +237,11 @@ public class TripRecommender {
             }
         }
         return null;
+    }
+
+    /** 게스트 번호가 비었으면 null (엔진은 null 이면 모드 기준만 씀) */
+    static String blankToNull(String guestId) {
+        return guestId == null || guestId.isBlank() ? null : guestId;
     }
 
     private WalkSpeed speed(String guestId, String mode) {
