@@ -70,6 +70,43 @@ class GeminiBrainTests {
     }
 
     @Test
+    void appQuestionGetsReferenceFromKnowledge() {
+        KnowledgeRepository knowledge = mock(KnowledgeRepository.class);
+        when(knowledge.find(any())).thenReturn(List.of(new KnowledgeRepository.Piece(8, "AI가 내 위치를 아나",
+                "AI는 내 정확한 위치를 몰라요. 위치 좌표는 세잎지도 서버가 길을 찾을 때만 써요.", 5.2)));
+        AssistantTools tools = new AssistantTools(kakao, mock(TripRecommender.class),
+                facilities, memory, mock(ReportService.class), mock(WeatherDustService.class), new NightJudge());
+        JsonMapper json = JsonMapper.builder().build();
+        GeminiBrain brain = new GeminiBrain(new GeminiClient(builder, "test-key", "gemini-test"), tools, json, knowledge);
+        AssistantService s = new AssistantService(new RuleBrain(tools, memory, mock(UnmetRepository.class)), brain, tools,
+                json, Clock.fixed(Instant.parse("2026-11-06T03:00:00Z"), ZoneId.of("Asia/Seoul")));
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("[참고]")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("AI가 내 위치를 아나")))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"role":"model","parts":[{"text":"AI는 정확한 위치를 몰라요."}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+        AssistantReply r = s.answer(new AssistantRequest(A, "AI가 내 위치 알아?", 35.148, 126.926, null, null, null, null,
+                null, null));
+        server.verify();
+        assertThat(r.say()).contains("위치를 몰라요");
+        assertThat(new String(java.util.Base64.getUrlDecoder().decode(r.conversationId()))).doesNotContain("[참고]");
+    }
+
+    @Test
+    void narrowedRulesAreSent() {
+        // 화장실 → 공통 + 가까운 곳 조각만 (길 조각의 "recommend_trip 을 한 번만"이 없음)
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("[도구: 가까운 곳]")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("[도구: 길]"))))
+                .andRespond(withSuccess("""
+                        {"candidates":[{"content":{"role":"model","parts":[{"text":"화장실을 찾아볼게요."}]}}]}
+                        """, MediaType.APPLICATION_JSON));
+        ask("화장실 어디야");
+        server.verify();
+    }
+
+    @Test
     void hurtLegAsksUntilWhenWithoutGeminiThenSevenDays() {
         // 비서 점검 24·25번: 제미나이를 부르지 않고 규칙이 "언제까지?"를 묻고, "잘 모르겠어"면 일주일
         String N = "00000000-0000-4000-8000-00000000de99";

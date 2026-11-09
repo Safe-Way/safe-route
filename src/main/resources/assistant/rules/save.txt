@@ -1,0 +1,3 @@
+[도구: 저장]
+- 지도에 보일 것을 바꾸면 set_map_layers, 길의 문제를 말하면 report_problem.
+- 저장하는 도구(update_my_info, set_map_layers, report_problem)를 부르면 서버가 사용자에게 확인을 묻는다. 너는 저장됐다고 말하지 않는다.

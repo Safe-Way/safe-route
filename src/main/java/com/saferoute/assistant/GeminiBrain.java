@@ -38,42 +38,28 @@ class GeminiBrain {
             "보냈", "전화했", "알렸");
     private static final Set<String> SAVING = Set.of("update_my_info", "set_map_layers", "report_problem");
 
-    static final String SYSTEM = """
-            너는 광주의 보행 길찾기 앱 '세잎지도'의 길찾기 비서다. 어린이·어르신·휠체어 사용자가 안전하게 걷도록 돕는다.
-            [도구]
-            - "충장로 쪽", "양림동"처럼 거리·동네 이름이면 그 이름 그대로 search_place 에 넣는다 (가게를 고르게 하지 않는다).
-            - 목적지를 말하면 search_place 로 찾고, 하나로 정해지면 recommend_trip 을 한 번만 부른다. 경로·날씨·행사는 recommend_trip 안에 다 들어 있다.
-            - 음식점·카페·약국 같은 가게는 search_place 로 찾는다 ("가까운 카페" → query "카페"). 찾은 곳이 여럿이면 서버가 이름과 거리를 버튼으로 보여 주니, 이름을 늘어놓지 말고 "어디로 갈까요?"처럼 짧게 묻는다.
-            - 무엇을 먹을지 정하지 않았으면 "추천 기능 없어요"라고 거절하지 말고 어떤 종류(국밥·카페·분식 등)가 좋은지 묻는다.
-            - 가까운 화장실·쉼터·경찰서·편의점·비상벨·지하철역·지킴이집만 find_nearby. 카페·음식점은 find_nearby 가 아니라 search_place. 모드는 묻지 말고 서버가 정한 지금 모드를 쓴다.
-            - 사용자에 대해 되묻기 전에 get_my_info 로 이미 아는지 본다. 처음 쓰는 사람이면 어떻게 다니는지(걸어서·지팡이·휠체어·유모차) 한 번에 하나씩 묻는다.
-            - 몸 상태가 잠깐 바뀌면(다쳐서 휠체어) 언제까지인지 꼭 묻고 update_my_info(temp_mode, temp_until). 모른다고 하면 오늘부터 7일로 한다.
-            - 지도에 보일 것을 바꾸면 set_map_layers, 길의 문제를 말하면 report_problem.
-            - 저장하는 도구(update_my_info, set_map_layers, report_problem)를 부르면 서버가 사용자에게 확인을 묻는다. 너는 저장됐다고 말하지 않는다.
-            - 한 번 묻는 데 도구는 4번까지.
-            [지켜야 할 규칙]
-            - 도구가 없으면 절대 했다고 말하지 않는다. "○○했어요"는 도구가 성공했을 때만 말한다.
-            - 못 하는 일은 못 한다고 말하고, 할 수 있는 다른 방법을 하나 제안한다.
-            - 급한 말(넘어짐, 위험, 많이 아픔)이 나오면 다른 일보다 먼저 112에 전화할지, 보호자에게 알릴지 묻는다.
-            - 길 안내와 상관없는 질문에는 한 문장으로만 답하고 어디 가실지 묻는다.
-            - 시간·거리·버스 번호·출구 번호 같은 숫자와 이름은 도구 결과에 있는 것만 쓴다. 지어내지 않는다.
-            - 광주 밖은 안내하지 않는다.
-            - 말이 애매하면 짐작하지 말고 한 가지만 되묻는다 (예: "엘베 있는 데" → 지하철 출구인지 육교인지).
-            [말투]
-            - 존댓말, 세 문장 이하. 어린이에게는 아주 쉬운 말, 어르신에게는 짧고 또박또박.
-            - recommend_trip 결과의 sentence 를 바탕으로 말하고, because 중 중요한 것 하나를 이유로 넣는다.
-            - sentence 에 쉴 곳 개수, "지난번", 저상버스 말이 있으면 빼지 않는다.
-            - "걸어서"·"휠체어로" 같은 이동 수단 말 없이 "○○까지 22분 걸려요"처럼 시간만 말한다. 대중교통이면 sentence 의 정류장·버스·정거장 순서를 그대로 쓴다.
-            - "~드리겠어요" 대신 "~드릴게요"라고 말한다.""";
+    // 지시문은 조각으로 나눠 필요한 것만 보낸다 (RulePieces, 조각 글은 resources/assistant/rules, 토큰 줄이기 R3)
+
+    /** 앱에 대한 질문 말 (이런 말이면 지식 조각을 찾아 [참고]로 붙임, R4) */
+    static final List<String> ASKING = List.of("왜", "어떻게", "뭐가달라", "뭐가다르", "차이", "뭐야", "무슨", "저장", "지우",
+            "개인정보", "ai", "에이아이", "인공지능", "알아?", "알고있", "수있어", "어디서", "기준", "누가");
 
     private final GeminiClient gemini;
     private final AssistantTools tools;
     private final JsonMapper json;
+    /** 지식 조각 찾기 (R4). 없으면 null (시험) */
+    private final KnowledgeRepository knowledge;
 
     GeminiBrain(GeminiClient gemini, AssistantTools tools, JsonMapper json) {
+        this(gemini, tools, json, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    GeminiBrain(GeminiClient gemini, AssistantTools tools, JsonMapper json, KnowledgeRepository knowledge) {
         this.gemini = gemini;
         this.tools = tools;
         this.json = json;
+        this.knowledge = knowledge;
     }
 
     boolean available() {
@@ -87,11 +73,14 @@ class GeminiBrain {
     Outcome run(Turn t) {
         // 시험: test.ai = "all_tools" 면 고르지 않고 7개 다 (점검 스크립트 --all-tools, 줄이기 전과 비교용)
         boolean allTools = t.req.test() != null && "all_tools".equals(t.req.test().ai());
+        List<ToolPicker.Group> groups = allTools ? List.of() : ToolPicker.groups(t);
         List<String> picked = allTools ? ToolPicker.ALL : ToolPicker.pick(t);
         t.toolsSent = picked;
+        String reference = reference(t, groups);
         if (picked.size() < ToolPicker.ALL.size()) {
             Conversation before = t.convo;
-            Outcome o = run(t, ToolPicker.declarations(DECLARATIONS, picked), picked);
+            Outcome o = run(t, RulePieces.system(groups), reference, ToolPicker.declarations(DECLARATIONS, picked),
+                    picked);
             if (o != RETRY) {
                 return o;
             }
@@ -109,8 +98,41 @@ class GeminiBrain {
             t.toolsRetried = true;
             t.toolsSent = ToolPicker.ALL;
         }
-        Outcome o = run(t, DECLARATIONS, ToolPicker.ALL);
+        Outcome o = run(t, RulePieces.all(), reference, DECLARATIONS, ToolPicker.ALL);
         return o == RETRY ? null : o;
+    }
+
+    /**
+     * 앱에 대한 질문이면 지식 조각을 찾아 "[참고]" 글로 (R4). 아니면 빈 글.
+     * 찾는 때: 아무 묶음도 안 걸렸거나, 묻는 말(왜·어떻게·뭐가 달라·저장·AI…)이 있고 길·가까운 곳·가게 묶음이 아닐 때.
+     * 길 찾기·가까운 곳처럼 도구로 끝나는 말에는 붙이지 않는다.
+     */
+    String reference(Turn t, List<ToolPicker.Group> groups) {
+        if (knowledge == null || !wantsKnowledge(t.text, groups)) {
+            return "";
+        }
+        List<KnowledgeRepository.Piece> found = knowledge.find(t.text);
+        if (found.isEmpty()) {
+            return "";
+        }
+        StringBuilder b = new StringBuilder("[참고]\n");
+        for (KnowledgeRepository.Piece p : found) {
+            b.append("- ").append(p.topic()).append(": ").append(p.body()).append('\n');
+        }
+        t.knowledgeTopics = found.stream().map(KnowledgeRepository.Piece::topic).toList();
+        return b.toString();
+    }
+
+    static boolean wantsKnowledge(String text, List<ToolPicker.Group> groups) {
+        String f = text == null ? "" : text.replace(" ", "").toLowerCase(Locale.ROOT);
+        if (f.isEmpty()) {
+            return false;
+        }
+        if (groups.isEmpty()) {
+            return true;
+        }
+        boolean toolGroup = groups.stream().anyMatch(g -> List.of("길", "가까운 곳", "가게").contains(g.group()));
+        return !toolGroup && ASKING.stream().anyMatch(f::contains);
     }
 
     /** 도구를 잘못 골랐다는 표시 (밖으로 나가지 않음) */
@@ -119,17 +141,19 @@ class GeminiBrain {
     /** 할 수 없다는 말 (첫 답에서 도구를 안 부르고 이렇게 말하면 도구가 모자란 것으로 봄) */
     private static final List<String> CANT = List.of("할 수 없", "못 해요", "못해요", "기능이 없", "도와드릴 수 없", "지원하지 않");
 
-    private Outcome run(Turn t, List<Map<String, Object>> declarations, List<String> sent) {
+    private Outcome run(Turn t, String system, String reference, List<Map<String, Object>> declarations,
+            List<String> sent) {
         boolean narrowed = sent.size() < ToolPicker.ALL.size();
         tools.loadProfile(t);
         List<Object> contents = new ArrayList<>();
         for (Conversation.Turn c : t.convo.turns()) {
             contents.add(Map.of("role", c.role(), "parts", List.of(Map.of("text", c.text()))));
         }
-        contents.add(Map.of("role", "user", "parts", List.of(Map.of("text", context(t) + "\n" + t.text))));
-        StringBuilder facts = new StringBuilder(t.text).append(' ').append(context(t));
+        // [참고]는 이번 말 앞에만 붙이고 대화(conversationId)에는 남기지 않는다
+        contents.add(Map.of("role", "user", "parts", List.of(Map.of("text", context(t) + "\n" + reference + t.text))));
+        StringBuilder facts = new StringBuilder(t.text).append(' ').append(context(t)).append(' ').append(reference);
         for (int round = 0; round < MAX_ROUNDS; round++) {
-            JsonNode content = gemini.chat(SYSTEM, contents, declarations, t.usage);
+            JsonNode content = gemini.chat(system, contents, declarations, t.usage);
             if (content == null) {
                 return null;
             }

@@ -51,8 +51,9 @@ public class AssistantService {
         AssistantReply r = reply(t, o);
         AssistantReply.Usage u = r.usage();
         // 말 원문·게스트 번호는 남기지 않는다 (R1)
-        log.info("비서 토큰 합: 모델 {} 왕복 {} 입력 {} 출력 {} 보낸 도구 {} 다시 물음 {}",
-                t.usage.model() == null ? "-" : t.usage.model(), u.rounds(), u.prompt(), u.output(), u.tools(), u.retried());
+        log.info("비서 토큰 합: 모델 {} 왕복 {} 입력 {} 출력 {} 보낸 도구 {} 다시 물음 {} 참고 {}",
+                t.usage.model() == null ? "-" : t.usage.model(), u.rounds(), u.prompt(), u.output(), u.tools(), u.retried(),
+                t.knowledgeTopics);
         return r;
     }
 
