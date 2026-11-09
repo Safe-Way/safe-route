@@ -94,6 +94,20 @@ class GeminiBrainTests {
     }
 
     @Test
+    void referenceWordsAreNotSaid() {
+        // 재휘님 점검(11/09): 답 첫머리에 "[참고] 내용에 따르면"이라고 그대로 말함 → 서버가 지운다
+        assertThat(GeminiBrain.dropReferenceWords("[참고] 내용에 따르면, AI는 정확한 위치를 몰라요."))
+                .isEqualTo("AI는 정확한 위치를 몰라요.");
+        assertThat(GeminiBrain.dropReferenceWords("참고 내용에 따르면 기록은 30일 뒤 지워져요."))
+                .isEqualTo("기록은 30일 뒤 지워져요.");
+        assertThat(GeminiBrain.dropReferenceWords("[참고]에 따르면 휠체어 모드는 계단을 피해요."))
+                .isEqualTo("휠체어 모드는 계단을 피해요.");
+        assertThat(GeminiBrain.dropReferenceWords("참고 자료를 보면 AI에는 말만 보내요."))
+                .isEqualTo("AI에는 말만 보내요.");
+        assertThat(GeminiBrain.dropReferenceWords("화장실을 찾아볼게요.")).isEqualTo("화장실을 찾아볼게요.");
+    }
+
+    @Test
     void narrowedRulesAreSent() {
         // 화장실 → 공통 + 가까운 곳 조각만 (길 조각의 "recommend_trip 을 한 번만"이 없음)
         server.expect(requestTo(URL))
