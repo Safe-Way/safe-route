@@ -8,6 +8,7 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 import com.saferoute.route.RouteProperties;
+import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.geo.Geo;
 
 /**
@@ -31,9 +32,12 @@ public class FacilityCounter {
     Counts count(List<double[]> line, List<Poi> pois) {
         Map<FacilityGroup, Integer> byGroup = new EnumMap<>(FacilityGroup.class);
         List<Poi> passed = new ArrayList<>();
+        // 경로를 감싼 사각형을 가장 큰 반경만큼 넓혀, 그 밖 시설은 선분마다 거리를 재지 않는다
+        BBox near = BBox.around(line, Math.max(Math.max(Math.max(radius.light(), radius.cctv()),
+                Math.max(radius.bell(), radius.help())), Math.max(radius.rest(), radius.school())));
         for (Poi p : pois) {
             FacilityGroup g = FacilityGroup.of(p.kind());
-            if (g != null && Geo.distanceToLine(p.point(), line) <= radiusOf(g)) {
+            if (g != null && near.contains(p.lon(), p.lat()) && Geo.distanceToLine(p.point(), line) <= radiusOf(g)) {
                 byGroup.merge(g, p.count(), Integer::sum);
                 passed.add(p);
             }

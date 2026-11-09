@@ -6,12 +6,19 @@ package com.saferoute.route.api;
  * @param night auto(기본, 일몰 계산), on, off
  * @param mode  누가 걷는지: adult(기본, 청년·중년), child(어린이·청소년), senior(노인), wheelchair(휠체어).
  *              2차에 요청에 추가되는 값 (8.3)
+ * @param guestId 앱이 처음 실행 때 만든 게스트 번호. 있으면 그 사람이 정한 선호(user_profile의 계단·우회 한도·쉬는 간격)를
+ *                모드 기준 대신 쓴다. 없으면 모드 기준 (2026-11-09)
  */
-public record RouteRequest(Place origin, Place destination, String night, String mode) {
+public record RouteRequest(Place origin, Place destination, String night, String mode, String guestId) {
 
     /** mode 없이 (1차 요청 모양) */
     public RouteRequest(Place origin, Place destination, String night) {
-        this(origin, destination, night, null);
+        this(origin, destination, night, null, null);
+    }
+
+    /** 게스트 번호 없이 (모드 기준만) */
+    public RouteRequest(Place origin, Place destination, String night, String mode) {
+        this(origin, destination, night, mode, null);
     }
 
     /**
