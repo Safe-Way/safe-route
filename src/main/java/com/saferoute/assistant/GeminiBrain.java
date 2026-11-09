@@ -31,6 +31,7 @@ import tools.jackson.databind.json.JsonMapper;
 class GeminiBrain {
 
     static final int MAX_ROUNDS = 5;
+    static final String AGAIN = "그때 다시 여쭤볼게요.";
     private static final Pattern NUMBER = Pattern.compile("\\d+");
     /** 도구가 성공했을 때만 쓸 수 있는 말 (재휘님 규칙 "했다고 말하지 않는다") */
     private static final List<String> DONE_WORDS = List.of("신고했", "저장했", "바꿨", "바꾸었", "기억했", "등록했",
@@ -382,7 +383,9 @@ class GeminiBrain {
             if ("wheelchair".equals(temp)) {
                 f.put("temp_aid", "manual_wheelchair");
             }
-            said.add(KoreanTime.day(until) + "까지 " + RuleBrain.modeWord(temp) + " 안내하는 걸로");
+            boolean week = until.equals(t.now.toLocalDate().plusDays(7));
+            said.add((week ? "일주일 동안(" + KoreanTime.day(until) + "까지) " : KoreanTime.day(until) + "까지 ")
+                    + RuleBrain.modeWord(temp) + " 안내하는 걸로");
         }
         if (a.path("setup_done").asBoolean(false)) {
             f.put("setup_done", true);
@@ -390,7 +393,12 @@ class GeminiBrain {
         if (said.isEmpty()) {
             return null;
         }
-        return tools.proposeMyInfo(f, String.join(", ", said) + " 기억할까요? 맞으세요?", null);
+        String q = String.join(", ", said) + " 기억할까요? 맞으세요?";
+        if (f.containsKey("temp_mode")) {
+            // 잠깐 바뀐 모드는 끝나는 날 다시 묻는다는 말을 서버가 꼭 붙인다 (비서 점검 c10)
+            q += " " + AGAIN;
+        }
+        return tools.proposeMyInfo(f, q, null);
     }
 
     /** set_map_layers 값 검사 → 확인 질문 */
