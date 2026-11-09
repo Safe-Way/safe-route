@@ -40,11 +40,26 @@ public record TransitResult(List<TransitPath> paths, int hiddenForWheelchair, St
      * @param liveAvailable 버스 도착·지하철 시간표를 붙였으면 true, 못 받았으면 false (걷기는 null)
      * @param buses         탈 버스 중 곧 오는 것 (/api/bus/nearby 와 같은 모양)
      * @param trains        그 방향으로 곧 오는 열차 (시간표 기준, /api/subway/nearby 와 같은 모양)
+     * @param stops         버스·지하철이 지나는 정류장·역, 타는 곳부터 내리는 곳까지 차례대로 (걷기는 빈 목록).
+     *                      앱이 이 점들을 이어 노선을 그리고 "다음 정류장에서 내리세요"를 알려 줌
      */
     public record Leg(String type, int distanceM, int minutes, Stop from, Stop to, List<String> lines, String way,
                       Integer stationCount, Boolean safeWalk, List<double[]> geometry,
                       List<RouteResult.Sidewalk> sidewalks, Boolean liveAvailable,
-                      List<BusArrival> buses, List<SubwayTrain> trains) {
+                      List<BusArrival> buses, List<SubwayTrain> trains, List<Stop> stops) {
+
+        public Leg {
+            stops = stops == null ? List.of() : List.copyOf(stops);
+        }
+
+        /** 지나는 정류장 없이 만들 때 (걷기 구간, 예전 코드) */
+        public Leg(String type, int distanceM, int minutes, Stop from, Stop to, List<String> lines, String way,
+                   Integer stationCount, Boolean safeWalk, List<double[]> geometry,
+                   List<RouteResult.Sidewalk> sidewalks, Boolean liveAvailable,
+                   List<BusArrival> buses, List<SubwayTrain> trains) {
+            this(type, distanceM, minutes, from, to, lines, way, stationCount, safeWalk, geometry, sidewalks,
+                    liveAvailable, buses, trains, List.of());
+        }
     }
 
     public record Stop(String name, double lat, double lon) {

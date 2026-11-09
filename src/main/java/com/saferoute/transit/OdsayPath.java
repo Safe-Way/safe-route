@@ -22,9 +22,19 @@ record OdsayPath(int totalMin, Integer fare, List<Seg> segs) {
      * @param lines        버스 번호들 (같은 정류장에서 타는 여러 버스) 또는 지하철 노선 이름
      * @param way          지하철 가는 방향 (예: 녹동). 버스·걷기는 null
      * @param stationCount 지나는 정류장·역 수
+     * @param stops        지나는 정류장·역 (passStopList, 타는 곳부터 내리는 곳까지). 걷기는 빈 목록
      */
     record Seg(int type, int distanceM, int minutes, Place start, Place end, List<String> lines, String way,
-               int stationCount) {
+               int stationCount, List<Place> stops) {
+
+        Seg {
+            stops = stops == null ? List.of() : List.copyOf(stops);
+        }
+
+        Seg(int type, int distanceM, int minutes, Place start, Place end, List<String> lines, String way,
+            int stationCount) {
+            this(type, distanceM, minutes, start, end, lines, way, stationCount, List.of());
+        }
     }
 
     /** 이름과 좌표 */

@@ -31,7 +31,12 @@ class OdsayClientTests {
                   { "trafficType": 2, "distance": 3100, "sectionTime": 12, "stationCount": 6,
                     "lane": [ { "busNo": "첨단09", "busID": 1 }, { "busNo": "봉선37" } ],
                     "startName": "조선대학교", "startX": "126.9301", "startY": "35.1420",
-                    "endName": "문화전당역", "endX": 126.9190, "endY": 35.1470 },
+                    "endName": "문화전당역", "endX": 126.9190, "endY": 35.1470,
+                    "passStopList": { "stations": [
+                      { "index": 0, "stationName": "조선대학교", "x": "126.9301", "y": "35.1420" },
+                      { "index": 1, "stationName": "산수오거리 ", "x": "126.9250", "y": "35.1450" },
+                      { "index": 2, "stationName": "좌표없음", "x": "", "y": "" },
+                      { "index": 3, "stationName": "문화전당역", "x": "126.9190", "y": "35.1470" } ] } },
                   { "trafficType": 3, "distance": 120, "sectionTime": 2 },
                   { "trafficType": 1, "distance": 5200, "sectionTime": 11, "stationCount": 5,
                     "lane": [ { "name": "광주 1호선", "subwayCode": 1 } ], "way": "녹동",
@@ -67,6 +72,10 @@ class OdsayClientTests {
         assertThat(bus.start()).isEqualTo(new OdsayPath.Place("조선대학교", 35.142, 126.9301));
         assertThat(p.segs().get(3).way()).isEqualTo("녹동");
         assertThat(p.segs().get(0).start()).isNull();
+        assertThat(bus.stops()).extracting(OdsayPath.Place::name).containsExactly("조선대학교", "산수오거리", "문화전당역");
+        assertThat(bus.stops().get(1)).isEqualTo(new OdsayPath.Place("산수오거리", 35.145, 126.925));
+        assertThat(p.segs().get(3).stops()).isEmpty();
+        assertThat(p.segs().get(0).stops()).isEmpty();
     }
 
     @Test

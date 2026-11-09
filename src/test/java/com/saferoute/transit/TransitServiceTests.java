@@ -46,7 +46,10 @@ class TransitServiceTests {
         return List.of(new OdsayPath(38, 1250, List.of(
                 new OdsayPath.Seg(3, 250, 4, null, null, List.of(), null, 0),
                 new OdsayPath.Seg(2, 3100, 12, new OdsayPath.Place("조선대학교", 35.1420, 126.9301),
-                        new OdsayPath.Place("문화전당역", 35.1470, 126.9190), List.of("첨단09"), null, 6),
+                        new OdsayPath.Place("문화전당역", 35.1470, 126.9190), List.of("첨단09"), null, 6,
+                        List.of(new OdsayPath.Place("조선대학교", 35.1420, 126.9301),
+                                new OdsayPath.Place("산수오거리", 35.1450, 126.9250),
+                                new OdsayPath.Place("문화전당역", 35.1470, 126.9190))),
                 new OdsayPath.Seg(3, 120, 2, null, null, List.of(), null, 0),
                 new OdsayPath.Seg(1, 5200, 11, new OdsayPath.Place(subwayStart, 35.1465, 126.9195),
                         new OdsayPath.Place("남광주", 35.1390, 126.9300), List.of("광주 1호선"), "녹동", 5),
@@ -116,10 +119,16 @@ class TransitServiceTests {
         assertThat(busLeg.liveAvailable()).isTrue();
         // 첨단09가 오는 정류장(길 건너 아닌 쪽)을 골라 그 버스만, 빨리 오는 순
         assertThat(busLeg.buses()).extracting(BusArrival::remainMin).containsExactly(7, 20);
+        // 지나는 정류장: 타는 곳부터 내리는 곳까지 차례대로
+        assertThat(busLeg.stops()).extracting(TransitResult.Stop::name)
+                .containsExactly("조선대학교", "산수오거리", "문화전당역");
+        assertThat(busLeg.stops().get(1).lat()).isEqualTo(35.1450);
+        assertThat(firstWalk.stops()).isEmpty();
 
         TransitResult.Leg subwayLeg = p.legs().get(3);
         assertThat(subwayLeg.trains()).extracting(SubwayTrain::direction).containsOnly("녹동행");
         assertThat(subwayLeg.way()).isEqualTo("녹동");
+        assertThat(subwayLeg.stops()).isEmpty();
         assertThat(r.hiddenForWheelchair()).isZero();
     }
 
