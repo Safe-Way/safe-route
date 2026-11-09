@@ -43,6 +43,8 @@ final class Turn {
     List<String> toolsSent = List.of();
     /** 처음 고른 도구가 틀려서 7개로 다시 물었으면 true (R5) */
     boolean toolsRetried;
+    /** [참고]로 붙인 지식 조각 주제 (R4). 없으면 빈 목록 */
+    List<String> knowledgeTopics = List.of();
     /** 들를 곳 묶기 결과 (plan_stops). 없으면 null */
     StopPlanner.Plan stopPlan;
     Conversation.Place planDest;
