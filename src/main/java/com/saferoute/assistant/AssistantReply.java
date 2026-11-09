@@ -18,13 +18,33 @@ import java.util.Map;
  * @param ai             say 를 AI가 만들었으면 true, 규칙 문장틀이면 false
  * @param situation      알아챈 지금 상황 (날씨·밤·행사). 길을 추천하지 않았으면 null
  * @param stops          들를 곳 묶기로 고른 가게 (가는 차례대로). pick.request.stops 와 같은 순서. 아니면 빈 목록
+ * @param usage          이번 질문에 제미나이가 쓴 토큰 (비서 토큰 줄이기 R1, 점검 스크립트가 합을 냄). AI를 안 불렀으면 0
  */
 public record AssistantReply(String say, Pick pick, List<Other> others, List<String> because, String ask,
                              List<Choice> choices, Spot place, String conversationId, List<String> tools,
-                             boolean ai, Situation situation, List<Stop> stops) {
+                             boolean ai, Situation situation, List<Stop> stops, Usage usage) {
 
     public AssistantReply {
         stops = stops == null ? List.of() : List.copyOf(stops);
+    }
+
+    /**
+     * 제미나이 토큰 (usageMetadata 합, 요구사항 tool_selection_rag.md R1 모양).
+     * 규칙이 먼저 처리해 제미나이를 안 불렀으면 모두 0 (셈에 넣음).
+     *
+     * @param prompt  입력 토큰 합 (지시문·도구 설명·대화). 줄이려는 것
+     * @param output  출력 토큰 합 (답·도구 부르기, 생각 토큰 포함)
+     * @param rounds  제미나이를 부른 횟수 (도구를 부르면 한 질문에 여러 번)
+     * @param tools   보낸 도구 이름 (다시 물었으면 7개)
+     * @param retried 처음 고른 도구가 모자라 7개로 다시 물었으면 true (R5)
+     */
+    public record Usage(int prompt, int output, int rounds, List<String> tools, boolean retried) {
+
+        public Usage {
+            tools = tools == null ? List.of() : List.copyOf(tools);
+        }
+
+        static final Usage NONE = new Usage(0, 0, 0, List.of(), false);
     }
 
     /**

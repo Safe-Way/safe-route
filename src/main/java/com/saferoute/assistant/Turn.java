@@ -37,6 +37,12 @@ final class Turn {
 
     final List<String> tools = new ArrayList<>();
     TripRecommender.Plan plan;
+    /** 이번 질문에 제미나이가 쓴 토큰 (R1). AI를 안 불렀으면 비어 있음 */
+    final TokenUsage usage = new TokenUsage();
+    /** 제미나이에게 보낸 도구 이름 (R2). AI를 안 불렀으면 빈 목록 */
+    List<String> toolsSent = List.of();
+    /** 처음 고른 도구가 틀려서 7개로 다시 물었으면 true (R5) */
+    boolean toolsRetried;
     /** 들를 곳 묶기 결과 (plan_stops). 없으면 null */
     StopPlanner.Plan stopPlan;
     Conversation.Place planDest;

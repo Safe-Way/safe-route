@@ -66,4 +66,33 @@ class GeminiClientTests {
     void structuredWithoutKeyIsNull() {
         assertThat(new GeminiClient(RestClient.builder(), "", "m").structured("s", List.of(), Map.of())).isNull();
     }
+
+    @Test
+    void chatAddsUsageMetadataOfEveryCall() {
+        RestClient.Builder b = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(b).build();
+        GeminiClient c = new GeminiClient(b, "k", "gemini-test");
+        String answer = """
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"네"}]}}],
+                 "usageMetadata":{"promptTokenCount":1200,"candidatesTokenCount":30,"thoughtsTokenCount":5,"totalTokenCount":1235}}
+                """;
+        server.expect(requestTo("https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent"))
+                .andRespond(withSuccess(answer, MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent"))
+                .andRespond(withSuccess(answer, MediaType.APPLICATION_JSON));
+        TokenUsage usage = new TokenUsage();
+        List<Object> contents = List.of(Map.of("role", "user", "parts", List.of(Map.of("text", "안녕"))));
+        List<Map<String, Object>> tools = List.of(Map.of("name", "a"), Map.of("name", "b"));
+        c.chat("지시", contents, tools, usage);
+        c.chat("지시", contents, tools, usage);
+        server.verify();
+        assertThat(usage.snapshot(List.of("a", "b"), false)).isEqualTo(new AssistantReply.Usage(2400, 70, 2, List.of("a", "b"), false));
+    }
+
+    @Test
+    void noUsageMetadataMeansNoUsage() {
+        TokenUsage usage = new TokenUsage();
+        GeminiClient.countTokens(null, "m", usage, 7);
+        assertThat(usage.snapshot(List.of(), false)).isEqualTo(AssistantReply.Usage.NONE);
+    }
 }
