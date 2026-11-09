@@ -143,6 +143,7 @@ public class OdsayClient {
         OdsayPath.Place end = null;
         List<String> lines = new ArrayList<>();
         String way = null;
+        List<OdsayPath.Place> stops = new ArrayList<>();
         if (type == OdsayPath.SUBWAY || type == OdsayPath.BUS) {
             start = place(s, "start");
             end = place(s, "end");
@@ -155,9 +156,24 @@ public class OdsayClient {
             if (type == OdsayPath.SUBWAY) {
                 way = s.path("way").asString(null);
             }
+            stops = stops(s);
         }
         return new OdsayPath.Seg(type, num(s.path("distance")), num(s.path("sectionTime")), start, end,
-                List.copyOf(lines), way, num(s.path("stationCount")));
+                List.copyOf(lines), way, num(s.path("stationCount")), stops);
+    }
+
+    /** 지나는 정류장·역 (passStopList.stations[]: stationName, x = 경도, y = 위도). 좌표 없는 것은 뺌 */
+    static List<OdsayPath.Place> stops(JsonNode s) {
+        List<OdsayPath.Place> out = new ArrayList<>();
+        for (JsonNode st : s.path("passStopList").path("stations")) {
+            double lat = dbl(st.path("y"));
+            double lon = dbl(st.path("x"));
+            if (lat == 0 || lon == 0) {
+                continue;
+            }
+            out.add(new OdsayPath.Place(st.path("stationName").asString("").trim(), lat, lon));
+        }
+        return out;
     }
 
     private static OdsayPath.Place place(JsonNode s, String prefix) {

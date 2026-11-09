@@ -194,14 +194,19 @@ public class TransitService {
                 .limit(MAX_BUSES).toList()).orElse(List.of());
         boolean live = stop.map(StopArrivals::available).orElse(false);
         return new TransitResult.Leg("bus", s.distanceM(), s.minutes(), stop(s.start()), stop(s.end()), s.lines(),
-                null, s.stationCount(), null, null, null, live, buses, null);
+                null, s.stationCount(), null, null, null, live, buses, null, stops(s));
     }
 
     private TransitResult.Leg subwayLeg(OdsayPath.Seg s, Lookups look) {
         Optional<StationTrains> st = look.station(s.start());
         List<SubwayTrain> trains = st.map(x -> trainsToward(x.trains(), s.way())).orElse(List.of());
         return new TransitResult.Leg("subway", s.distanceM(), s.minutes(), stop(s.start()), stop(s.end()), s.lines(),
-                s.way(), s.stationCount(), null, null, null, st.isPresent(), null, trains);
+                s.way(), s.stationCount(), null, null, null, st.isPresent(), null, trains, stops(s));
+    }
+
+    /** 지나는 정류장·역을 앱에 줄 모양으로 */
+    private static List<TransitResult.Stop> stops(OdsayPath.Seg s) {
+        return s.stops().stream().map(p -> new TransitResult.Stop(p.name(), p.lat(), p.lon())).toList();
     }
 
     /** ODsay 방향(예: 녹동)과 맞는 열차만. 방향을 모르거나 맞는 게 없으면 모든 방향 */
