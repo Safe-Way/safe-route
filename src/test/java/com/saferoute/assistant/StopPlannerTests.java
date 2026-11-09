@@ -67,7 +67,7 @@ class StopPlannerTests {
         assertThat(p.directMin()).isNotNull().isLessThanOrEqualTo(p.minutes());
         assertThat(p.savedMin()).isNotNull().isPositive();
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> via = (List<Map<String, Object>>) p.request().get("via");
+        List<Map<String, Object>> via = (List<Map<String, Object>>) p.request().get("stops");
         assertThat(via).extracting(v -> v.get("name")).containsExactly("GS25 동쪽점", "다이소 서쪽점");
         assertThat(p.request()).containsKeys("origin", "destination", "mode", "night");
         // 고른 길 3구간 + 바로 가는 길 1 + 말한 순서 3구간
