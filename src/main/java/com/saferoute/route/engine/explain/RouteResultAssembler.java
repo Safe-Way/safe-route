@@ -16,7 +16,6 @@ import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.condition.Conditions;
 import com.saferoute.route.engine.event.RoadEvent;
 import com.saferoute.route.engine.event.RoadEvents;
-import com.saferoute.route.engine.facility.Availability;
 import com.saferoute.route.engine.facility.FacilityCounter;
 import com.saferoute.route.engine.facility.FacilityCounter.Counts;
 import com.saferoute.route.engine.facility.FacilityGroup;
@@ -26,6 +25,7 @@ import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.score.Coverage;
+import com.saferoute.route.engine.score.RouteScorer;
 import com.saferoute.route.engine.search.RoadPath;
 import com.saferoute.route.engine.search.RouteFinder;
 
@@ -68,11 +68,8 @@ public class RouteResultAssembler {
         int shortM = (int) Math.round(found.shortest().lengthM() + snapM);
         int safeM = (int) Math.round(found.safe().lengthM() + snapM);
 
-        // 쉼 곳은 경로 고를 때처럼 지금 이용 가능한 곳만 센다
-        List<Poi> pois = nearby.pois().stream()
-                .filter(p -> FacilityGroup.of(p.kind()) != FacilityGroup.REST
-                        || Availability.usable(p, nearby.at(), nearby.holidays()))
-                .toList();
+        // 경로 고를 때처럼 지금 쓸 수 있는 시설만 센다 (밤 도움 시설, 운영 시간)
+        List<Poi> pois = nearby.pois().stream().filter(p -> RouteScorer.usableNow(p, cond.night(), nearby)).toList();
         List<Counts> counts = counter.countAlong(List.of(shortLine, safeLine), pois);
         Counts shortCounts = counts.get(0);
         Counts safeCounts = counts.get(1);
@@ -101,8 +98,7 @@ public class RouteResultAssembler {
         ExplanationBuilder.Avoided avoided = same ? ExplanationBuilder.Avoided.NONE : new ExplanationBuilder.Avoided(
                 profile.avoidStairs() && avoids(found, RouteFinder::isStairs),
                 profile.avoidUnpaved() && avoids(found, RouteFinder::isUnpaved),
-                shortEvents.stream().anyMatch(e -> e.avoid() && safeEvents.stream()
-                        .noneMatch(x -> x.kind().equals(e.kind()) && x.title().equals(e.title()))));
+                !ExplanationBuilder.avoided(shortEvents, safeEvents).isEmpty());
         String summary = ExplanationBuilder.text(cond, profile, phase, same, found.detourCapped(), extraM, extraMin,
                 diff, avoided);
         summary = ExplanationBuilder.withEvents(summary, extraM, extraMin, same ? List.of() : shortEvents, safeEvents);
@@ -181,11 +177,18 @@ public class RouteResultAssembler {
             if (s != null) {
                 out.add(new RouteResult.Event(e.kind(), e.title(), e.place(), e.message(),
                         e.endsAt() == null ? null : e.endsAt().format(ENDS),
-                        (int) Math.round(s[0]), (int) Math.round(s[1]), avoids.test(e)));
+                        (int) Math.round(s[0]), (int) Math.round(s[1]), avoids.test(e), near(e, line)));
             }
         }
         out.sort(Comparator.comparingInt(RouteResult.Event::fromM));
         return out;
+    }
+
+    /** 경로 선의 첫 점(요청한 출발)·끝 점(도착)이 영향 범위 안인지. RouteService가 피하지 않을 행사를 고르는 기준과 같다 */
+    static String near(RoadEvent e, List<double[]> line) {
+        boolean start = Geo.distance(e.point(), line.get(0)) <= e.radiusM();
+        boolean end = Geo.distance(e.point(), line.get(line.size() - 1)) <= e.radiusM();
+        return start && end ? "both" : start ? "start" : end ? "end" : null;
     }
 
     private static List<RouteResult.Stretch> crossings(RoadPath path, double[] start) {

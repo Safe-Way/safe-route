@@ -2,7 +2,6 @@ package com.saferoute.route.data;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -80,8 +79,8 @@ public class MysqlPoiSource implements PoiSource {
     public LocalDate dataDate() {
         LocalDate d = dataDate;
         if (d == null) {
-            Timestamp at = jdbc.queryForObject("SELECT MAX(loaded_at) FROM data_source", Timestamp.class);
-            d = at == null ? null : at.toLocalDateTime().toLocalDate();
+            LocalDateTime at = jdbc.queryForObject("SELECT MAX(loaded_at) FROM data_source", LocalDateTime.class);
+            d = at == null ? null : at.toLocalDate();
             dataDate = d;
         }
         return d;
@@ -97,8 +96,8 @@ public class MysqlPoiSource implements PoiSource {
                     (rs, n) -> new RoadEvent(rs.getLong("id"), rs.getString("kind"), rs.getString("title"),
                             rs.getString("place"), rs.getString("message"), rs.getDouble("lon"), rs.getDouble("lat"),
                             rs.getDouble("radius_m"),
-                            rs.getTimestamp("ends_at") == null ? null : rs.getTimestamp("ends_at").toLocalDateTime()),
-                    box.toWkt(), Timestamp.valueOf(at), Timestamp.valueOf(at));
+                            rs.getObject("ends_at", LocalDateTime.class)),
+                    box.toWkt(), at, at);
         } catch (DataAccessException e) {
             // 행사 정보는 덧붙이는 것이라 못 읽어도 경로는 준다
             log.warn("행사·돌발상황을 읽지 못함: {}", e.getMostSpecificCause().getMessage());

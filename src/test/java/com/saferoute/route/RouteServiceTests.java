@@ -188,13 +188,9 @@ class RouteServiceTests {
     }
 
     @Test
-    void dataGapIsNotShown() {
-        // 데이터 부족 길만 지나도 알림을 띄우지 않는다 (2026-11-06). 기준일만 준다
-        EdgePenalty gap = new EdgePenalty(Map.of(), true);
-        RoadGraph graph = new RoadGraph(Map.of(S, S_P, T, T_P), List.of(edge(1, S, T, S_P, T_P, gap)));
-        RouteService s = TestRoutes.service(graph, facilities(List.of()), 21);
-
-        RouteResult r = s.route(request("auto"));
+    void dataQualityIsAlwaysOkWithDataDate() {
+        // 데이터 부족 알림은 없앴다 (2026-11-06). 기준일만 준다
+        RouteResult r = service(facilities(List.of()), 21).route(request("auto"));
 
         assertThat(r.dataQuality().status()).isEqualTo("OK");
         assertThat(r.dataQuality().message()).isNull();
@@ -258,21 +254,6 @@ class RouteServiceTests {
         RouteResult r = s.route(request("auto"));
 
         assertThat(r.facilities()).extracting(RouteResult.FacilityMark::type).containsExactly("EMERGENCY_BELL", "CCTV");
-    }
-
-    @Test
-    void partialDataGapOnOneRoute() {
-        double[] nP = {126.93110, LAT + 0.0006};
-        EdgePenalty gap = new EdgePenalty(Map.of(), true);
-        RoadGraph g = new RoadGraph(Map.of(S, S_P, M, M_P, T, T_P, N, nP), List.of(
-                edge(10, S, M, S_P, M_P, DARK), edge(11, M, T, M_P, T_P, DARK),
-                edge(12, S, N, S_P, nP, gap), edge(13, T, N, T_P, nP, gap)));
-
-        // 북쪽 길에만 등이 있어 밤에는 북쪽(데이터 부족)으로 간다
-        RouteResult r = TestRoutes.service(g, facilities(brightSideFacilities()), 21).route(request("auto"));
-
-        assertThat(r.dataQuality().status()).isEqualTo("OK");
-        assertThat(r.dataQuality().message()).isNull();
     }
 
     @Test

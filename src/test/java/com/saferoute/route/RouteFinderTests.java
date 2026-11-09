@@ -37,8 +37,8 @@ class RouteFinderTests {
                 edge(12, S, N, S_P, nP, EdgePenalty.NONE), edge(13, T, N, T_P, nP, EdgePenalty.NONE)));
     }
 
-    static final EdgePenalty STAIRS = new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), false);
-    static final EdgePenalty CURB = new EdgePenalty(Map.of(Penalty.CURB, 1.0), false);
+    static final EdgePenalty STAIRS = new EdgePenalty(Map.of(Penalty.STAIRS, 1.0));
+    static final EdgePenalty CURB = new EdgePenalty(Map.of(Penalty.CURB, 1.0));
 
     /** 지름길만 비싸게 (어두운 길) */
     static final ToDoubleFunction<RoadEdge> DIRECT_IS_DARK = e -> e.id() <= 11 ? e.lengthM() * 13 : 0;

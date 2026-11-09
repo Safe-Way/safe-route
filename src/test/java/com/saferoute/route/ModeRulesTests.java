@@ -138,11 +138,11 @@ class ModeRulesTests {
 
     @Test
     void wheelchairAvoidsConfirmedUnpavedRoad() {
-        RoadGraph dirt = RouteFinderTests.diamond(0.0004, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0), false));
+        RoadGraph dirt = RouteFinderTests.diamond(0.0004, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0)));
         assertThat(north(route(dirt, List.of(), at(12), "wheelchair", "auto"))).isTrue();
         assertThat(north(route(dirt, List.of(), at(12), "adult", "auto"))).isFalse();
         // 비포장 없는 북쪽 길이 1.2배를 넘으면 비포장 지름길로 가고 알린다
-        RoadGraph far = RouteFinderTests.diamond(0.0008, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0), false));
+        RoadGraph far = RouteFinderTests.diamond(0.0008, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0)));
         RouteResult r = route(far, List.of(), at(12), "wheelchair", "auto");
         assertThat(north(r)).isFalse();
         assertThat(r.explanation().text()).contains("비포장을 피하면");
@@ -154,7 +154,7 @@ class ModeRulesTests {
         assertThat(north(route(stairs, List.of(), at(12), "wheelchair", "auto"))).isTrue();
 
         // 경사로가 있는 계단: 휠체어는 지름길, 노인은 여전히 계단으로 보고 피한다
-        RoadGraph ramp = RouteFinderTests.diamond(0.0004, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), false, true));
+        RoadGraph ramp = RouteFinderTests.diamond(0.0004, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), true));
         assertThat(north(route(ramp, List.of(), at(12), "wheelchair", "auto"))).isFalse();
         assertThat(north(route(ramp, List.of(), at(12), "senior", "auto"))).isTrue();
     }

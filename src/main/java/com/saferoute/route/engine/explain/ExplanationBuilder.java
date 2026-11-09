@@ -164,6 +164,8 @@ public final class ExplanationBuilder {
      *   <li>다른 이유로 돌면서 피하기도 했으면: 알림 "○○ 행사 둘레도 피했습니다"</li>
      *   <li>안내하는 길이 피할 것을 지나면(피하는 길이 우회 한도를 넘음): 주의 "○○ 구간을 지납니다. 피해 가는 길은 너무 멉니다"</li>
      *   <li>지나도 되는 것(어른의 행사, 차 없는 거리 등)을 지나면: 알림 "○○ 구간을 지납니다"</li>
+     *   <li>출발·도착이 행사 범위 안이면(그 행사장에서 출발하거나 그리로 가는 길) "지난다" 대신 한 번만:
+     *       알림 "출발지 근처에서 ○○ 행사가 열리고 있어요" (도착지, 출발지와 도착지)</li>
      * </ul>
      *
      * @param summary 이유 문장 ({@link #withEvents} 뒤). 이미 피한 것을 말했으면 "둘레도 피했습니다"는 붙이지 않는다
@@ -175,12 +177,24 @@ public final class ExplanationBuilder {
         if (!avoided.isEmpty() && !summary.endsWith(" 둘레를 피해 갑니다")) {
             out.add(RouteResult.Note.info("event", avoided + " 둘레도 피했습니다"));
         }
-        String warn = names(safeEvents.stream().filter(RouteResult.Event::avoid).map(ExplanationBuilder::label)
+        // 행사장에서 출발하거나 그리로 가는 길: 행사마다 한 줄. 행사는 "열리고 있어요", 공사·통제 등은 "있어요"
+        safeEvents.stream().filter(e -> e.near() != null).map(e -> {
+            String place = switch (e.near()) {
+                case "start" -> "출발지";
+                case "end" -> "도착지";
+                default -> "출발지와 도착지";
+            };
+            String name = label(e);
+            return "행사".equals(e.kind()) ? place + " 근처에서 " + name + iGa(name) + " 열리고 있어요"
+                    : place + " 근처에 " + name + iGa(name) + " 있어요";
+        }).distinct().forEach(t -> out.add(RouteResult.Note.info("event", t)));
+        List<RouteResult.Event> passing = safeEvents.stream().filter(e -> e.near() == null).toList();
+        String warn = names(passing.stream().filter(RouteResult.Event::avoid).map(ExplanationBuilder::label)
                 .toList());
         if (!warn.isEmpty()) {
             out.add(RouteResult.Note.warn("event", warn + " 구간을 지납니다. 피해 가는 길은 너무 멉니다"));
         }
-        String notice = names(safeEvents.stream().filter(e -> !e.avoid()).map(ExplanationBuilder::label).toList());
+        String notice = names(passing.stream().filter(e -> !e.avoid()).map(ExplanationBuilder::label).toList());
         if (!notice.isEmpty()) {
             out.add(RouteResult.Note.info("event", notice + " 구간을 지납니다"));
         }
@@ -194,7 +208,7 @@ public final class ExplanationBuilder {
     }
 
     /** 최단 경로가 지나는 피할 행사·돌발 중 안전 경로가 지나지 않는 것의 이름 */
-    private static String avoided(List<RouteResult.Event> shortEvents, List<RouteResult.Event> safeEvents) {
+    static String avoided(List<RouteResult.Event> shortEvents, List<RouteResult.Event> safeEvents) {
         Set<String> passed = safeEvents.stream().map(ExplanationBuilder::label).collect(Collectors.toSet());
         return names(shortEvents.stream().filter(RouteResult.Event::avoid).map(ExplanationBuilder::label)
                 .filter(n -> !passed.contains(n)).toList());
@@ -219,6 +233,12 @@ public final class ExplanationBuilder {
         return extraM <= 0 ? "같은 거리로"
                 : extraMin > 0 ? "%dm(%d분) 더 돌지만".formatted(extraM, extraMin)
                 : "%dm 더 돌지만".formatted(extraM);
+    }
+
+    /** 마지막 글자에 받침이 있으면 "이", 없으면 "가" (한글이 아니면 "가") */
+    static String iGa(String word) {
+        char c = word.isEmpty() ? ' ' : word.charAt(word.length() - 1);
+        return c >= '가' && c <= '힣' && (c - '가') % 28 != 0 ? "이" : "가";
     }
 
     /** 돌발은 이름에 종류가 이미 들어 있다 ("무진대로 공사") */
