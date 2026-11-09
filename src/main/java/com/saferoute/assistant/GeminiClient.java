@@ -114,6 +114,52 @@ public class GeminiClient {
         return null;
     }
 
+    /**
+     * 정해진 JSON 모양(responseSchema)으로만 답하게 묻는다 (앱의 말로 맞추기·지도 비서용, 도구 없음).
+     *
+     * @return 제미나이가 준 JSON 글자 (parts 의 text 를 이은 것). 키 없음·실패·빈 답이면 null
+     */
+    public String structured(String system, List<Object> contents, Map<String, Object> schema) {
+        if (!available()) {
+            return null;
+        }
+        for (int i = 0; i < models.size(); i++) {
+            int at = (working + i) % models.size();
+            String m = models.get(at);
+            try {
+                Map<String, Object> config = new java.util.LinkedHashMap<>(generationConfig(m));
+                config.put("responseMimeType", "application/json");
+                config.put("responseSchema", schema);
+                config.put("maxOutputTokens", 400);
+                Map<String, Object> body = Map.of(
+                        "systemInstruction", Map.of("parts", List.of(Map.of("text", system))),
+                        "contents", contents,
+                        "generationConfig", config);
+                JsonNode content = ask(m, body);
+                working = at;
+                if (content == null) {
+                    return null;
+                }
+                StringBuilder text = new StringBuilder();
+                for (JsonNode part : content.path("parts")) {
+                    text.append(part.path("text").asString(""));
+                }
+                return text.isEmpty() ? null : text.toString();
+            } catch (RestClientResponseException e) {
+                int status = e.getStatusCode().value();
+                log.warn("제미나이 호출 실패: {} {} (모델 {})", status, googleMessage(e.getResponseBodyAsString()), m);
+                if (status != 503 && status != 429 && status != 404) {
+                    break;
+                }
+            } catch (RestClientException | JacksonException e) {
+                log.warn("제미나이 호출 실패: {} {} (모델 {})", e.getClass().getSimpleName(), shortText(e.getMessage()), m);
+                working = (at + 1) % models.size();
+                break;
+            }
+        }
+        return null;
+    }
+
     /** 모델 하나에 묻는다. 빈 답이면 null */
     private JsonNode ask(String m, Map<String, Object> body) {
         // 받은 바이트를 그대로 UTF-8 글자로 읽는다. 구글(또는 중간 프록시)이 종류를 application/octet-stream 으로
