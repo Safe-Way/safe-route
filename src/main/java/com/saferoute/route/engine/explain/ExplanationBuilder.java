@@ -26,6 +26,8 @@ public final class ExplanationBuilder {
     static final String DAY = "지금은 밤이 아니라 가장 짧은 길을 안내합니다";
     static final String NIGHT_OFF = "밤 기준을 꺼서 가장 짧은 길을 안내합니다";
     static final String WHEELCHAIR = "휠체어로 지날 수 있는 길 중 가장 짧은 길입니다";
+    /** 계단을 못 가는 사람 설정(stairs_ok 0)으로 계단 길만 뺐을 때 */
+    static final String STAIRLESS = "계단 없는 길 중 가장 짧은 길입니다";
     static final String SAME = "가장 짧은 길이 가장 안전한 길입니다";
     static final String CAPPED = "더 안전한 길은 너무 많이 돌아서 가장 짧은 길을 안내합니다";
     static final String NIGHT_REASON = "더 밝고 사람 눈이 닿는 길로 갑니다";
@@ -47,7 +49,8 @@ public final class ExplanationBuilder {
     private static final int MAX_ITEMS = 3;
 
     /** 가장 짧은 길을 안내한다는 문장. 행사·돌발 둘레를 피해 다른 길로 가면 이 문장은 맞지 않다 */
-    private static final Set<String> SHORTEST_TEXTS = Set.of(DAY, NIGHT_OFF, WHEELCHAIR, SAME, CAPPED);
+    private static final Set<String> SHORTEST_TEXTS = Set.of(DAY, NIGHT_OFF, WHEELCHAIR, STAIRLESS, SAME,
+            CAPPED);
 
     private ExplanationBuilder() {
     }
@@ -74,7 +77,7 @@ public final class ExplanationBuilder {
         boolean rules = phase.hasWeights() || profile.avoidStairs() || profile.avoidUnpaved();
         // 휠체어 낮: 기준(가중치)은 없고 제외·비포장 조건부 제외만 있다. 최단 그대로면 "지날 수 있는 길 중 가장 짧은 길"
         if (!profile.exclude().isEmpty() && !phase.hasWeights() && (same || !rules)) {
-            return WHEELCHAIR;
+            return profile.onlyStairsExcluded() ? STAIRLESS : WHEELCHAIR;
         }
         if (!rules) {
             if (!cond.night()) {

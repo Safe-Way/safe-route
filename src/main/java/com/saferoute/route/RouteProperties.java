@@ -6,6 +6,7 @@ import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import com.saferoute.route.data.UserPreferences;
 import com.saferoute.route.engine.event.RoadEvent;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
@@ -127,6 +128,14 @@ public record RouteProperties(
         public boolean hasWeights() {
             return !weights.isEmpty();
         }
+
+        /** 쉼 곳 기준을 쓸 때만 반경을 쉬는 간격의 절반으로 바꾼다. 간격이 없으면 그대로 */
+        Phase withRestM(Integer restEveryM) {
+            if (restEveryM == null || !weights.containsKey(Criterion.REST)) {
+                return this;
+            }
+            return new Phase(weights, helpM, restEveryM / 2.0, schoolM, note);
+        }
     }
 
     /**
@@ -176,6 +185,50 @@ public record RouteProperties(
                 return e -> RouteFinder.isStairs(e) || RouteFinder.isUnpaved(e);
             }
             return avoidStairs ? RouteFinder::isStairs : avoidUnpaved ? RouteFinder::isUnpaved : null;
+        }
+
+        /**
+         * 그 사람이 정한 선호를 모드 기준 위에 덮는다 (user_profile, 2026-11-09). 비어 있는 값은 모드 기준 그대로.
+         * <ul>
+         *   <li>우회 한도: max_detour (1.0~2.0으로 자름)</li>
+         *   <li>계단: 0 못 감 → 계단 길을 뺀다(휠체어 경사로가 있는 계단은 지남). 1 몇 칸은 괜찮음 → 계단 조건부 제외(노인 기준).
+         *       2 괜찮음 → 계단을 피하지 않는다. 휠체어 모드는 계단 제외를 풀지 않는다</li>
+         *   <li>쉬는 간격: rest_every_m마다 쉬려면 경로 어디서든 그 절반 안에 쉴 곳이 있어야 한다.
+         *       그래서 쉼 곳 기준을 쓰는 때(노인 낮)의 쉼 곳 반경을 rest_every_m ÷ 2로 바꾼다</li>
+         * </ul>
+         */
+        public Profile personalized(UserPreferences p) {
+            if (p == null || p.isEmpty()) {
+                return this;
+            }
+            double detour = p.maxDetour() == null ? maxDetour : Math.max(1.0, Math.min(2.0, p.maxDetour()));
+            List<Penalty> ex = exclude;
+            boolean stairs = avoidStairs;
+            // 휠체어는 계단 말고도 턱·육교 등을 빼는 모드라, 사람 설정으로 계단 제외를 풀지 않는다
+            boolean wheelchair = exclude.size() > 1 && exclude.contains(Penalty.STAIRS);
+            if (p.stairsOk() != null && !wheelchair) {
+                switch (p.stairsOk()) {
+                    case 0 -> {
+                        ex = new java.util.ArrayList<>(exclude);
+                        if (!ex.contains(Penalty.STAIRS)) {
+                            ex.add(Penalty.STAIRS);
+                        }
+                        stairs = false;
+                    }
+                    case 1 -> stairs = true;
+                    default -> {
+                        ex = exclude.stream().filter(x -> x != Penalty.STAIRS).toList();
+                        stairs = false;
+                    }
+                }
+            }
+            return new Profile(detour, walkSpeedMPerMin, nightLeadMin, ex, stairs, avoidUnpaved, avoidEvents,
+                    day.withRestM(p.restEveryM()), night.withRestM(p.restEveryM()));
+        }
+
+        /** 계단만 빼고 찾는 사람 (계단을 못 가는 사람 설정). 휠체어 모드와 설명 문장을 나눈다 */
+        public boolean onlyStairsExcluded() {
+            return exclude.size() == 1 && exclude.contains(Penalty.STAIRS);
         }
 
         /** 걸리는 시간(분), 이 사람의 보행 속도로 환산 */

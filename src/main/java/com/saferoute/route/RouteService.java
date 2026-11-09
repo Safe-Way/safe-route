@@ -20,6 +20,7 @@ import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteRequest.Place;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.data.PoiSource;
+import com.saferoute.route.data.PreferenceSource;
 import com.saferoute.route.data.RoadGraphSource;
 import com.saferoute.route.engine.condition.Conditions;
 import com.saferoute.route.engine.event.RoadEvent;
@@ -43,6 +44,7 @@ import com.saferoute.situation.NightResult;
  * 경로 엔진의 입구 (요구사항 8.1). 순서만 정하고, 각 단계는 맡은 클래스가 한다.
  * <ol>
  *   <li>요청 검사 (SAME_POINT, TOO_FAR, OUT_OF_AREA)</li>
+ *   <li>모드 기준에 그 사람 선호(계단·우회 한도·쉬는 간격)를 덮기: {@link PreferenceSource}. 요청에 guestId가 있을 때만</li>
  *   <li>밤 판단: C파트 {@link NightJudge}. 어린이처럼 일몰 몇 분 전부터 밤으로 보는 모드는 여기서 앞당긴다</li>
  *   <li>주변 도로망 읽기, 출발·도착을 길에 붙이기: {@link RoadGraphSource}. 휠체어는 지날 수 있는 길로 이어진 곳에 붙인다</li>
  *   <li>주변 시설을 한 번 읽기: {@link PoiSource}. 점수·설명·지도 아이콘이 같은 목록을 쓴다</li>
@@ -78,9 +80,18 @@ public class RouteService {
     private final RouteResultAssembler assembler;
     private final RouteProperties props;
     private final Clock clock;
+    private final PreferenceSource preferences;
 
+    /** 선호를 읽지 않는 엔진 (테스트·점검 도구용) */
     public RouteService(RoadGraphSource roads, PoiSource pois, NightJudge nightJudge, RouteScorer scorer,
             RouteResultAssembler assembler, RouteProperties props, Clock clock) {
+        this(roads, pois, nightJudge, scorer, assembler, props, clock, PreferenceSource.NONE);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RouteService(RoadGraphSource roads, PoiSource pois, NightJudge nightJudge, RouteScorer scorer,
+            RouteResultAssembler assembler, RouteProperties props, Clock clock, PreferenceSource preferences) {
+        this.preferences = preferences;
         this.roads = roads;
         this.pois = pois;
         this.nightJudge = nightJudge;
@@ -109,8 +120,9 @@ public class RouteService {
         double[] start = point(req.origin());
         double[] end = point(req.destination());
         NightOption option = NightOption.from(req.night());
-        RouteProperties.Profile profile = props.profile(req.mode());
+        RouteProperties.Profile base = props.profile(req.mode());
         validate(start, end);
+        RouteProperties.Profile profile = base.personalized(preferences.find(req.guestId()));
 
         ZonedDateTime now = ZonedDateTime.now(clock).withZoneSameInstant(KOREA);
         Conditions cond = conditions(start, now, option, profile.nightLeadMin());
@@ -206,7 +218,7 @@ public class RouteService {
             RouteFinder.Found found = RouteFinder.find(graph, f.snap().node(), t.snap().node(), extra,
                     profile.maxDetour(), profile::passable, profile.avoid(), aside(graph, moved));
             return new Attempt(found, f.snap().distanceM() + t.snap().distanceM(), nearby,
-                    java.util.stream.Stream.of(placeNote("출발점", f), placeNote("도착점", t))
+                    java.util.stream.Stream.of(placeNote("출발점", f, profile), placeNote("도착점", t, profile))
                             .flatMap(java.util.Optional::stream).toList(), cov, moved);
         } catch (RouteException e) {
             return null;
@@ -323,10 +335,12 @@ public class RouteService {
     }
 
     /** 옆 길에 붙였으면 남은 거리를 알린다. 계단으로만 드나드는 곳이라 휠체어 길이 확인되지 않은 구간이다 */
-    private static java.util.Optional<RouteResult.Note> placeNote(String which, Placed p) {
+    private static java.util.Optional<RouteResult.Note> placeNote(String which, Placed p,
+            RouteProperties.Profile profile) {
+        String way = profile.onlyStairsExcluded() ? "계단 없이" : "휠체어로";
         return p.moved() ? java.util.Optional.of(RouteResult.Note.warn("snap",
-                "%s 근처 약 %dm는 휠체어로 이어진 길이 확인되지 않았습니다".formatted(which,
-                        Math.round(p.snap().distanceM())))) : java.util.Optional.empty();
+                "%s 근처 약 %dm는 %s 이어진 길이 확인되지 않았습니다".formatted(which,
+                        Math.round(p.snap().distanceM()), way))) : java.util.Optional.empty();
     }
 
     /** {경도, 위도} */
