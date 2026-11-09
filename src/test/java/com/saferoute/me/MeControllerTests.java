@@ -69,11 +69,18 @@ class MeControllerTests {
     }
 
     @Test
-    void endTripGives204() throws Exception {
-        when(repo.endTrip(GUEST, 3L, "arrived", 14, "good", null)).thenReturn(1);
+    void endTripTellsWhatWasLearned() throws Exception {
+        when(repo.endTrip(GUEST, 3L, "arrived", 14, "bad", "계단 많음")).thenReturn(1);
+        when(repo.find(GUEST)).thenReturn(Optional.of(MeServiceTests.row(true)));
+        when(repo.recentDone(GUEST, 10)).thenReturn(List.of(
+                new PreferenceLearner.Done("walk", "arrived", "bad", "계단 많음"),
+                new PreferenceLearner.Done("walk", "arrived", "bad", "계단")));
         mvc.perform(patch("/api/me/trips/3").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"guestId\":\"" + GUEST + "\",\"result\":\"arrived\",\"actualMin\":14,\"feedback\":\"good\"}"))
-                .andExpect(status().isNoContent());
+                        .content("{\"guestId\":\"" + GUEST + "\",\"result\":\"arrived\",\"actualMin\":14,"
+                                + "\"feedback\":\"bad\",\"feedbackReason\":\"계단 많음\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.learned[0].what").value("stairsOk"))
+                .andExpect(jsonPath("$.learned[0].say").exists());
     }
 
     @Test
