@@ -448,9 +448,65 @@ class RuleBrain {
             t.convo = t.convo.asked("location");
             return Outcome.ask("지금 계신 곳을 알아야 길을 찾을 수 있어요. 위치 켜기를 눌러 주세요.");
         }
+        if (t.convo.errand() != null) {
+            Conversation.Errand e = t.convo.errand();
+            t.convo = t.convo.withErrand(null).asked(null);
+            tools.planStops(t, t.convo.destination(), e);
+            return Outcome.say(Sentences.stops(t));
+        }
         tools.recommendTrip(t, t.convo.destination());
         t.convo = t.convo.asked(null);
         return Outcome.say(Sentences.trip(t));
+    }
+
+    /**
+     * 들를 곳 묶기 ("퇴근길에 다이소 들르고 택배 찾고 집 갈래"). 아니면 null.
+     * 들를 곳은 대화에 기억하고, 도착이 정해지면 goOrAsk 가 같이 길을 찾는다. 걷기는 세 곳까지.
+     */
+    Outcome stops(Turn t) {
+        Conversation.Errand waiting = t.convo.errand();
+        if (waiting != null && "destination".equals(t.convo.asked())) {
+            // "들른 뒤 어디로 가세요?"의 답
+            String dest = destination(t.text);
+            return stopDest(t, dest == null ? RuleReader.stripParticle(t.text.strip()) : dest);
+        }
+        StopReader.Read r = StopReader.read(t.text);
+        if (r == null) {
+            return null;
+        }
+        if (r.tooMany()) {
+            t.convo = t.convo.withErrand(null).asked(null);
+            return Outcome.ask("세 곳까지 같이 갈 수 있어요. 꼭 들를 곳 세 곳만 다시 말씀해 주시겠어요?");
+        }
+        String m = RuleReader.mode(t.text);
+        if (m != null) {
+            t.convo = t.convo.withMode(m);
+        }
+        t.convo = t.convo.withErrand(new Conversation.Errand(r.stops(), r.ordered())).withDestination(null);
+        if (r.dest() == null) {
+            t.convo = t.convo.asked("destination");
+            return Outcome.ask("들르신 뒤에는 어디로 가세요? (예: 집)");
+        }
+        return stopDest(t, r.dest());
+    }
+
+    private Outcome stopDest(Turn t, String dest) {
+        AssistantTools.Found f = tools.searchPlace(t, dest);
+        switch (f.status()) {
+            case "none":
+                t.convo = t.convo.asked("destination");
+                return Outcome.ask("'" + dest + "'을(를) 찾지 못했어요. 들르신 뒤 어디로 가실지 다른 이름으로 말씀해 주시겠어요?");
+            case "error":
+                return Outcome.ask("지금은 장소 검색이 잘 안 돼요. 잠시 뒤에 다시 말씀해 주세요.");
+            case "outside":
+                t.convo = t.convo.withErrand(null);
+                return Outcome.say(Josa.eun("'" + f.places().get(0).name() + "'") + " 광주 밖이에요. 지금은 광주 안에서만 길을 안내해요.");
+            case "choose":
+                return choosePlace(t, dest, f.places());
+            default:
+                t.convo = t.convo.asked(null);
+                return goOrAsk(t);
+        }
     }
 
     // ───────────────────────── 흐름 조각 ─────────────────────────

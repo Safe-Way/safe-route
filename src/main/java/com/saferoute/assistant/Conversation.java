@@ -21,9 +21,10 @@ import tools.jackson.databind.json.JsonMapper;
  * @param pending     확인을 기다리는 저장 일 ("맞으세요?" 뒤 "네"를 들으면 함). 없으면 null
  * @param setup       처음 설정에서 지금까지 들은 답 (aid, stairs)
  * @param bodyNote    오늘 몸 상태 한마디 ("무릎이 아파"). 없으면 null
+ * @param errand      가는 길에 들를 곳 ("다이소 들르고 택배 찾고 집 갈래"). 도착지가 정해지면 같이 길을 찾는다. 없으면 null
  */
 public record Conversation(List<Turn> turns, Place destination, List<Place> candidates, String mode, String asked,
-                           Pending pending, Map<String, String> setup, String bodyNote) {
+                           Pending pending, Map<String, String> setup, String bodyNote, Errand errand) {
 
     static final int MAX_TURNS = 6;
     static final int MAX_TEXT = 200;
@@ -54,8 +55,26 @@ public record Conversation(List<Turn> turns, Place destination, List<Place> cand
     public record Pending(String tool, Map<String, Object> args, String question, Pending more) {
     }
 
+    /**
+     * 들를 곳 목록 (말로 들를 곳 묶기, 11-09 결정).
+     *
+     * @param stops   말한 차례대로
+     * @param ordered "먼저 다이소, 그다음 약국"처럼 순서를 말했으면 true (그 순서 그대로 감)
+     */
+    public record Errand(List<Stop> stops, boolean ordered) {
+    }
+
+    /**
+     * 들를 곳 하나.
+     *
+     * @param query 카카오에서 찾을 말 ("다이소", 택배는 "편의점")
+     * @param label 사용자가 말한 것 ("다이소", "택배")
+     */
+    public record Stop(String query, String label) {
+    }
+
     static Conversation start() {
-        return new Conversation(List.of(), null, List.of(), null, null, null, Map.of(), null);
+        return new Conversation(List.of(), null, List.of(), null, null, null, Map.of(), null, null);
     }
 
     Conversation withTurn(String role, String text) {
@@ -68,35 +87,39 @@ public record Conversation(List<Turn> turns, Place destination, List<Place> cand
         while (t.size() > MAX_TURNS) {
             t.remove(0);
         }
-        return new Conversation(List.copyOf(t), destination, candidates, mode, asked, pending, setup, bodyNote);
+        return new Conversation(List.copyOf(t), destination, candidates, mode, asked, pending, setup, bodyNote, errand);
     }
 
     Conversation withDestination(Place d) {
-        return new Conversation(turns, d, List.of(), mode, asked, pending, setup, bodyNote);
+        return new Conversation(turns, d, List.of(), mode, asked, pending, setup, bodyNote, errand);
     }
 
     Conversation withCandidates(List<Place> c) {
-        return new Conversation(turns, destination, List.copyOf(c), mode, asked, pending, setup, bodyNote);
+        return new Conversation(turns, destination, List.copyOf(c), mode, asked, pending, setup, bodyNote, errand);
     }
 
     Conversation withMode(String m) {
-        return new Conversation(turns, destination, candidates, m, asked, pending, setup, bodyNote);
+        return new Conversation(turns, destination, candidates, m, asked, pending, setup, bodyNote, errand);
     }
 
     Conversation asked(String what) {
-        return new Conversation(turns, destination, candidates, mode, what, pending, setup, bodyNote);
+        return new Conversation(turns, destination, candidates, mode, what, pending, setup, bodyNote, errand);
     }
 
     Conversation withPending(Pending p) {
-        return new Conversation(turns, destination, candidates, mode, asked, p, setup, bodyNote);
+        return new Conversation(turns, destination, candidates, mode, asked, p, setup, bodyNote, errand);
     }
 
     Conversation withSetup(Map<String, String> s) {
-        return new Conversation(turns, destination, candidates, mode, asked, pending, Map.copyOf(s), bodyNote);
+        return new Conversation(turns, destination, candidates, mode, asked, pending, Map.copyOf(s), bodyNote, errand);
+    }
+
+    Conversation withErrand(Errand e) {
+        return new Conversation(turns, destination, candidates, mode, asked, pending, setup, bodyNote, e);
     }
 
     Conversation withBodyNote(String note) {
-        return new Conversation(turns, destination, candidates, mode, asked, pending, setup, note);
+        return new Conversation(turns, destination, candidates, mode, asked, pending, setup, note, errand);
     }
 
     /** conversationId 글자 ↔ 대화. 글자가 틀렸으면 새 대화로 본다 */
@@ -121,7 +144,7 @@ public record Conversation(List<Turn> turns, Place destination, List<Place> cand
                 Conversation c = json.readValue(Base64.getUrlDecoder().decode(id.strip()), Conversation.class);
                 return new Conversation(c.turns() == null ? List.of() : c.turns(), c.destination(),
                         c.candidates() == null ? List.of() : c.candidates(), c.mode(), c.asked(), c.pending(),
-                        c.setup() == null ? Map.of() : c.setup(), c.bodyNote());
+                        c.setup() == null ? Map.of() : c.setup(), c.bodyNote(), c.errand());
             } catch (IllegalArgumentException | JacksonException e) {
                 return start();
             }

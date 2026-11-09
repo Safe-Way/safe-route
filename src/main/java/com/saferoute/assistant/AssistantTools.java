@@ -64,9 +64,19 @@ public class AssistantTools {
     private final ReportService reports;
     private final WeatherDustService weatherDust;
     private final NightJudge nightJudge;
+    private final StopPlanner stops;
 
+    /** 들를 곳 묶기 없이 (예전 테스트) */
     public AssistantTools(KakaoLocalClient kakao, TripRecommender trips, FacilityRepository facilities,
             MemoryRepository memory, ReportService reports, WeatherDustService weatherDust, NightJudge nightJudge) {
+        this(kakao, trips, facilities, memory, reports, weatherDust, nightJudge, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AssistantTools(KakaoLocalClient kakao, TripRecommender trips, FacilityRepository facilities,
+            MemoryRepository memory, ReportService reports, WeatherDustService weatherDust, NightJudge nightJudge,
+            StopPlanner stops) {
+        this.stops = stops;
         this.kakao = kakao;
         this.trips = trips;
         this.facilities = facilities;
@@ -277,6 +287,20 @@ public class AssistantTools {
         t.planDest = dest;
         t.weather = plan.weather();
         return plan;
+    }
+
+    // ───────────────────────── plan_stops (들를 곳 묶기) ─────────────────────────
+
+    /** plan_stops: 들를 곳을 고르고 출발 → 들를 곳 → 도착 걷는 길을 찾는다. 결과는 t.stopPlan */
+    StopPlanner.Plan planStops(Turn t, Place dest, Conversation.Errand errand) {
+        t.tools.add("plan_stops");
+        String mode = t.mode() == null ? "adult" : t.mode();
+        StopPlanner.Plan p = stops == null ? StopPlanner.Plan.fail("지금은 들를 곳을 같이 찾을 수 없어요.")
+                : stops.plan(new StopPlanner.Ask(t.guestId, t.lat, t.lon, dest, errand.stops(), errand.ordered(),
+                        mode, night(t)));
+        t.stopPlan = p;
+        t.planDest = dest;
+        return p;
     }
 
     /** 시험 시각이 있으면 그 시각으로 밤을 정하고, 없으면 엔진이 지금 시각으로 정한다 */

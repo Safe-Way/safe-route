@@ -1,0 +1,54 @@
+package com.saferoute.assistant;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+
+import com.saferoute.assistant.Conversation.Stop;
+
+/** 말에서 들를 곳·도착 읽기 (11-09 결정 ①) */
+class StopReaderTests {
+
+    @Test
+    void readsErrandsOnTheWayHome() {
+        StopReader.Read r = StopReader.read("퇴근길에 다이소 들르고 택배 찾고 집 갈래");
+        assertThat(r.stops()).containsExactly(new Stop("다이소", "다이소"), new Stop("편의점", "택배"));
+        assertThat(r.ordered()).isFalse();
+        assertThat(r.dest()).isEqualTo("집");
+    }
+
+    @Test
+    void keepsSpokenOrder() {
+        StopReader.Read r = StopReader.read("먼저 다이소, 그다음 약국 들렀다가 집에 가자");
+        assertThat(r.stops()).extracting(Stop::query).containsExactly("다이소", "약국");
+        assertThat(r.ordered()).isTrue();
+        assertThat(r.dest()).isEqualTo("집");
+    }
+
+    @Test
+    void oneStopToAPlace() {
+        StopReader.Read r = StopReader.read("편의점 들렀다 문화전당 가자");
+        assertThat(r.stops()).extracting(Stop::query).containsExactly("편의점");
+        assertThat(r.dest()).isEqualTo("문화전당");
+    }
+
+    @Test
+    void destinationCanBeMissing() {
+        StopReader.Read r = StopReader.read("다이소 들르고 약국 들러");
+        assertThat(r.stops()).extracting(Stop::query).containsExactly("다이소", "약국");
+        assertThat(r.dest()).isNull();
+    }
+
+    @Test
+    void moreThanThreeIsTooMany() {
+        assertThat(StopReader.read("다이소 들르고 약국 들르고 빵집 들르고 꽃집 들렀다 집 가자").tooMany()).isTrue();
+    }
+
+    @Test
+    void otherSentencesAreNotErrands() {
+        assertThat(StopReader.read("문화전당 가자")).isNull();
+        assertThat(StopReader.read("화장실 들러야 해")).isNull();
+        assertThat(StopReader.read("택배 보내는 곳 어디야")).isNull();
+        assertThat(StopReader.read("")).isNull();
+    }
+}

@@ -17,10 +17,24 @@ import java.util.Map;
  * @param tools          이번에 부른 도구 이름 (순서대로). 시험 스크립트가 확인한다
  * @param ai             say 를 AI가 만들었으면 true, 규칙 문장틀이면 false
  * @param situation      알아챈 지금 상황 (날씨·밤·행사). 길을 추천하지 않았으면 null
+ * @param stops          들를 곳 묶기로 고른 가게 (가는 차례대로). pick.request.via 와 같은 순서. 아니면 빈 목록
  */
 public record AssistantReply(String say, Pick pick, List<Other> others, List<String> because, String ask,
                              List<Choice> choices, Spot place, String conversationId, List<String> tools,
-                             boolean ai, Situation situation) {
+                             boolean ai, Situation situation, List<Stop> stops) {
+
+    public AssistantReply {
+        stops = stops == null ? List.of() : List.copyOf(stops);
+    }
+
+    /**
+     * 들를 곳 하나.
+     *
+     * @param label 사용자가 말한 것 ("다이소", "택배")
+     * @param name  찾은 가게 ("다이소 충장로점", 택배는 편의점 이름)
+     */
+    public record Stop(String label, String name, String address, double lat, double lon) {
+    }
 
     /**
      * 추천 1등.
