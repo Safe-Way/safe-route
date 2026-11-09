@@ -47,6 +47,9 @@ public class TransitService {
     static final int MAX_BUSES = 3;
     static final int MAX_TRAINS = 2;
     static final Set<String> MODES = Set.of("adult", "child", "senior", "wheelchair");
+    /** 대중교통으로 같이 찾는 들를 곳 수 (경유지 하나마다 ODsay 한 번 더, 하루 30번) */
+    static final int MAX_VIA = 1;
+    static final String VIA_NOTE = "들르신 뒤 버스·지하철 시간은 그때 다시 찾아요. 다 보시면 [다 봤어요]를 눌러 주세요";
 
     private final OdsayClient odsay;
     private final RouteService route;
@@ -102,6 +105,101 @@ public class TransitService {
             note = "엘리베이터로 들어갈 수 없는 역을 지나는 길 " + hidden + "개는 뺐어요";
         }
         return new TransitResult(out, hidden, note);
+    }
+
+    // ---------- 들를 곳 (via, 11-09 결정 ②) ----------
+
+    /**
+     * 들를 곳이 있으면 앞 구간(출발 → 들를 곳)과 뒤 구간(들를 곳 → 도착)을 따로 찾아 legs 사이에 들르기 구간(type stop)을 끼운다.
+     * 700m 안 구간은 ODsay 가 안 찾아 주므로 지금처럼 걷기만. 뒤 구간은 언제 탈지 몰라서 곧 오는 버스·열차를 붙이지 않고
+     * 대략 시간만 준다 (앱이 [다 봤어요]를 누르면 지금 위치에서 다시 찾음). 들를 곳이 없으면 search(req) 와 같다.
+     */
+    public TransitResult search(RouteRequest req, List<RouteRequest.Place> via) {
+        if (via == null || via.isEmpty()) {
+            return search(req);
+        }
+        if (req == null) {
+            throw TransitException.bad("요청 내용이 비어 있어요");
+        }
+        if (via.size() > MAX_VIA) {
+            throw TransitException.bad("대중교통은 들를 곳을 한 곳까지 같이 찾아요");
+        }
+        RouteRequest.Place from = checkPlace(req.origin(), "origin");
+        RouteRequest.Place to = checkPlace(req.destination(), "destination");
+        RouteRequest.Place stop = checkPlace(via.get(0), "stops");
+        String mode = mode(req.mode());
+        Lookups look = new Lookups(req.guestId());
+
+        Half front = half(from, stop, req.night(), mode, look, MAX_PATHS);
+        Half back = half(stop, to, req.night(), mode, look, 1);
+        int hidden = front.hidden() + back.hidden();
+        if (front.paths().isEmpty() || back.paths().isEmpty()) {
+            return new TransitResult(List.of(), hidden, hidden > 0 ? "엘리베이터로 들어갈 수 없는 역을 지나는 길만 있어요"
+                    : "들를 곳을 지나는 대중교통 길을 찾지 못했어요");
+        }
+        TransitResult.TransitPath b = back.paths().get(0);
+        List<TransitResult.Leg> later = new ArrayList<>();
+        for (TransitResult.Leg l : b.legs()) {
+            later.add(later(l));
+        }
+        TransitResult.Stop at = stop(stop);
+        TransitResult.Leg visit = new TransitResult.Leg("stop", 0, 0, at, at, List.of(), null, null, null, null, null,
+                null, null, null);
+        List<TransitResult.TransitPath> out = new ArrayList<>();
+        for (TransitResult.TransitPath f : front.paths()) {
+            List<TransitResult.Leg> legs = new ArrayList<>(f.legs());
+            legs.add(visit);
+            legs.addAll(later);
+            Integer fare = f.fare() == null || b.fare() == null ? null : f.fare() + b.fare();
+            out.add(new TransitResult.TransitPath(f.totalMin() + b.totalMin(), fare, f.transfers() + b.transfers(),
+                    f.walkM() + b.walkM(), List.copyOf(legs)));
+        }
+        String note = hidden > 0 ? VIA_NOTE + ". 엘리베이터로 들어갈 수 없는 역을 지나는 길 " + hidden + "개는 뺐어요" : VIA_NOTE;
+        return new TransitResult(out, hidden, note);
+    }
+
+    private record Half(List<TransitResult.TransitPath> paths, int hidden) {
+    }
+
+    /** 한 구간. 가까우면(ODsay TOO_CLOSE) 우리 걷는 길 하나 */
+    private Half half(RouteRequest.Place from, RouteRequest.Place to, String night, String mode, Lookups look,
+                      int max) {
+        List<OdsayPath> all;
+        try {
+            all = paths(from, to);
+        } catch (TransitException e) {
+            if (!"TOO_CLOSE".equals(e.code())) {
+                throw e;
+            }
+            RouteResult.Route safe = look.walk(stop(from), stop(to), night, mode);
+            if (safe == null) {
+                throw TransitException.noRoute();
+            }
+            TransitResult.Leg leg = new TransitResult.Leg("walk", safe.distanceM(), safe.durationMin(), stop(from),
+                    stop(to), List.of(), null, null, true, safe.geometry(), safe.sidewalks(), null, null, null);
+            return new Half(List.of(new TransitResult.TransitPath(Math.max(1, safe.durationMin()), 0, 0,
+                    safe.distanceM(), List.of(leg))), 0);
+        }
+        List<TransitResult.TransitPath> out = new ArrayList<>();
+        int hidden = 0;
+        for (OdsayPath p : all) {
+            if ("wheelchair".equals(mode) && !wheelchairOk(p, look)) {
+                hidden++;
+            } else if (out.size() < max) {
+                out.add(build(p, from, to, night, mode, look));
+            }
+        }
+        return new Half(out, hidden);
+    }
+
+    /** 뒤 구간: 언제 탈지 몰라서 곧 오는 버스·열차는 빼고 대략 시간만 */
+    private static TransitResult.Leg later(TransitResult.Leg l) {
+        if (!"bus".equals(l.type()) && !"subway".equals(l.type())) {
+            return l;
+        }
+        return new TransitResult.Leg(l.type(), l.distanceM(), l.minutes(), l.from(), l.to(), l.lines(), l.way(),
+                l.stationCount(), l.safeWalk(), l.geometry(), l.sidewalks(), false,
+                "bus".equals(l.type()) ? List.of() : null, "subway".equals(l.type()) ? List.of() : null, l.stops());
     }
 
     // ---------- 1) ODsay + 기억 ----------

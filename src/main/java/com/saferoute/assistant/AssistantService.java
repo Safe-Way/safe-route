@@ -85,6 +85,11 @@ public class AssistantService {
         if (t.text.isEmpty() || t.text.startsWith("(")) {
             return rules.suggest(t);
         }
+        // ⑤ 들를 곳 묶기 ("다이소 들르고 택배 찾고 집 갈래"). 고르기·길 찾기는 우리 규칙이 해서 AI를 거치지 않는다
+        Outcome stops = rules.stops(t);
+        if (stops != null) {
+            return stops;
+        }
         // ⑤ 도구가 없는 요청 (못 하는 일·상관없는 말·인사). AI 비용을 아끼고 했다고 지어내지 않게 규칙이 먼저
         Outcome noTool = rules.noTool(t);
         if (noTool != null) {
@@ -128,6 +133,13 @@ public class AssistantService {
             situation = new Situation(t.plan.night(), w.rain(), w.heat(), w.cold(), w.tempC(), w.weatherAvailable(),
                     w.dustBad(), w.dustAvailable(), List.copyOf(events));
         }
+        List<AssistantReply.Stop> stops = List.of();
+        StopPlanner.Plan sp = t.stopPlan;
+        if (sp != null && sp.failText() == null) {
+            pick = new Pick("walk", sp.request(), Sentences.stopSummary(sp), sp.minutes(), "safe");
+            stops = sp.stops().stream()
+                    .map(s -> new AssistantReply.Stop(s.label(), s.name(), s.address(), s.lat(), s.lon())).toList();
+        }
         String mode = t.mode();
         String say = Sentences.polish(o.say(), mode);
         String ask = Sentences.polish(o.ask(), mode);
@@ -150,7 +162,7 @@ public class AssistantService {
             called.add(name.replace(":confirm", ""));
         }
         return new AssistantReply(say, pick, others, because, ask, o.choices(), t.spot,
-                codec.encode(next), List.copyOf(called), o.ai(), situation);
+                codec.encode(next), List.copyOf(called), o.ai(), situation, stops);
     }
 
     static final String WHEELCHAIR_WHY = "확인된 턱과 못 지나는 곳을 피한 길이에요.";

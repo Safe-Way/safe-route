@@ -37,6 +37,8 @@ final class Turn {
 
     final List<String> tools = new ArrayList<>();
     TripRecommender.Plan plan;
+    /** 들를 곳 묶기 결과 (plan_stops). 없으면 null */
+    StopPlanner.Plan stopPlan;
     Conversation.Place planDest;
     AssistantReply.Spot spot;
     String spotKindName;
