@@ -30,7 +30,7 @@ public record TransitResult(List<TransitPath> paths, int hiddenForWheelchair, St
     /**
      * 구간 하나.
      *
-     * @param type          walk, bus, subway
+     * @param type          walk, bus, subway, stop (들를 곳에 들르기, 요청에 via 가 있을 때만. 거리·시간 0)
      * @param lines         버스 번호들 또는 지하철 노선 이름 (걷기는 빈 목록)
      * @param way           지하철 방향 (예: 녹동). 그 밖에는 null
      * @param stationCount  지나는 정류장·역 수 (걷기는 null)

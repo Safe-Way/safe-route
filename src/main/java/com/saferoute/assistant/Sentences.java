@@ -36,6 +36,45 @@ final class Sentences {
         return out;
     }
 
+    /**
+     * 들를 곳 묶기 결과를 말로.
+     * 예: "다이소 충장로점, GS25 충장점(택배) 들렀다 집까지 25분 걸려요. 바로 가는 것보다 6분 더 걸려요."
+     */
+    static String stops(Turn t) {
+        StopPlanner.Plan p = t.stopPlan;
+        if (p.failText() != null) {
+            return p.failText();
+        }
+        String dest = t.planDest == null ? "가실 곳" : t.planDest.name();
+        StringBuilder sb = new StringBuilder(stopNames(p)).append(" 들렀다 ").append(dest).append("까지 ")
+                .append(p.minutes()).append("분 걸려요.");
+        if (p.directMin() != null) {
+            int extra = p.minutes() - p.directMin();
+            sb.append(extra > 0 ? " 바로 가는 것보다 " + extra + "분 더 걸려요." : " 바로 가는 것과 시간이 거의 같아요.");
+        }
+        if (p.savedMin() != null && !p.stops().isEmpty()) {
+            sb.append(" 순서를 바꾸면 ").append(p.savedMin()).append("분 덜 걸려서 ")
+                    .append(p.stops().get(0).name()).append("부터 들르게 했어요.");
+        }
+        if ("wheelchair".equals(t.mode())) {
+            sb.append(" 확인된 턱과 못 지나는 곳을 피한 길이에요.");
+        }
+        return sb.toString();
+    }
+
+    /** "다이소 충장로점 → GS25 충장점(택배) 들렀다, 25분" */
+    static String stopSummary(StopPlanner.Plan p) {
+        return stopNames(p).replace(", ", " → ") + " 들렀다, " + p.minutes() + "분";
+    }
+
+    private static String stopNames(StopPlanner.Plan p) {
+        List<String> names = new ArrayList<>();
+        for (StopPlanner.Stop s : p.stops()) {
+            names.add(s.name().contains(s.label()) ? s.name() : s.name() + "(" + s.label() + ")");
+        }
+        return String.join(", ", names);
+    }
+
     /** recommend_trip 결과를 말로 */
     static String trip(Turn t) {
         TripRecommender.Plan plan = t.plan;
