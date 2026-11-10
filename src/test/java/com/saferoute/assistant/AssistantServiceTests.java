@@ -191,6 +191,32 @@ class AssistantServiceTests {
     }
 
     @Test
+    void someoneFollowingMeIsUrgent() {
+        // 사용성 점검: "누가 자꾸 쫓아오는 것 같아" → 112·보호자부터
+        AssistantReply r = ask(A, "누가 자꾸 쫓아오는 것 같아", null);
+        assertThat(question(r)).contains("112", "보호자");
+        assertThat(r.tools()).isEmpty();
+    }
+
+    @Test
+    void firstTimeUserGetsRouteFirstThenSetupQuestion() {
+        // 사용성 점검: 처음 쓰는 사람도 "문화전당 가자"면 길부터 찾고 그다음 "어떻게 다니세요?"
+        String guest = "00000000-0000-4000-8000-000000000996";
+        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+                new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
+        Trip walk = new Trip("walk", 12, 700, 0, 0, "걸어서 12분, 700m", Map.of(), "safe", Map.of(), List.of(), false,
+                null);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of()), WeatherDust.unknown(), false, null));
+        AssistantReply r = service.answer(new AssistantRequest(guest, "문화전당 가자", LAT, LON, null, null, null, null,
+                null, null));
+        assertThat(r.tools()).contains("recommend_trip");
+        assertThat(r.pick()).isNotNull();
+        assertThat(question(r)).contains("어떻게 다니세요");
+        assertThat(r.choices()).extracting(AssistantReply.Choice::value).contains("walk", "wheelchair");
+    }
+
+    @Test
     void outsideGwangjuIsNotGuided() {
         wheelchairUser();
         when(kakao.search(eq("서울역"), any(), any())).thenReturn(List.of(
