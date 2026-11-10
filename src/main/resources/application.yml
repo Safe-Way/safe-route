@@ -35,6 +35,11 @@ api-keys:
   tmap: ${TMAP_APP_KEY:}
   gemini: ${GEMINI_API_KEY:}
 
+# 불편 신고 (C 파트). 같은 사람 신고를 한 명으로 세려고 앱 번호에 이 비밀값을 섞어 해시로 남긴다 (033 reporter_hash).
+# 비어 있으면 해시를 안 남긴다(신고마다 다른 사람으로 셈). 값은 .env·GitHub Secrets 에만
+report:
+  hash-secret: ${REPORT_HASH_SECRET:}
+
 # 길찾기 비서 (C 파트, POST /api/assistant). 제미나이 키(GEMINI_API_KEY)가 없으면 규칙만으로 답한다
 assistant:
   # 모델은 .env의 GEMINI_MODEL로 바꿀 수 있다 (새 AI Studio 키는 3 이후 모델을 쓴다)

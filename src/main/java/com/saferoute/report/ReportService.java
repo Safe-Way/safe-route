@@ -7,6 +7,7 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,7 +16,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 불편 신고 받기·보여 주기 (FR-49).
- * 로그인이 없어서 누가 올렸는지는 받지 않는다. 신고 좌표는 표에 남지만 서버 로그에는 남기지 않는다 (NFR-07).
+ * 로그인이 없어서 누가 올렸는지는 모른다. 앱 번호(guestId)가 오면 비밀값을 섞은 해시(reporter_hash, 033)만 남겨
+ * 같은 사람이 여러 번 올린 신고를 한 명으로 센다(뷰 reporter_count·confirmed). 원래 번호는 남기지 않는다.
+ * 신고 좌표는 표에 남지만 서버 로그에는 남기지 않는다 (NFR-07).
  */
 @Service
 public class ReportService {
@@ -31,9 +34,17 @@ public class ReportService {
     static final Set<String> MODES = Set.of("adult", "child", "senior", "wheelchair");
 
     private final ReportRepository repo;
+    private final ReporterHash reporter;
 
-    public ReportService(ReportRepository repo) {
+    @Autowired
+    public ReportService(ReportRepository repo, ReporterHash reporter) {
         this.repo = repo;
+        this.reporter = reporter;
+    }
+
+    /** 신고자 해시 없이 (시험용) */
+    public ReportService(ReportRepository repo) {
+        this(repo, new ReporterHash(""));
     }
 
     /** 앱이 보낸 값을 검사해서 NewReport 로 만든다. 틀리면 ReportException(400) */
@@ -83,8 +94,17 @@ public class ReportService {
     }
 
     /** 신고와 사진을 한 번에 저장한다 (사진 저장이 실패하면 신고도 안 남음) */
-    @Transactional
     public ReportCreated create(NewReport r) {
+        return create(r, null);
+    }
+
+    /**
+     * 신고와 사진을 한 번에 저장한다.
+     *
+     * @param guestId 앱 번호. 해시로만 남기고 원래 번호는 저장하지 않는다. 없으면 null
+     */
+    @Transactional
+    public ReportCreated create(NewReport r, String guestId) {
         Long edge = null;
         try {
             edge = repo.nearestEdge(r.lat(), r.lon(), EDGE_SNAP_M);
@@ -92,7 +112,7 @@ public class ReportService {
             // 길 찾기가 안 돼도 신고는 받는다 (edge_id 는 비어도 되는 칸)
             log.warn("신고 가까운 길 찾기 실패: {}", e.getMostSpecificCause().getMessage());
         }
-        long id = repo.insert(r, edge);
+        long id = repo.insert(r, edge, "photo", reporter.of(guestId));
         int seq = 1;
         for (NewReport.Photo p : r.photos()) {
             repo.insertPhoto(id, seq++, p);
@@ -106,8 +126,13 @@ public class ReportService {
      * @param type 유형 코드 (steep, construction, curb, broken, obstacle, accident, other)
      * @return 새 신고 번호
      */
-    @Transactional
     public long createVoice(String type, String mode, String memo, double lat, double lon) {
+        return createVoice(type, mode, memo, lat, lon, null);
+    }
+
+    /** 말로 한 신고 + 앱 번호 (해시로만 남김) */
+    @Transactional
+    public long createVoice(String type, String mode, String memo, double lat, double lon, String guestId) {
         String t = ReportType.known(type) ? type : "other";
         String m = mode != null && MODES.contains(mode) ? mode : null;
         String note = blankToNull(memo);
@@ -121,7 +146,7 @@ public class ReportService {
         } catch (DataAccessException e) {
             log.warn("말 신고 가까운 길 찾기 실패: {}", e.getMostSpecificCause().getMessage());
         }
-        return repo.insert(r, edge, "voice");
+        return repo.insert(r, edge, "voice", reporter.of(guestId));
     }
 
     /** 유형 코드의 이름 ("construction" → "공사") */

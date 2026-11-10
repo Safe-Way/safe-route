@@ -165,7 +165,7 @@ class AssistantServiceTests {
         // 신고 자리 = 지금 위치(출발)라 이번 길은 피하지 않음. 엔진 60초 기억이라 1분쯤 뒤부터 (w11 뒤 사실대로)
         assertThat(second.say()).contains("신고했어요", "1분쯤 뒤", "피할 수 있으면", "조심하세요")
                 .doesNotContain("피해서 다시 안내", "아직은");
-        verify(reports).createVoice(eq("construction"), eq("wheelchair"), anyString(), eq(LAT), eq(LON));
+        verify(reports).createVoice(eq("construction"), eq("wheelchair"), anyString(), eq(LAT), eq(LON), eq(A));
     }
 
     @Test
@@ -175,7 +175,7 @@ class AssistantServiceTests {
         assertThat(question(first)).contains("사고", "신고할까요");
         AssistantReply second = ask(A, "아니 괜찮아", first.conversationId());
         assertThat(second.say()).contains("바꾸지 않을게요");
-        verify(reports, never()).createVoice(anyString(), any(), any(), anyDouble(), anyDouble());
+        verify(reports, never()).createVoice(anyString(), any(), any(), anyDouble(), anyDouble(), any());
     }
 
     @Test

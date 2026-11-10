@@ -53,7 +53,7 @@ final class StopReader {
         List<String> parts = new ArrayList<>();
         for (String p : SPLIT.split(text.strip())) {
             if (!p.isBlank()) {
-                parts.add(p.strip());
+                parts.addAll(joined(p.strip()));
             }
         }
         boolean stopWord = STOP_WORD.matcher(flat).find();
@@ -89,6 +89,53 @@ final class StopReader {
         boolean ordered = flat.contains("먼저") || flat.contains("그다음") || flat.contains("다음에")
                 || flat.contains("순서대로") || flat.contains("부터");
         return new Read(List.copyOf(stops), ordered, dest == null || dest.isBlank() ? null : dest);
+    }
+
+    /** 이어 주는 말 ("다이소랑 약국", "약국하고 편의점", "약국과 편의점") */
+    private static final Pattern AND = Pattern.compile("(\\S+?)(이랑|랑|하고|와|과)\\s+");
+    /** 과·와로 끝나지만 이어 주는 말이 아닌 이름 (안과, 학과 등. 치과·내과·사과는 받침 규칙으로 걸러짐) */
+    private static final List<String> NOT_AND = List.of("안과", "학과", "결과", "성과", "효과", "통과");
+
+    /**
+     * "다이소랑 약국이랑 편의점이랑 서점" → [다이소, 약국, 편의점, 서점] (점검 40번, 11-10 재휘).
+     * 와·과는 받침에 맞을 때만 나눈다 (받침 없으면 와, 있으면 과). 그래서 "치과 약국"의 치과는 그대로.
+     */
+    static List<String> joined(String part) {
+        List<String> out = new ArrayList<>();
+        java.util.regex.Matcher m = AND.matcher(part);
+        int from = 0;
+        while (m.find()) {
+            String word = m.group(1);
+            String and = m.group(2);
+            String whole = word + and;
+            if (!fits(word, and) || NOT_AND.stream().anyMatch(whole::endsWith)) {
+                continue;
+            }
+            String piece = (part.substring(from, m.start()) + word).strip();
+            if (!piece.isEmpty()) {
+                out.add(piece);
+            }
+            from = m.end();
+        }
+        String rest = part.substring(from).strip();
+        if (!rest.isEmpty()) {
+            out.add(rest);
+        }
+        return out;
+    }
+
+    /** 이어 주는 말이 앞 글자 받침에 맞는지 (와·랑은 받침 없을 때, 과·이랑은 받침 있을 때, 하고는 늘) */
+    private static boolean fits(String word, String and) {
+        char c = word.charAt(word.length() - 1);
+        if (c < '가' || c > '힣') {
+            return !"과".equals(and) && !"와".equals(and); // 영어·숫자 이름 뒤 와·과는 나누지 않음
+        }
+        boolean batchim = (c - '가') % 28 != 0;
+        return switch (and) {
+            case "와", "랑" -> !batchim;
+            case "과", "이랑" -> batchim;
+            default -> true;
+        };
     }
 
     /** "퇴근길에 다이소" → 다이소, "약국에" → 약국. 남는 것이 없으면 null */

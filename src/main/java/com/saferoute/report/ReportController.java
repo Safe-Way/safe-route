@@ -23,7 +23,7 @@ import com.saferoute.common.ErrorResponse;
 /**
  * 불편 신고 창구 (FR-49, 2차).
  * <ul>
- *   <li>POST /api/reports (multipart/form-data): type, lat, lon, mode, memo, accuracyM, photos(0~3장) → 201</li>
+ *   <li>POST /api/reports (multipart/form-data): type, lat, lon, mode, memo, accuracyM, photos(0~3장), guestId(선택, 해시로만 저장) → 201</li>
  *   <li>GET /api/reports?bbox=서,남,동,북 : 지도 범위 안 신고 (숨긴 것 빼고, 최근 순 300개까지)</li>
  *   <li>GET /api/reports/active?bbox=서,남,동,북 : 지금 유효한 신고 지점 (같은 곳 묶음·기간은 032 뷰가 계산)</li>
  *   <li>GET /api/reports/{id}/photos/{seq} : 사진 한 장</li>
@@ -48,9 +48,10 @@ public class ReportController {
                                                 @RequestParam(required = false) String mode,
                                                 @RequestParam(required = false) String memo,
                                                 @RequestParam(required = false) Integer accuracyM,
-                                                @RequestParam(required = false) List<MultipartFile> photos) {
+                                                @RequestParam(required = false) List<MultipartFile> photos,
+                                                @RequestParam(required = false) String guestId) {
         NewReport r = reports.check(type, lat, lon, mode, memo, accuracyM, photos);
-        return ResponseEntity.status(HttpStatus.CREATED).body(reports.create(r));
+        return ResponseEntity.status(HttpStatus.CREATED).body(reports.create(r, guestId));
     }
 
     @GetMapping("/api/reports")

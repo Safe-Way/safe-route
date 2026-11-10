@@ -7,6 +7,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -19,9 +22,13 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class ReportRepository {
 
+    private static final Logger log = LoggerFactory.getLogger(ReportRepository.class);
     private static final double M_PER_DEG = 111_320.0;
 
     private final JdbcTemplate jdbc;
+
+    /** 033(reporter_hash 칸·reporter_count 뷰)이 DB에 있는지. 없다고 한 번 확인되면 서버를 다시 켤 때까지 예전 방식 */
+    private volatile boolean hasReporterColumns = true;
 
     public ReportRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -38,11 +45,35 @@ public class ReportRepository {
      * @param via photo 화면에서 사진과 함께, voice 비서에게 말로 (028)
      */
     public long insert(NewReport r, Long edgeId, String via) {
+        return insert(r, edgeId, via, null);
+    }
+
+    /**
+     * 신고 한 줄을 넣는다.
+     *
+     * @param via          photo 화면에서 사진과 함께, voice 비서에게 말로 (028)
+     * @param reporterHash 신고한 사람 표시 (ReporterHash, 033). 앱 번호가 없으면 null
+     */
+    public long insert(NewReport r, Long edgeId, String via, String reporterHash) {
+        if (hasReporterColumns) {
+            try {
+                return insertRow(r, edgeId, via, reporterHash, true);
+            } catch (BadSqlGrammarException e) {
+                // 033(reporter_hash 칸)이 아직 DB에 안 들어갔으면 예전처럼 넣는다
+                hasReporterColumns = false;
+                log.warn("reporter_hash 칸이 없어 신고자 없이 저장해요 (033 반영 전): {}", e.getMostSpecificCause().getMessage());
+            }
+        }
+        return insertRow(r, edgeId, via, null, false);
+    }
+
+    private long insertRow(NewReport r, Long edgeId, String via, String reporterHash, boolean withReporter) {
         KeyHolder key = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(
-                    "INSERT INTO road_report (report_type, mode, memo, lon, lat, geom, accuracy_m, edge_id, via)"
-                            + " VALUES (?, ?, ?, ?, ?, ST_SRID(POINT(?, ?), 0), ?, ?, ?)",
+                    "INSERT INTO road_report (report_type, mode, memo, lon, lat, geom, accuracy_m, edge_id, via"
+                            + (withReporter ? ", reporter_hash" : "")
+                            + ") VALUES (?, ?, ?, ?, ?, ST_SRID(POINT(?, ?), 0), ?, ?, ?" + (withReporter ? ", ?" : "") + ")",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, r.type());
             ps.setString(2, r.mode());
@@ -62,6 +93,9 @@ public class ReportRepository {
                 ps.setLong(9, edgeId);
             }
             ps.setString(10, via);
+            if (withReporter) {
+                ps.setString(11, reporterHash);
+            }
             return ps;
         }, key);
         return key.getKey().longValue();
@@ -117,15 +151,31 @@ public class ReportRepository {
      * 뷰가 기간·같은 곳 묶기를 계산하니 여기서는 범위만 거른다.
      */
     public List<ActiveSpot> active(double west, double south, double east, double north, int limit) {
+        if (hasReporterColumns) {
+            try {
+                return activeRows(west, south, east, north, limit, true);
+            } catch (BadSqlGrammarException e) {
+                // 033 전 뷰(032)에는 reporter_count 가 없다 → 신고 수를 사람 수로 둔다
+                hasReporterColumns = false;
+                log.warn("reporter_count 칸이 없어 신고 수로 대신해요 (033 반영 전): {}", e.getMostSpecificCause().getMessage());
+            }
+        }
+        return activeRows(west, south, east, north, limit, false);
+    }
+
+    private List<ActiveSpot> activeRows(double west, double south, double east, double north, int limit,
+                                        boolean withReporter) {
         return jdbc.query("SELECT spot_id, report_type, lat, lon,"
                         + " DATE_FORMAT(starts_on, '%Y-%m-%d') AS starts, DATE_FORMAT(ends_on, '%Y-%m-%d') AS ends,"
-                        + " report_count, photo_count, confirmed, avoid_modes, cost_modes,"
+                        + " report_count, " + (withReporter ? "reporter_count" : "report_count AS reporter_count")
+                        + ", photo_count, confirmed, avoid_modes, cost_modes,"
                         + " DATE_FORMAT(last_at, '%Y-%m-%dT%H:%i') AS last, last_memo"
                         + " FROM road_report_active"
                         + " WHERE lon BETWEEN ? AND ? AND lat BETWEEN ? AND ?"
                         + " ORDER BY last_at DESC, spot_id DESC LIMIT ?",
                 (rs, n) -> new ActiveSpot(rs.getLong("spot_id"), rs.getString("report_type"), rs.getDouble("lat"),
                         rs.getDouble("lon"), rs.getString("starts"), rs.getString("ends"), rs.getInt("report_count"),
+                        rs.getInt("reporter_count"),
                         rs.getInt("photo_count"), rs.getInt("confirmed") == 1, modes(rs.getString("avoid_modes")),
                         modes(rs.getString("cost_modes")), rs.getString("last"), rs.getString("last_memo")),
                 west, east, south, north, limit);
