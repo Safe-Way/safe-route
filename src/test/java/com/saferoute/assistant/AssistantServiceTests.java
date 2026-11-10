@@ -534,4 +534,22 @@ class AssistantServiceTests {
     static String question(AssistantReply r) {
         return r.ask() != null ? r.ask() : r.say();
     }
+
+    @Test
+    void transitAnswerKeepsStepsAndLastTime() {
+        // 비서 점검 1번(11/10): 제미나이가 "문화전당까지 14분 걸려요. 오늘은 비가 와서 덜 걷는 길이에요."만 말함
+        List<com.saferoute.transit.TransitResult.Leg> legs = List.of(
+                SentencesTests.walk(600, 9, "출발", "남광주역"),
+                SentencesTests.subway("1호선", 2, 4, "남광주역", "문화전당역"),
+                SentencesTests.walk(100, 1, "문화전당역", "도착"));
+        String said = AssistantService.mustSayTransit("국립아시아문화전당까지 14분 걸려요. 오늘은 비가 와서 덜 걷는 길이에요.",
+                legs, List.of("비가 와요", "지난번 비 올 때도 대중교통을 타셨어요"));
+        assertThat(said).startsWith("국립아시아문화전당까지 14분 걸려요.")
+                .contains("남광주역까지 9분 가서").contains("지하철 1호선을 타고")
+                .endsWith("지난번 비 올 때도 대중교통을 타셨어요.");
+        // 이미 말했으면 두 번 붙이지 않음
+        String full = "남광주역까지 9분 가서, 지하철 1호선을 타고 가요. 지난번 비 올 때도 대중교통을 타셨어요.";
+        assertThat(AssistantService.mustSayTransit(full, legs, List.of("지난번 비 올 때도 대중교통을 타셨어요")))
+                .isEqualTo(full);
+    }
 }

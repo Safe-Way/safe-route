@@ -236,11 +236,24 @@ class GeminiBrain {
             return Outcome.ask(cand.size() + "곳을 찾았어요. 어디로 갈까요?", buttons);
         }
         String q = o.ask() != null ? o.ask() : o.say();
-        if ((o.say() + " " + q).contains("번호")) {
+        String all = o.say() + " " + q;
+        if (all.contains("번호") || namesListed(all, cand) >= 2) {
             // 버튼에는 번호가 없는데 "번호를 말씀해 주세요"라고 하면 헷갈려서 서버 문장으로 (사용성 점검)
+            // 버튼에 이미 있는 이름을 늘어놓아도 길고 헷갈려서 서버 문장으로 (비서 점검 5번)
             return new Outcome(cand.size() + "곳을 찾았어요. 어디로 갈까요? 아래에서 골라 주세요.", null, buttons, o.ai());
         }
         return new Outcome(o.say(), q, buttons, o.ai());
+    }
+
+    /** 답에 후보 이름이 몇 개 들어 있는지 */
+    static int namesListed(String text, List<Place> cand) {
+        int n = 0;
+        for (Place p : cand) {
+            if (p.name() != null && !p.name().isBlank() && text.contains(p.name().strip())) {
+                n++;
+            }
+        }
+        return n;
     }
 
     /** 답에서 [참고] 말을 지운다. 지시문에도 쓰지 말라고 했지만 제미나이가 가끔 그대로 말해서 서버가 한 번 더 지운다 */
