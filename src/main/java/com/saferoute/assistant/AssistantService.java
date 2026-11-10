@@ -15,6 +15,7 @@ import com.saferoute.assistant.AssistantReply.Pick;
 import com.saferoute.assistant.AssistantReply.Situation;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.situation.WeatherDust;
+import com.saferoute.transit.TransitResult;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -156,6 +157,10 @@ public class AssistantService {
         String ask = Sentences.polish(o.ask(), mode);
         if (o.ai()) {
             say = mustSay(say, mode, pick);
+            if (pick != null && "transit".equals(pick.type()) && t.plan != null
+                    && t.plan.scored() != null) {
+                say = Sentences.polish(mustSayTransit(say, t.plan.scored().best().legs(), because), mode);
+            }
         }
         if (ask != null && say != null && ask.strip().equals(say.strip())) {
             // 같은 문장을 두 번 보내지 않는다 (비서 점검 c10). 버튼(choices)은 그대로 간다
@@ -191,6 +196,29 @@ public class AssistantService {
             return say.strip() + " " + WHEELCHAIR_WHY;
         }
         return say;
+    }
+
+    /**
+     * 대중교통을 추천했는데 제미나이가 말을 줄이면서 빼먹은 것을 서버가 붙인다 (비서 점검 1번 11/10).
+     * 어떤 교통을 어디서 타는지(구간 순서)와 "지난번 비 올 때도 대중교통을 타셨어요".
+     */
+    static String mustSayTransit(String say, List<TransitResult.Leg> legs, List<String> because) {
+        if (say == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder(say.strip());
+        String steps = Sentences.steps(legs);
+        if (steps != null && !say.contains("타고")) {
+            sb.append(' ').append(steps);
+        }
+        if (because != null && !say.contains("지난번")) {
+            for (String b : because) {
+                if (b.startsWith("지난번")) {
+                    sb.append(' ').append(b).append('.');
+                }
+            }
+        }
+        return sb.toString();
     }
 
     /** 시험 날씨 → 판단 결과 (clear, rain, heat, cold, dust) */

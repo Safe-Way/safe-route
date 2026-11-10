@@ -86,12 +86,31 @@ class RuleBrain {
         if (food != null) {
             return food;
         }
+        if (asksLocationSaved(f)) {
+            return Outcome.say(LOCATION_SAVED);
+        }
         if (f.contains("뭐할수있") || f.contains("뭘할수있") || f.contains("무슨기능") || f.equals("도움말")) {
             return Outcome.ask("길 찾기, 가까운 화장실·쉴 곳 찾기, 길 문제 신고, 지도에 보일 것 바꾸기를 할 수 있어요. 무엇을 할까요?",
                     List.of(new Choice("문화전당 가자", "문화전당 가자"), new Choice("화장실 어디야", "화장실 어디야"),
                             new Choice("여기 공사 중이야", "여기 공사 중이야")));
         }
         return null;
+    }
+
+    /**
+     * "이 앱은 내 위치 저장해?"의 답 (사용성 점검: 제미나이 답이 정확하지 않음). 근거는 knowledge.json 1·5·8번
+     * (consent.md): 지금 위치·지나온 길은 저장 안 함, 기록 동의 때만 간 곳을 약 100m로, 보호자 공유는 마지막 한 점.
+     */
+    static final String LOCATION_SAVED = "지금 계신 위치나 지나온 길은 저장하지 않아요. 위치는 길을 찾을 때만 쓰고 AI에도 보내지 않아요."
+            + " 다닌 기록에 동의하신 경우에만 간 곳 이름과 약 100m로 반올림한 위치가 남고, 보호자 위치 공유 중에는 마지막 위치 한 점만 보여 줘요.";
+
+    /** 위치를 저장하는지 묻는 말이면 true ("집 위치 저장해 줘"처럼 해 달라는 말은 아님) */
+    static boolean asksLocationSaved(String f) {
+        boolean location = f.contains("위치") || f.contains("좌표") || f.contains("동선");
+        boolean saved = f.contains("저장") || f.contains("기록") || f.contains("남아") || f.contains("남겨") || f.contains("남기")
+                || f.contains("보관") || f.contains("수집");
+        boolean request = f.contains("해줘") || f.contains("해주") || f.contains("하고싶") || f.contains("저장할래");
+        return location && saved && !request;
     }
 
     /** 먹을 곳을 찾을 때 고르는 종류 버튼 (value 는 장소 검색어) */

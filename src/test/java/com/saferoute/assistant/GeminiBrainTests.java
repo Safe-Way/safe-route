@@ -94,6 +94,35 @@ class GeminiBrainTests {
     }
 
     @Test
+    void placeButtonsNeverAskForANumber() {
+        // 사용성 점검: 버튼에 번호가 없는데 "번호를 말씀해 주세요" → 서버 문장으로 바꿈
+        Turn t = new Turn(new AssistantRequest(A, "카페 가자", 35.148, 126.926, null, null, null, null, null, null),
+                Conversation.start(), java.time.LocalDateTime.of(2026, 11, 10, 10, 0), false, null);
+        t.convo = t.convo.withCandidates(List.of(new Conversation.Place("카페 하나", null, 35.147, 126.925, 100),
+                new Conversation.Place("카페 둘", null, 35.149, 126.927, 200))).asked("place");
+        Outcome o = GeminiBrain.withPlaceButtons(t, Outcome.say("카페 2곳이 있어요. 번호를 말씀해 주세요."));
+        assertThat(o.say()).doesNotContain("번호").contains("아래에서 골라 주세요");
+        assertThat(o.choices()).hasSize(2);
+    }
+
+    @Test
+    void placeNamesAreNotListedWhenButtonsShowThem() {
+        // 비서 점검 5번(11/10): "광주비엔날레, 제16회 광주비엔날레, 광주비엔날레 제문헌 중…" → 버튼이 있으니 짧게
+        Turn t = new Turn(new AssistantRequest(A, "비엔날레 가자", 35.148, 126.926, null, null, null, null, null, null),
+                Conversation.start(), java.time.LocalDateTime.of(2026, 11, 10, 10, 0), false, null);
+        t.convo = t.convo.withCandidates(List.of(new Conversation.Place("광주비엔날레", null, 35.18, 126.89, 100),
+                new Conversation.Place("제16회 광주비엔날레", null, 35.18, 126.89, 200),
+                new Conversation.Place("광주비엔날레 제문헌", null, 35.18, 126.89, 300))).asked("place");
+        Outcome o = GeminiBrain.withPlaceButtons(t,
+                Outcome.say("광주비엔날레, 제16회 광주비엔날레, 광주비엔날레 제문헌 중 어디로 갈까요?"));
+        assertThat(o.say()).isEqualTo("3곳을 찾았어요. 어디로 갈까요? 아래에서 골라 주세요.");
+        assertThat(o.choices()).hasSize(3);
+        // 하나만 말하면 그대로 둠
+        Outcome one = GeminiBrain.withPlaceButtons(t, Outcome.say("가까운 곳은 광주비엔날레예요. 어디로 갈까요?"));
+        assertThat(one.say()).startsWith("가까운 곳은");
+    }
+
+    @Test
     void promiseWithoutToolIsCaught() {
         // 사용성 점검: "화장실 찾아 드릴게요"라고 하고 도구를 안 부름
         assertThat(GeminiBrain.promiseOnly("가까운 화장실을 찾아 드릴게요.")).isTrue();
