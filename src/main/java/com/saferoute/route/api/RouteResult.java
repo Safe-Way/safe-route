@@ -16,12 +16,24 @@ public record RouteResult(
         List<FacilityMark> facilities,
         DataQuality dataQuality) {
 
-    /** @param sunset "17:41" 형식 */
-    public record Conditions(boolean night, String nightSource, String sunset) {
+    /**
+     * rain·heat 등 날씨 칸은 RouteController가 C파트 날씨로 덧붙인다 (2026-11-05). roof는 그와 별개로 엔진이 비 기준을 적용했는지 (2026-11-09).
+     *
+     * @param sunset     "17:41" 형식
+     * @param roof       지붕 있는 길 기준을 더했는지: 비가 오거나(auto) 요청 rain = on. 그러면 지붕 있는 길(지하 포함)을 먼저 찾는다
+     * @param roofSource auto(C파트 날씨로 판단) 또는 manual(요청 rain on·off)
+     */
+    public record Conditions(boolean night, String nightSource, String sunset, boolean roof, String roofSource) {
+
+        /** 비 기준 없이 (밤만) */
+        public Conditions(boolean night, String nightSource, String sunset) {
+            this(night, nightSource, sunset, false, "auto");
+        }
 
         public static Conditions of(com.saferoute.route.engine.condition.Conditions c) {
             return new Conditions(c.night(), c.nightSource(),
-                    c.sunset() == null ? null : c.sunset().format(DateTimeFormatter.ofPattern("HH:mm")));
+                    c.sunset() == null ? null : c.sunset().format(DateTimeFormatter.ofPattern("HH:mm")),
+                    c.roof(), c.roofSource());
         }
     }
 
@@ -35,13 +47,24 @@ public record RouteResult(
      * @param crossings 횡단보도를 건너는 구간. 꺾지 않고 곧장 건너는 곳도 있다
      * @param covered  이 요청 기준(모드·낮밤)마다 경로가 그 범위 안을 걷는 길이(m). 예: 어린이 낮
      *                 {"school": 1905, "help": 2896} = 보호구역 300m 안 1905m, 도움 시설 150m 안 2896m.
+     *                 비 오는 날 {"roof": 780} = 지붕 있는 길 780m (비 올 때만 키가 생김, 2026-11-09).
      *                 기준이 없으면(어른 낮·휠체어 낮) 빈 맵. 출발·도착에서 길까지 잇는 부분은 넣지 않는다
      * @param stairs   계단 구간. 계단이 없으면 빈 목록
      * @param events   지나는 행사·돌발상황 영향 구간. 지나지 않으면 빈 목록
+     * @param unpavedM        지나는 비포장 길이(m). 휠체어 주의 문장과 같은 값 (2026-11-09, 비서 추천 점수가 씀)
+     * @param surfaceUnknownM 지나는 재질 모르는 산길 길이(m)
      */
     public record Route(String kind, int distanceM, int durationMin, List<double[]> geometry,
             Map<String, Integer> counts, Map<String, Integer> covered, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
-            List<Stretch> crossings, List<Stair> stairs, List<Event> events) {
+            List<Stretch> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM) {
+
+        /** 바닥 길이 없이 (시험·다른 파트 코드가 만드는 모양) */
+        public Route(String kind, int distanceM, int durationMin, List<double[]> geometry, Map<String, Integer> counts,
+                Map<String, Integer> covered, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
+                List<Stretch> crossings, List<Stair> stairs, List<Event> events) {
+            this(kind, distanceM, durationMin, geometry, counts, covered, sidewalks, dark, turns, crossings, stairs,
+                    events, 0, 0);
+        }
     }
 
     /**
@@ -126,7 +149,7 @@ public record RouteResult(
      *
      * @param level warn(주의), info(알림), unknown(확인 안 됨)
      * @param kind  stairs(노인이 계단을 지남), event(행사·돌발), unpaved(휠체어 비포장), surface(재질 모르는 산길),
-     *              snap(휠체어 출발·도착을 옆 길에 붙임)
+     *              snap(휠체어 출발·도착을 옆 길에 붙임), underground(비 오는 날 지하로 지남, 2026-11-09)
      * @param text  괄호·머리말 없는 문장
      */
     public record Note(String level, String kind, String text) {

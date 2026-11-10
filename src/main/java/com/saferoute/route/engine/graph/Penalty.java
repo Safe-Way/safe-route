@@ -3,6 +3,7 @@ package com.saferoute.route.engine.graph;
 /**
  * 길 성질 종류. 경로 엔진은 STAIRS·CURB·FOOTBRIDGE·UNPAVED·TRAIL·FORD·SURFACE_UNKNOWN·CROSSWALK만 읽는다 (값 1 = 확실히 해당, 0 = 아님·모름).
  * 밝기·CCTV·도움 시설 같은 선호 기준은 {@link com.saferoute.route.engine.score.Criterion}으로 요청 때 계산한다.
+ * 지붕(COVERED)·지하(UNDERGROUND)는 비 오는 날 기준에 쓴다.
  */
 public enum Penalty {
     /** 계단이면 1 */
@@ -20,5 +21,12 @@ public enum Penalty {
     /** 재질 확인 안 됨: 재질·난이도 태그가 없는 산길이면 1. 포장으로 보고 지나가되 알린다 (휠체어, 2026-11-04) */
     SURFACE_UNKNOWN,
     /** 횡단보도 길: OSM footway=crossing이면 1. 경로 비용에는 쓰지 않고 꺾는 곳 안내("횡단보도를 건너 왼쪽", FR-34)에만 쓴다 */
-    CROSSWALK
+    CROSSWALK,
+    /** 지붕 있는 길: road_edge.covered = 1 (OSM covered·indoor·tunnel, A파트가 그린 지하 길). 비 오는 날 기준(ROOF)에서 범위 안 (2026-11-09) */
+    COVERED,
+    /**
+     * 지하 길: road_edge_excluded(reason = underground)에 A파트가 직접 그린 역 출구 계단·엘리베이터, 대합실, 지하상가 통로.
+     * 비 올 때 운행 시간 안에만 도로망에 넣고, 가로등·CCTV·시설 자료가 없어 기준 감점을 하지 않는다 (2026-11-09)
+     */
+    UNDERGROUND
 }

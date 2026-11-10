@@ -7,6 +7,7 @@ import java.util.Set;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.search.RoadPath;
+import com.saferoute.route.engine.search.RouteFinder;
 
 /**
  * 경로가 차도를 따라가는 구간마다 인도가 어느 쪽에 있는지. 앱이 "오른쪽 인도로 가세요" 안내나
@@ -34,7 +35,9 @@ public final class Sidewalks {
         for (int i = 0; i < path.edges().size(); i++) {
             RoadEdge e = path.edges().get(i);
             int to = at + e.geometry().size() - 1;
-            if (!WALKWAYS.contains(e.highway())) {
+            // 지하 길(비 오는 날 역 출구 계단·엘리베이터·지하상가)은 차도가 아니다. highway로 나누지 않고 성질로 빼서
+            // 지상 도로망(맑은 날 응답)은 그대로 둔다 (2026-11-09)
+            if (!WALKWAYS.contains(e.highway()) && !RouteFinder.isUnderground(e)) {
                 String side = side(e.sidewalk(), forward[i]);
                 RouteResult.Sidewalk last = out.isEmpty() ? null : out.get(out.size() - 1);
                 if (last != null && last.to() == at && last.side().equals(side)) {

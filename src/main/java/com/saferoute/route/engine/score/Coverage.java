@@ -1,12 +1,14 @@
 package com.saferoute.route.engine.score;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 
+import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadGraph;
 
@@ -104,6 +106,23 @@ public final class Coverage {
                     List<Sample> ss = samples.get(e.id());
                     long in = ss.stream().filter(s -> grid.anyWithin(s.x, s.y, layer.radiusM())).count();
                     out.get(e.id())[k] = ss.isEmpty() ? 0 : (double) in / ss.size();
+                }
+            }
+        }
+        // 지붕·지하 (2026-11-09). 지붕은 시설이 아니라 길 성질(road_edge.covered)이라 바로 정한다.
+        // 지하 길(A파트가 그린 역 출구·대합실·지하상가)에는 가로등·CCTV·시설 자료가 없다. "모르는 값은 감점하지 않는다"(route.yml)에 따라
+        // 모든 기준을 범위 안으로 보고, 어두운 구간 안내(FR-31)에서도 어둡다고 하지 않는다
+        Map<Long, Sampled> light = sampled.get(Criterion.LIGHT);
+        for (RoadEdge e : g.graph().edgeSet()) {
+            double[] v = out.get(e.id());
+            v[Criterion.ROOF.ordinal()] = e.penalty().get(Penalty.COVERED) >= 1 ? 1 : 0;
+            if (e.penalty().get(Penalty.UNDERGROUND) >= 1) {
+                Arrays.fill(v, 1);
+                if (light != null) { // 표본을 모두 "밝음"으로 (DarkStretches가 이 표본으로 어두운 구간을 만든다)
+                    List<Sample> ss = samples.get(e.id());
+                    boolean[] inside = new boolean[ss.size()];
+                    Arrays.fill(inside, true);
+                    light.put(e.id(), new Sampled(ss.stream().mapToDouble(Sample::offsetM).toArray(), inside));
                 }
             }
         }
@@ -259,6 +278,10 @@ public final class Coverage {
 
         EdgeIndex(RoadGraph g, Projection pr) {
             for (RoadEdge e : g.graph().edgeSet()) {
+                // 지하 길에는 시설을 붙이지 않는다. 시설은 지상에 있어, 지하상가 선이 바로 위 지상 길의 등·CCTV를 가져가면 지상이 어둡게 계산된다
+                if (e.penalty().get(Penalty.UNDERGROUND) >= 1) {
+                    continue;
+                }
                 List<double[]> xy = e.geometry().stream().map(pr::xy).toList();
                 lines.put(e.id(), xy);
                 double total = 0;

@@ -26,20 +26,33 @@ public class FacilityCounter {
 
     /** 여러 경로 선 각각이 지나는 시설 수 */
     public List<Counts> countAlong(List<List<double[]>> lines, List<Poi> pois) {
-        return lines.stream().map(line -> count(line, pois)).toList();
+        return countAlongPieces(lines.stream().map(List::of).toList(), pois);
     }
 
-    Counts count(List<double[]> line, List<Poi> pois) {
+    /**
+     * 경로마다 조각 선들(지하 구간에서 끊은 지상 조각, 2026-11-09)이 지나는 시설 수. 시설은 조각 중 하나의 반경 안이면 센다.
+     * 지하를 걷는 사람은 바로 위 지상 가로등·CCTV를 지나지 않는다. 조각이 없으면(전부 지하) 0
+     */
+    public List<Counts> countAlongPieces(List<List<List<double[]>>> routes, List<Poi> pois) {
+        return routes.stream().map(pieces -> count(pieces, pois)).toList();
+    }
+
+    Counts count(List<List<double[]>> pieces, List<Poi> pois) {
         Map<FacilityGroup, Integer> byGroup = new EnumMap<>(FacilityGroup.class);
         List<Poi> passed = new ArrayList<>();
-        // 경로를 감싼 사각형을 가장 큰 반경만큼 넓혀, 그 밖 시설은 선분마다 거리를 재지 않는다
-        BBox near = BBox.around(line, Math.max(Math.max(Math.max(radius.light(), radius.cctv()),
-                Math.max(radius.bell(), radius.help())), Math.max(radius.rest(), radius.school())));
+        // 조각을 감싼 사각형을 가장 큰 반경만큼 넓혀, 그 밖 시설은 선분마다 거리를 재지 않는다
+        double margin = Math.max(Math.max(Math.max(radius.light(), radius.cctv()), Math.max(radius.bell(), radius.help())),
+                Math.max(radius.rest(), radius.school()));
+        List<BBox> near = pieces.stream().map(line -> BBox.around(line, margin)).toList();
         for (Poi p : pois) {
             FacilityGroup g = FacilityGroup.of(p.kind());
-            if (g != null && near.contains(p.lon(), p.lat()) && Geo.distanceToLine(p.point(), line) <= radiusOf(g)) {
-                byGroup.merge(g, p.count(), Integer::sum);
-                passed.add(p);
+            for (int i = 0; g != null && i < pieces.size(); i++) {
+                if (near.get(i).contains(p.lon(), p.lat())
+                        && Geo.distanceToLine(p.point(), pieces.get(i)) <= radiusOf(g)) {
+                    byGroup.merge(g, p.count(), Integer::sum);
+                    passed.add(p);
+                    break;
+                }
             }
         }
         return new Counts(byGroup, passed);

@@ -2,6 +2,8 @@ package com.saferoute.transit;
 
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import com.saferoute.bus.BusArrival;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.subway.SubwayTrain;
@@ -42,14 +44,25 @@ public record TransitResult(List<TransitPath> paths, int hiddenForWheelchair, St
      * @param trains        그 방향으로 곧 오는 열차 (시간표 기준, /api/subway/nearby 와 같은 모양)
      * @param stops         버스·지하철이 지나는 정류장·역, 타는 곳부터 내리는 곳까지 차례대로 (걷기는 빈 목록).
      *                      앱이 이 점들을 이어 노선을 그리고 "다음 정류장에서 내리세요"를 알려 줌
+     * @param walkRoute     걷는 구간을 원일님 엔진으로 찾았으면 그 경로 (비서 추천 점수가 어두운 길·계단 등을 봄). 앱 응답에는 안 나감
      */
     public record Leg(String type, int distanceM, int minutes, Stop from, Stop to, List<String> lines, String way,
                       Integer stationCount, Boolean safeWalk, List<double[]> geometry,
                       List<RouteResult.Sidewalk> sidewalks, Boolean liveAvailable,
-                      List<BusArrival> buses, List<SubwayTrain> trains, List<Stop> stops) {
+                      List<BusArrival> buses, List<SubwayTrain> trains, List<Stop> stops,
+                      @JsonIgnore RouteResult.Route walkRoute) {
 
         public Leg {
             stops = stops == null ? List.of() : List.copyOf(stops);
+        }
+
+        /** 엔진 경로 없이 */
+        public Leg(String type, int distanceM, int minutes, Stop from, Stop to, List<String> lines, String way,
+                   Integer stationCount, Boolean safeWalk, List<double[]> geometry,
+                   List<RouteResult.Sidewalk> sidewalks, Boolean liveAvailable,
+                   List<BusArrival> buses, List<SubwayTrain> trains, List<Stop> stops) {
+            this(type, distanceM, minutes, from, to, lines, way, stationCount, safeWalk, geometry, sidewalks,
+                    liveAvailable, buses, trains, stops, null);
         }
 
         /** 지나는 정류장 없이 만들 때 (걷기 구간, 예전 코드) */
