@@ -226,7 +226,7 @@ class RuleBrain {
         if ("report_problem".equals(p.tool())) {
             if (t.convo.destination() != null && t.located() && t.canCall()) {
                 tools.recommendTrip(t, t.convo.destination());
-                // 엔진이 아직 신고를 길 계산에 쓰지 않아서(w11 전) 피한다고 말하지 않는다 (사실대로)
+                // 신고 자리가 지금 위치(=출발)라 엔진은 이번 길에서 피하지 않고 알리기만 한다 (w11 출발 20m 규칙, 사실대로)
                 return Outcome.say(msg + " " + REPORT_CAREFUL + " " + Sentences.trip(t));
             }
             return Outcome.say(msg + " " + REPORT_CAREFUL);
@@ -557,7 +557,12 @@ class RuleBrain {
     // ───────────────────────── 흐름 조각 ─────────────────────────
 
     /** 신고 뒤 말 (사실대로: 신고한 곳을 피하는 길은 아직 못 찾음) */
-    static final String REPORT_CAREFUL = "아직은 신고한 곳을 피하는 길을 따로 찾지는 못해요. 그곳을 지나실 때 조심하세요.";
+    /**
+     * 신고 뒤 할 말 (w11 뒤 11/10). 엔진은 신고 목록을 60초 기억하고(그래서 "1분쯤 뒤"), 피할 모드는 우회 한도 안에서만 피한다
+     * (그래서 "피할 수 있으면"). 신고 자리가 지금 위치라 이번 길은 거기서 출발해 피하지 않는다.
+     */
+    static final String REPORT_CAREFUL = "1분쯤 뒤부터 길찾기에 반영돼서, 다음 길부터는 피할 수 있으면 이곳을 피해 가요."
+            + " 지금은 이 자리에서 출발하니 지나실 때 조심하세요.";
 
     /** 길을 먼저 찾아 준 뒤 묻는 처음 설정 질문 */
     static final String SETUP_AFTER = "처음 오셨네요. 어떻게 다니세요? 알려 주시면 다음부터 거기에 맞춰 안내할게요.";

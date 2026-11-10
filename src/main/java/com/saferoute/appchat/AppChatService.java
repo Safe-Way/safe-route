@@ -196,6 +196,58 @@ public class AppChatService {
         return out;
     }
 
+    // ---------- 답 버튼 고르기 ----------
+
+    static final int MAX_CHOICES = 6;
+    static final int MAX_CHOICE_CHARS = 40;
+
+    static final String PICK_INSTRUCTION = """
+            너는 '세잎지도' 걷기 길안내 앱의 처음 설정을 돕는다. 앱이 한 질문, 답 버튼 목록, 사용자가 한 말을 보고
+            사용자의 말이 어느 버튼과 뜻이 같은지 골라 그 번호(0부터)를 index에 넣어.
+            사용자가 돌려 말해도(예: "무릎 때문에 계단은 좀…"은 계단을 못 간다는 뜻) 뜻이 분명하면 골라.
+            뜻이 두 버튼에 걸치거나, 질문과 상관없는 말이거나, 확실하지 않으면 지어내지 말고 index에 -1을 넣어.
+            """;
+
+    /**
+     * 처음 설정 질문에 사용자가 말로 답한 것을 답 버튼 하나로 고른다. 모르면 index null.
+     * 앱은 낱말 규칙으로 못 알아들었을 때만 부르고, null 이거나 503 이면 "다시 말해 주세요"로 묻는다.
+     */
+    public Map<String, Object> pickAnswer(PickAnswerRequest req) {
+        if (req == null || req.said() == null || req.said().isBlank()) {
+            throw AppChatException.bad("said 가 비어 있어요");
+        }
+        if (req.said().length() > MAX_LINE_CHARS) {
+            throw AppChatException.bad("said 는 " + MAX_LINE_CHARS + "자까지예요");
+        }
+        if (req.question() != null && req.question().length() > MAX_LINE_CHARS) {
+            throw AppChatException.bad("question 은 " + MAX_LINE_CHARS + "자까지예요");
+        }
+        List<String> choices = req.choices();
+        if (choices == null || choices.size() < 2 || choices.size() > MAX_CHOICES) {
+            throw AppChatException.bad("choices 는 2~" + MAX_CHOICES + "개여야 해요");
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("질문: ").append(req.question() == null || req.question().isBlank() ? "(없음)" : req.question().strip())
+                .append("\n답 버튼:\n");
+        for (int i = 0; i < choices.size(); i++) {
+            String c = choices.get(i);
+            if (c == null || c.isBlank() || c.length() > MAX_CHOICE_CHARS) {
+                throw AppChatException.bad("답 버튼 글자는 1~" + MAX_CHOICE_CHARS + "자여야 해요");
+            }
+            sb.append(i).append(". ").append(c.strip()).append("\n");
+        }
+        sb.append("사용자가 한 말: ").append(req.said().strip());
+        List<Object> contents = List.of(Map.of("role", "user", "parts", List.of(Map.of("text", sb.toString()))));
+        JsonNode j = ask(PICK_INSTRUCTION, contents,
+                schema(Map.of("index", Map.of("type", "INTEGER")), List.of("index")));
+        JsonNode n = j.get("index");
+        Integer index = n != null && n.isIntegralNumber() && n.asInt() >= 0 && n.asInt() < choices.size()
+                ? n.asInt() : null;
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("index", index);
+        return out;
+    }
+
     // ---------- 같이 쓰는 것 ----------
 
     /** 대화 검사 → 제미나이 contents. 마지막 n줄만 보낸다 */

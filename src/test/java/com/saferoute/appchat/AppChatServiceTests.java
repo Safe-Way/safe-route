@@ -163,4 +163,61 @@ class AppChatServiceTests {
         assertThat(AppChatService.looksLikeKorean("네 네 네 네 네")).isFalse();
         assertThat(AppChatService.looksLikeKorean("")).isFalse();
     }
+
+    // ---------- 답 버튼 고르기 (민수님 부탁 11/10) ----------
+
+    static final List<String> STAIRS = List.of("못 가요", "몇 칸은 괜찮아요", "괜찮아요");
+
+    @Test
+    void pickAnswerChoosesButton() throws Exception {
+        when(gemini.structured(anyString(), any(), any())).thenReturn("{\"index\":0}");
+        mvc.perform(post("/api/ai/pick-answer").contentType(MediaType.APPLICATION_JSON).content("""
+                        {"question":"계단은 어떠세요?","choices":["못 가요","몇 칸은 괜찮아요","괜찮아요"],
+                         "said":"무릎 때문에 계단은 좀…"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.index").value(0));
+        // 질문·버튼·말이 번호와 함께 제미나이에 감
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Object>> sent = ArgumentCaptor.forClass(List.class);
+        verify(gemini).structured(anyString(), sent.capture(), any());
+        assertThat(sent.getValue().toString()).contains("1. 몇 칸은 괜찮아요", "무릎 때문에 계단은 좀");
+    }
+
+    @Test
+    void pickAnswerUnknownIsNull() throws Exception {
+        when(gemini.structured(anyString(), any(), any())).thenReturn("{\"index\":-1}");
+        mvc.perform(post("/api/ai/pick-answer").contentType(MediaType.APPLICATION_JSON).content("""
+                        {"question":"계단은 어떠세요?","choices":["못 가요","괜찮아요"],"said":"오늘 날씨 좋네"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.index").doesNotExist());
+        // 버튼 밖 번호도 지어낸 것으로 보고 null
+        when(gemini.structured(anyString(), any(), any())).thenReturn("{\"index\":5}");
+        assertThat(service.pickAnswer(new PickAnswerRequest("계단은요?", STAIRS, "음"))).containsEntry("index", null);
+        when(gemini.structured(anyString(), any(), any())).thenReturn("{\"index\":\"0\"}");
+        assertThat(service.pickAnswer(new PickAnswerRequest("계단은요?", STAIRS, "음"))).containsEntry("index", null);
+    }
+
+    @Test
+    void pickAnswerChecksInput() {
+        assertThatThrownBy(() -> service.pickAnswer(new PickAnswerRequest("계단은요?", STAIRS, " ")))
+                .isInstanceOf(AppChatException.class).hasMessageContaining("said");
+        assertThatThrownBy(() -> service.pickAnswer(new PickAnswerRequest("계단은요?", List.of("하나"), "응")))
+                .hasMessageContaining("choices");
+        assertThatThrownBy(() -> service.pickAnswer(new PickAnswerRequest("계단은요?", List.of("a", ""), "응")))
+                .hasMessageContaining("답 버튼");
+        assertThatThrownBy(() -> service.pickAnswer(null)).isInstanceOf(AppChatException.class);
+        verify(gemini, never()).structured(anyString(), any(), any());
+    }
+
+    @Test
+    void pickAnswerWithoutKeyIs503() throws Exception {
+        when(gemini.available()).thenReturn(false);
+        mvc.perform(post("/api/ai/pick-answer").contentType(MediaType.APPLICATION_JSON).content("""
+                        {"question":"맞으세요?","choices":["네","아니요"],"said":"그런 것 같아요"}
+                        """))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("AI_UNAVAILABLE"));
+    }
 }
