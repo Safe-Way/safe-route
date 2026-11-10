@@ -70,6 +70,53 @@ class ReportControllerTests {
     }
 
     @Test
+    void activeGivesSpotsFromView() throws Exception {
+        // 재휘님 032 road_report_active 뷰 한 줄을 그대로 (기간·같은 곳 묶기는 뷰가 계산)
+        when(repo.active(126.92, 35.13, 126.94, 35.15, ReportService.LIST_LIMIT + 1)).thenReturn(List.of(
+                new ActiveSpot(7, "construction", 35.14, 126.93, "2026-11-10", "2026-11-16", 2, 1, true,
+                        List.of("adult", "child", "senior", "wheelchair"), List.of(), "2026-11-10T11:15", "공사 중이에요")));
+
+        mvc.perform(get("/api/reports/active").param("bbox", "126.92,35.13,126.94,35.15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.spots[0].spotId").value(7))
+                .andExpect(jsonPath("$.spots[0].reportType").value("construction"))
+                .andExpect(jsonPath("$.spots[0].endsOn").value("2026-11-16"))
+                .andExpect(jsonPath("$.spots[0].reportCount").value(2))
+                .andExpect(jsonPath("$.spots[0].confirmed").value(true))
+                .andExpect(jsonPath("$.spots[0].avoidModes[3]").value("wheelchair"))
+                .andExpect(jsonPath("$.spots[0].costModes").isEmpty())
+                .andExpect(jsonPath("$.spots[0].lastMemo").value("공사 중이에요"))
+                .andExpect(jsonPath("$.truncated").value(false));
+    }
+
+    @Test
+    void activeNeedsBbox() throws Exception {
+        mvc.perform(get("/api/reports/active")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/reports/active").param("bbox", "126.94,35.13,126.92,35.15"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/reports/active").param("bbox", "126.0,35.0,127.0,36.0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BBOX_TOO_LARGE"));
+    }
+
+    @Test
+    void activeDbDownGives503() throws Exception {
+        when(repo.active(anyDouble(), anyDouble(), anyDouble(), anyDouble(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenThrow(new DataAccessResourceFailureException("뷰 없음"));
+        mvc.perform(get("/api/reports/active").param("bbox", "126.92,35.13,126.94,35.15"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("DB_UNAVAILABLE"));
+    }
+
+    @Test
+    void modeListIsSplit() {
+        org.assertj.core.api.Assertions.assertThat(ReportRepository.modes("senior,wheelchair"))
+                .containsExactly("senior", "wheelchair");
+        org.assertj.core.api.Assertions.assertThat(ReportRepository.modes("")).isEmpty();
+        org.assertj.core.api.Assertions.assertThat(ReportRepository.modes(null)).isEmpty();
+    }
+
+    @Test
     void badBboxGives400() throws Exception {
         mvc.perform(get("/api/reports").param("bbox", "1,2,3"))
                 .andExpect(status().isBadRequest());

@@ -25,6 +25,7 @@ import com.saferoute.common.ErrorResponse;
  * <ul>
  *   <li>POST /api/reports (multipart/form-data): type, lat, lon, mode, memo, accuracyM, photos(0~3장) → 201</li>
  *   <li>GET /api/reports?bbox=서,남,동,북 : 지도 범위 안 신고 (숨긴 것 빼고, 최근 순 300개까지)</li>
+ *   <li>GET /api/reports/active?bbox=서,남,동,북 : 지금 유효한 신고 지점 (같은 곳 묶음·기간은 032 뷰가 계산)</li>
  *   <li>GET /api/reports/{id}/photos/{seq} : 사진 한 장</li>
  * </ul>
  * 처음에는 지도에 "신고된 곳"으로만 보이고 경로 계산에는 쓰지 않는다 (023 표 설명).
@@ -59,6 +60,15 @@ public class ReportController {
             throw ReportException.bad("bbox 는 서쪽경도,남쪽위도,동쪽경도,북쪽위도 네 숫자여야 해요");
         }
         return ResponseEntity.ok(reports.within(b[0], b[1], b[2], b[3]));
+    }
+
+    @GetMapping("/api/reports/active")
+    public ResponseEntity<ActiveSpotsResponse> active(@RequestParam(required = false) String bbox) {
+        double[] b = parseBbox(bbox);
+        if (b == null) {
+            throw ReportException.bad("bbox 는 서쪽경도,남쪽위도,동쪽경도,북쪽위도 네 숫자여야 해요");
+        }
+        return ResponseEntity.ok(reports.active(b[0], b[1], b[2], b[3]));
     }
 
     @GetMapping("/api/reports/{id}/photos/{seq}")
