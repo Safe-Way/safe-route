@@ -131,6 +131,12 @@ public class AssistantTools {
             log.warn("비서 장소 검색 실패: {}", e.getMessage());
             return new Found("error", List.of());
         }
+        // "조용한 공원"처럼 꾸미는 말이 붙어 광주에 맞는 곳이 없으면 마지막 낱말("공원")로 가까운 곳을 다시 (사용성 점검)
+        String head = headWord(q);
+        if (head != null && t.located() && found.stream().map(p -> new Place(p.name(), p.address(), p.lat(), p.lon()))
+                .noneMatch(AssistantTools::inGwangju)) {
+            return nearKind(t, head);
+        }
         // "충장로", "양림동"처럼 거리·동네 이름이면 가게를 고르게 하지 않고 그 거리로 (점검 5번)
         Place area = area(q, found);
         if (area != null) {
@@ -151,6 +157,20 @@ public class AssistantTools {
      */
     Found searchKind(Turn t, String kind) {
         t.tools.add("search_place");
+        return nearKind(t, kind);
+    }
+
+    /** 여러 낱말이면 마지막 낱말 ("조용한 공원" → 공원). 한 낱말이거나 너무 짧으면 null */
+    static String headWord(String q) {
+        String[] w = q.strip().split("\\s+");
+        if (w.length < 2) {
+            return null;
+        }
+        String last = RuleReader.stripParticle(w[w.length - 1]);
+        return last.length() >= 2 ? last : null;
+    }
+
+    private Found nearKind(Turn t, String kind) {
         List<com.saferoute.place.Place> found;
         try {
             found = kakao.search(kind, t.lat, t.lon);

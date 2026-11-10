@@ -144,7 +144,8 @@ class AssistantServiceTests {
         AssistantReply first = ask(A, "여기 공사 중이라 못 지나가", null);
         assertThat(question(first)).contains("공사", "신고할까요");
         AssistantReply second = ask(A, "응 사진은 안 찍을래", first.conversationId());
-        assertThat(second.say()).contains("신고했어요", "다시");
+        // 엔진이 아직 신고를 피하지 않으니 피한다고 말하지 않고 조심하라고 (사용성 점검 16번)
+        assertThat(second.say()).contains("신고했어요", "조심하세요").doesNotContain("피해서");
         verify(reports).createVoice(eq("construction"), eq("wheelchair"), anyString(), eq(LAT), eq(LON));
     }
 
@@ -188,6 +189,53 @@ class AssistantServiceTests {
         assertThat(question(r)).contains("112", "보호자");
         assertThat(r.choices()).extracting(AssistantReply.Choice::value).contains("call_112", "call_guardian");
         assertThat(r.tools()).isEmpty();
+    }
+
+    @Test
+    void someoneFollowingMeIsUrgent() {
+        // 사용성 점검: "누가 자꾸 쫓아오는 것 같아" → 112·보호자부터
+        AssistantReply r = ask(A, "누가 자꾸 쫓아오는 것 같아", null);
+        assertThat(question(r)).contains("112", "보호자");
+        assertThat(r.tools()).isEmpty();
+    }
+
+    @Test
+    void call119IsUrgent() {
+        // 민수님 63개 비교: "119 불러 줘" → 112·보호자 버튼부터 (전화는 앱이 휴대폰에서)
+        AssistantReply r = ask(A, "119 불러 줘", null);
+        assertThat(question(r)).contains("112", "보호자");
+        assertThat(r.tools()).isEmpty();
+    }
+
+    @Test
+    void quietParkLooksForNearbyParkInGwangju() {
+        // 민수님 63개 비교: "조용한 공원"을 카카오가 광주 밖 가게로만 찾아 "광주 밖"이라고 답함 → "공원"으로 가까운 곳
+        wheelchairUser();
+        when(kakao.search(eq("조용한 공원"), any(), any())).thenReturn(List.of(
+                new Place("1", "조용한공원 카페", "서울 마포구", 37.55, 126.92, null)));
+        when(kakao.search(eq("공원"), any(), any())).thenReturn(List.of(
+                new Place("2", "광주공원", "광주 남구", 35.1440, 126.9140, 900)));
+        AssistantReply r = ask(A, "조용한 공원 가고 싶어", null);
+        assertThat(r.say() + question(r)).doesNotContain("광주 밖");
+        assertThat(r.choices()).extracting(AssistantReply.Choice::label).anyMatch(l -> l.contains("광주공원"));
+    }
+
+    @Test
+    void firstTimeUserGetsRouteFirstThenSetupQuestion() {
+        // 사용성 점검: 처음 쓰는 사람도 "문화전당 가자"면 길부터 찾고 그다음 "어떻게 다니세요?"
+        String guest = "00000000-0000-4000-8000-000000000996";
+        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+                new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
+        Trip walk = new Trip("walk", 12, 700, 0, 0, "걸어서 12분, 700m", Map.of(), "safe", Map.of(), List.of(), false,
+                null);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of()), WeatherDust.unknown(), false, null));
+        AssistantReply r = service.answer(new AssistantRequest(guest, "문화전당 가자", LAT, LON, null, null, null, null,
+                null, null));
+        assertThat(r.tools()).contains("recommend_trip");
+        assertThat(r.pick()).isNotNull();
+        assertThat(question(r)).contains("어떻게 다니세요");
+        assertThat(r.choices()).extracting(AssistantReply.Choice::value).contains("walk", "wheelchair");
     }
 
     @Test

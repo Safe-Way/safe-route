@@ -19,7 +19,7 @@ final class StopReader {
     private static final Pattern STOP_WORD = Pattern.compile("들르|들러|들렀|들려|들리고");
     /** 들를 곳 사이를 나누는 말 */
     private static final Pattern SPLIT = Pattern.compile(
-            "\\s*(?:들르고서?|들렀다가?|들렀다 가|들러서|들러|들려서|들리고|찾고|찾아서|부치고|보내고|사고|그다음에?|그 다음에?"
+            "\\s*(?:갔다가|갔다 가서?|다녀와서|다녀오고|들르고서?|들렀다가?|들렀다 가|들러서|들러|들려서|들리고|찾고|찾아서|부치고|보내고|사고|그다음에?|그 다음에?"
                     + "|다음에|그리고|,|→)\\s*");
     /** 도착 뒤에 붙는 가자는 말 */
     private static final Pattern GO_TAIL = Pattern.compile("\\s*(가자|갈래|가 줘|가줘|갈게|가고 싶어|가야 해|갈 거야|가려고|가요)\\s*$");
