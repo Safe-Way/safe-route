@@ -15,6 +15,7 @@ import com.saferoute.common.ErrorResponse;
  * <ul>
  *   <li>POST /api/ai/setup-chat: 말로 맞추기 (누가 어떻게 걷는지 듣고 앱 설정 고르기)</li>
  *   <li>POST /api/ai/map-chat: 지도 화면 비서 (설정 바꾸기·가까운 곳·장소·버스·신고·되묻기·답 중 하나 고르기)</li>
+ *   <li>POST /api/ai/pick-answer: 처음 설정 질문에 말로 한 답을 답 버튼 하나로 고르기 (모르면 index null)</li>
  * </ul>
  * 답은 앱이 예전에 제미나이에게서 받던 JSON 모양 그대로다. 503 AI_UNAVAILABLE 이면 앱은 자기 규칙으로 답한다.
  */
@@ -35,6 +36,11 @@ public class AppChatController {
     @PostMapping("/api/ai/map-chat")
     public Map<String, Object> map(@RequestBody(required = false) AppChatRequest request) {
         return service.map(request);
+    }
+
+    @PostMapping("/api/ai/pick-answer")
+    public Map<String, Object> pickAnswer(@RequestBody(required = false) PickAnswerRequest request) {
+        return service.pickAnswer(request);
     }
 
     @ExceptionHandler(AppChatException.class)
