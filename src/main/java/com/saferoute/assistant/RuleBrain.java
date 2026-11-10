@@ -207,9 +207,10 @@ class RuleBrain {
         if ("report_problem".equals(p.tool())) {
             if (t.convo.destination() != null && t.located() && t.canCall()) {
                 tools.recommendTrip(t, t.convo.destination());
-                return Outcome.say(msg + " 신고한 곳을 피해서 다시 안내할게요. " + Sentences.trip(t));
+                // 엔진이 아직 신고를 길 계산에 쓰지 않아서(w11 전) 피한다고 말하지 않는다 (사실대로)
+                return Outcome.say(msg + " " + REPORT_CAREFUL + " " + Sentences.trip(t));
             }
-            return Outcome.say(msg + " 가시던 곳을 말씀해 주시면 그곳을 피해서 다시 안내할게요.");
+            return Outcome.say(msg + " " + REPORT_CAREFUL);
         }
         if (Boolean.TRUE.equals(p.args().get("setup_done"))) {
             if (t.convo.destination() != null && t.located()) {
@@ -275,7 +276,7 @@ class RuleBrain {
     // ───────────────────────── 급한 말 (다른 일보다 먼저) ─────────────────────────
 
     private static final List<String> URGENT = List.of("넘어졌", "넘어짐", "넘어져서", "쓰러", "피가", "피나", "살려",
-            "도와줘", "도와주세요", "위험해", "따라와", "따라오", "쫓아와", "쫓아오", "쫓아온", "미행", "숨이", "너무아파", "많이아파", "못일어나", "다쳤어", "다쳤어요");
+            "도와줘", "도와주세요", "위험해", "따라와", "따라오", "쫓아와", "쫓아오", "쫓아온", "미행", "119", "구급차", "숨이", "너무아파", "많이아파", "못일어나", "다쳤어", "다쳤어요");
 
     /** 넘어짐·위험·많이 아픔 같은 급한 말이면 true ("다쳐서 휠체어 타고 다녀"처럼 모드를 바꾸는 말은 아님) */
     static boolean urgent(String text) {
@@ -535,6 +536,9 @@ class RuleBrain {
     }
 
     // ───────────────────────── 흐름 조각 ─────────────────────────
+
+    /** 신고 뒤 말 (사실대로: 신고한 곳을 피하는 길은 아직 못 찾음) */
+    static final String REPORT_CAREFUL = "아직은 신고한 곳을 피하는 길을 따로 찾지는 못해요. 그곳을 지나실 때 조심하세요.";
 
     /** 길을 먼저 찾아 준 뒤 묻는 처음 설정 질문 */
     static final String SETUP_AFTER = "처음 오셨네요. 어떻게 다니세요? 알려 주시면 다음부터 거기에 맞춰 안내할게요.";
