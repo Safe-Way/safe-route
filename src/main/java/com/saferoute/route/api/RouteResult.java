@@ -53,10 +53,20 @@ public record RouteResult(
      * @param events   지나는 행사·돌발상황 영향 구간. 지나지 않으면 빈 목록
      * @param unpavedM        지나는 비포장 길이(m). 휠체어 주의 문장과 같은 값 (2026-11-09, 비서 추천 점수가 씀)
      * @param surfaceUnknownM 지나는 재질 모르는 산길 길이(m)
+     * @param stops    요청한 들를 곳을 거치는 순서대로 (2026-11-10). 들를 곳이 없으면 빈 목록
      */
     public record Route(String kind, int distanceM, int durationMin, List<double[]> geometry,
             Map<String, Integer> counts, Map<String, Integer> covered, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
-            List<Stretch> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM) {
+            List<Stretch> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM,
+            List<StopMark> stops) {
+
+        /** 들를 곳 없이 */
+        public Route(String kind, int distanceM, int durationMin, List<double[]> geometry, Map<String, Integer> counts,
+                Map<String, Integer> covered, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
+                List<Stretch> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM) {
+            this(kind, distanceM, durationMin, geometry, counts, covered, sidewalks, dark, turns, crossings, stairs,
+                    events, unpavedM, surfaceUnknownM, List.of());
+        }
 
         /** 바닥 길이 없이 (시험·다른 파트 코드가 만드는 모양) */
         public Route(String kind, int distanceM, int durationMin, List<double[]> geometry, Map<String, Integer> counts,
@@ -65,6 +75,15 @@ public record RouteResult(
             this(kind, distanceM, durationMin, geometry, counts, covered, sidewalks, dark, turns, crossings, stairs,
                     events, 0, 0);
         }
+    }
+
+    /**
+     * 경로가 거치는 들를 곳 (2026-11-10). 지도 번호 핀과 "다음 들를 곳까지 몇 m"에 쓴다.
+     *
+     * @param name, lat, lon 요청한 값 그대로 (가게 위치)
+     * @param atM  출발부터 경로를 따라 그 들를 곳을 붙인 길 위 점까지 거리(m). 시설 along.atM과 같은 기준
+     */
+    public record StopMark(String name, double lat, double lon, int atM) {
     }
 
     /**

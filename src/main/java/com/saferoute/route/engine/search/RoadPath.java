@@ -36,6 +36,24 @@ public record RoadPath(List<RoadEdge> edges, List<double[]> line, double lengthM
     }
 
     /**
+     * 들를 곳 구간들을 차례로 이은 경로 (2026-11-10). 앞 구간의 끝 노드가 다음 구간의 첫 노드라 그 점은 한 번만 넣는다
+     */
+    public static RoadPath join(List<RoadPath> parts) {
+        List<RoadEdge> edges = new ArrayList<>();
+        List<double[]> line = new ArrayList<>(parts.get(0).line());
+        double length = 0;
+        for (int i = 0; i < parts.size(); i++) {
+            RoadPath p = parts.get(i);
+            edges.addAll(p.edges());
+            if (i > 0) {
+                line.addAll(p.line().subList(1, p.line().size()));
+            }
+            length += p.lengthM();
+        }
+        return new RoadPath(List.copyOf(edges), line, length);
+    }
+
+    /**
      * 길마다 from → to 방향으로 지나는지. 첫 길은 경로 선의 첫 점이 그 길 선의 처음과 끝 중 어디에 가까운지로 정하고,
      * 그다음부터는 앞 길에서 나온 노드로 정한다 (어두운 구간·꺾는 곳·인도 쪽 계산이 같이 쓴다)
      */
