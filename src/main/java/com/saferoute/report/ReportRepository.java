@@ -30,6 +30,35 @@ public class ReportRepository {
     /** 033(reporter_hash 칸·reporter_count 뷰)이 DB에 있는지. 없다고 한 번 확인되면 서버를 다시 켤 때까지 예전 방식 */
     private volatile boolean hasReporterColumns = true;
 
+    /** 종류별 신고 기간(일) — 결정 57, 뷰 road_report_active·scripts/review_reports.py 와 같음 */
+    private static String days(String t) {
+        return "CASE " + t + ".report_type WHEN 'obstacle' THEN 1 WHEN 'accident' THEN 1 WHEN 'construction' THEN 7"
+                + " WHEN 'curb' THEN 30 WHEN 'steep' THEN 30 WHEN 'broken' THEN 30 ELSE 7 END";
+    }
+
+    /**
+     * 신고 r 둘레(같은 종류·30m 안, 자기 포함)에 '기간 끝 + keep일'이 아직 안 지난 신고가 있으면 참.
+     * 숨긴 신고는 자기 자신만 지킨다. scripts/review_reports.py 의 still_kept 와 같은 SQL (결정 59).
+     * keep = 0 이면 "아직 기간 안"이라는 뜻이라 지도 목록·사진에도 같은 조건을 쓴다.
+     */
+    static String stillKept(int keep) {
+        return "EXISTS (SELECT 1 FROM road_report n WHERE (n.status <> 'hidden' OR n.id = r.id)"
+                + " AND n.report_type = r.report_type"
+                + " AND ST_Distance_Sphere(n.geom, r.geom) <= 30"
+                + " AND DATE_ADD(DATE(n.created_at), INTERVAL (" + days("n") + ") - 1 + " + keep + " DAY) >= CURDATE())";
+    }
+
+    /** 사진을 지울 신고: 숨긴 신고, 또는 둘레 신고까지 모두 '기간 끝 + 7일'이 지난 신고 (결정 59 PHOTO_DUE) */
+    static final String PHOTO_DUE = "SELECT r.id FROM road_report r"
+            + " WHERE EXISTS (SELECT 1 FROM road_report_photo p WHERE p.report_id = r.id)"
+            + " AND (r.status = 'hidden' OR NOT " + stillKept(7) + ")";
+
+    /** 줄을 지울 신고: 둘레 신고까지 모두 '기간 끝 + 30일'이 지난 신고 (결정 59 ROW_DUE) */
+    static final String ROW_DUE = "SELECT r.id FROM road_report r WHERE NOT " + stillKept(30);
+
+    /** 한 번에 지우는 개수 (IN 목록이 너무 길어지지 않게) */
+    static final int DELETE_BATCH = 500;
+
     public ReportRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
@@ -131,6 +160,7 @@ public class ReportRepository {
                         + " (SELECT COUNT(*) FROM road_report_photo p WHERE p.report_id = r.id) AS photos"
                         + " FROM road_report r WHERE r.status IN ('open', 'confirmed')"
                         + " AND MBRContains(ST_GeomFromText(?, 0), r.geom)"
+                        + " AND " + stillKept(0)
                         + " ORDER BY r.created_at DESC, r.id DESC LIMIT ?",
                 rs -> {
                     long id = rs.getLong("id");
@@ -181,6 +211,38 @@ public class ReportRepository {
                 west, east, south, north, limit);
     }
 
+    /**
+     * 결정 59 보관 기간이 지난 사진·신고를 지운다 (하루 한 번, ReportCleanup).
+     * 지울 번호를 먼저 읽고 번호로 지운다 — MySQL 은 같은 표를 읽으면서 지우는 DELETE 를 막을 수 있어서다.
+     * 신고 줄을 지우면 사진은 표 규칙(ON DELETE CASCADE)으로 같이 지워진다.
+     *
+     * @return {지운 사진 장 수, 지운 신고 수}
+     */
+    public int[] cleanUp() {
+        int photos = 0;
+        for (List<Long> ids : batches(jdbc.queryForList(PHOTO_DUE, Long.class))) {
+            photos += jdbc.update("DELETE FROM road_report_photo WHERE report_id IN (" + marks(ids.size()) + ")",
+                    ids.toArray());
+        }
+        int rows = 0;
+        for (List<Long> ids : batches(jdbc.queryForList(ROW_DUE, Long.class))) {
+            rows += jdbc.update("DELETE FROM road_report WHERE id IN (" + marks(ids.size()) + ")", ids.toArray());
+        }
+        return new int[] {photos, rows};
+    }
+
+    private static List<List<Long>> batches(List<Long> ids) {
+        List<List<Long>> out = new ArrayList<>();
+        for (int i = 0; i < ids.size(); i += DELETE_BATCH) {
+            out.add(ids.subList(i, Math.min(ids.size(), i + DELETE_BATCH)));
+        }
+        return out;
+    }
+
+    private static String marks(int n) {
+        return String.join(", ", java.util.Collections.nCopies(n, "?"));
+    }
+
     /** "senior,wheelchair" → [senior, wheelchair], 빈 칸이면 빈 목록 */
     static List<String> modes(String csv) {
         if (csv == null || csv.isBlank()) {
@@ -199,7 +261,7 @@ public class ReportRepository {
     public NewReport.Photo photo(long reportId, int seq) {
         List<NewReport.Photo> found = jdbc.query(
                 "SELECT p.content_type, p.data FROM road_report_photo p JOIN road_report r ON r.id = p.report_id"
-                        + " WHERE p.report_id = ? AND p.seq = ? AND r.status <> 'hidden'",
+                        + " WHERE p.report_id = ? AND p.seq = ? AND r.status <> 'hidden' AND " + stillKept(0),
                 (rs, n) -> new NewReport.Photo(rs.getString("content_type"), rs.getBytes("data")), reportId, seq);
         return found.isEmpty() ? null : found.get(0);
     }
