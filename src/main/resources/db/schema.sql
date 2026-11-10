@@ -880,9 +880,11 @@ CREATE TABLE IF NOT EXISTS road_report (
     accuracy_m  SMALLINT     NULL     COMMENT '올릴 때 GPS 정확도 (m)',
     edge_id     BIGINT       NULL     COMMENT '가장 가까운 길 road_edge.id (나중에 경로에 반영할 때 씀, 비어도 됨)',
     status      VARCHAR(10)  NOT NULL DEFAULT 'open' COMMENT 'open 지도에 보임, confirmed 확인됨, hidden 숨김(잘못 올림·얼굴·차량 번호)',
+    reporter_hash CHAR(64)   NULL     COMMENT '같은 사람 판단용: HMAC-SHA256(서버 비밀값, 게스트 번호) 16진수. 원래 번호는 저장 안 함, 없으면 NULL (033)',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '올린 시각 (학교 DB는 한국 시각)',
     PRIMARY KEY (id),
     KEY idx_road_report_status (status),
+    KEY idx_road_report_reporter (reporter_hash),
     SPATIAL INDEX sx_road_report_geom (geom)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '불편 접수 (FR-49)';
 
@@ -1194,12 +1196,12 @@ CREATE TABLE IF NOT EXISTS assistant_knowledge (
     FULLTEXT INDEX ft_assistant_knowledge (keywords, body) WITH PARSER ngram
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '비서 지식 조각 (앱에 대한 설명, 증강검색)';
 
--- 032 지금 유효한 신고 지점 (결정 57: 같은 곳 묶기·종류별 기간·공사 마지막 날 연장). 시험 scripts/check_report_active.py
+-- 032·033 지금 유효한 신고 지점 (결정 57: 같은 곳 묶기·종류별 기간·공사 마지막 날 연장, 033에서 confirmed 는 서로 다른 사람 2명). 시험 scripts/check_report_active.py
 CREATE OR REPLACE VIEW road_report_active AS
 WITH RECURSIVE
 base AS (
     -- @@BASE@@
-    SELECT r.id, r.report_type, r.lat, r.lon, r.geom, r.edge_id, r.accuracy_m, r.memo, r.status, r.created_at,
+    SELECT r.id, r.report_type, r.lat, r.lon, r.geom, r.edge_id, r.accuracy_m, r.memo, r.status, r.reporter_hash, r.created_at,
            DATE(r.created_at) AS d,
            (SELECT COUNT(*) FROM road_report_photo ph WHERE ph.report_id = r.id) AS photos
     FROM road_report r
@@ -1238,13 +1240,15 @@ SELECT l.spot_id,
        a.lat, a.lon, a.edge_id,
        l.starts_on, l.ends_on,
        COUNT(s.id)                                        AS report_count,
+       COUNT(DISTINCT COALESCE(s.reporter_hash, CONCAT('#', s.id))) AS reporter_count,
        SUM(s.photos)                                      AS photo_count,
        MIN(s.accuracy_m)                                  AS best_accuracy_m,
        MIN(s.created_at)                                  AS first_at,
        MAX(s.created_at)                                  AS last_at,
        SUBSTRING_INDEX(GROUP_CONCAT(s.memo ORDER BY s.created_at DESC SEPARATOR '\n'), '\n', 1) AS last_memo,
        GROUP_CONCAT(DISTINCT s.edge_id ORDER BY s.edge_id) AS edge_ids,
-       CASE WHEN COUNT(s.id) >= 2 OR SUM(s.status = 'confirmed') > 0 THEN 1 ELSE 0 END AS confirmed,
+       CASE WHEN COUNT(DISTINCT COALESCE(s.reporter_hash, CONCAT('#', s.id))) >= 2
+                 OR SUM(s.status = 'confirmed') > 0 THEN 1 ELSE 0 END AS confirmed,
        CASE WHEN l.report_type IN ('obstacle', 'accident', 'construction') THEN 'adult,child,senior,wheelchair'
             WHEN l.report_type IN ('curb', 'steep', 'broken') THEN 'senior,wheelchair'
             ELSE '' END                                   AS avoid_modes,
