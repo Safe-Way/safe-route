@@ -15,6 +15,7 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.saferoute.bus.BusArrival;
@@ -24,6 +25,7 @@ import com.saferoute.route.RouteService;
 import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteResult;
+import com.saferoute.situation.WeatherDustService;
 import com.saferoute.subway.StationTrains;
 import com.saferoute.subway.SubwayService;
 import com.saferoute.subway.SubwayTrain;
@@ -60,6 +62,9 @@ public class TransitService {
     private record Cached(List<OdsayPath> paths, Instant at) {
     }
 
+    /** 날씨 (rain auto 일 때 한 번만 물음). null 이면 묻지 않음 */
+    private final WeatherDustService weather;
+
     private final Map<String, Cached> cache = new LinkedHashMap<>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, Cached> eldest) {
@@ -67,7 +72,15 @@ public class TransitService {
         }
     };
 
+    /** 날씨 없이 (테스트용). 요청 rain 이 auto 면 걷는 구간마다 엔진이 날씨를 정한다 */
     public TransitService(OdsayClient odsay, RouteService route, BusService bus, SubwayService subway, Clock clock) {
+        this(odsay, route, bus, subway, clock, null);
+    }
+
+    @Autowired
+    public TransitService(OdsayClient odsay, RouteService route, BusService bus, SubwayService subway, Clock clock,
+                          WeatherDustService weather) {
+        this.weather = weather;
         this.odsay = odsay;
         this.route = route;
         this.bus = bus;
@@ -84,7 +97,7 @@ public class TransitService {
         String mode = mode(req.mode());
 
         List<OdsayPath> all = paths(from, to);
-        Lookups look = new Lookups(req.guestId());
+        Lookups look = new Lookups(req.guestId(), rain(req.rain(), from));
         List<OdsayPath> usable = new ArrayList<>();
         int hidden = 0;
         for (OdsayPath p : all) {
@@ -128,7 +141,7 @@ public class TransitService {
         RouteRequest.Place to = checkPlace(req.destination(), "destination");
         RouteRequest.Place stop = checkPlace(via.get(0), "stops");
         String mode = mode(req.mode());
-        Lookups look = new Lookups(req.guestId());
+        Lookups look = new Lookups(req.guestId(), rain(req.rain(), from));
 
         Half front = half(from, stop, req.night(), mode, look, MAX_PATHS);
         Half back = half(stop, to, req.night(), mode, look, 1);
@@ -176,7 +189,8 @@ public class TransitService {
                 throw TransitException.noRoute();
             }
             TransitResult.Leg leg = new TransitResult.Leg("walk", safe.distanceM(), safe.durationMin(), stop(from),
-                    stop(to), List.of(), null, null, true, safe.geometry(), safe.sidewalks(), null, null, null);
+                    stop(to), List.of(), null, null, true, safe.geometry(), safe.sidewalks(), null, null, null,
+                    List.of(), safe);
             return new Half(List.of(new TransitResult.TransitPath(Math.max(1, safe.durationMin()), 0, 0,
                     safe.distanceM(), List.of(leg))), 0);
         }
@@ -281,7 +295,7 @@ public class TransitService {
                     false, null, null, null, null, null);
         }
         return new TransitResult.Leg("walk", safe.distanceM(), safe.durationMin(), a, b, List.of(), null, null,
-                true, safe.geometry(), safe.sidewalks(), null, null, null);
+                true, safe.geometry(), safe.sidewalks(), null, null, null, List.of(), safe);
     }
 
     private TransitResult.Leg busLeg(OdsayPath.Seg s, Lookups look) {
@@ -323,18 +337,44 @@ public class TransitService {
         return trains.stream().limit(MAX_TRAINS * 2L).toList();
     }
 
+    /**
+     * 걷는 구간 길찾기에 넘길 비. 요청에 on·off가 있으면 그대로, auto·비었으면 출발지 날씨를 한 번만 물어 on·off로 정한다
+     * (구간마다 날씨를 따로 묻지 않게). 날씨를 못 쓰면 null (엔진이 정함).
+     */
+    String rain(String asked, RouteRequest.Place from) {
+        String v = asked == null ? "" : asked.strip().toLowerCase(Locale.ROOT);
+        if ("on".equals(v) || "off".equals(v)) {
+            return v;
+        }
+        if (!v.isEmpty() && !"auto".equals(v)) {
+            throw TransitException.bad("rain 은 auto, on, off 중 하나여야 해요");
+        }
+        if (weather == null) {
+            return null;
+        }
+        try {
+            return weather.judge(from.lat(), from.lon()).rain() ? "on" : "off";
+        } catch (RuntimeException e) {
+            log.warn("대중교통: 날씨를 못 읽어 걷는 구간 비 판단을 엔진에 맡김 {}", e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
     // ---------- 한 요청 안에서 같은 조회를 되풀이하지 않게 ----------
 
     /** 한 요청 안에서만 쓰는 기억 (같은 역·정류장·걷는 길을 여러 경로가 같이 씀) */
     private final class Lookups {
         /** 걷는 구간 길찾기에 넘기는 게스트 번호 (있으면 그 사람의 계단·우회·쉼 간격 선호가 들어감). 없으면 null */
         private final String guestId;
+        /** 걷는 구간 길찾기에 넘기는 비 (on·off). 한 요청에 한 번만 정한다. null 이면 엔진이 구간마다 날씨를 봄 */
+        private final String rain;
         private final Map<String, Optional<StationTrains>> stations = new HashMap<>();
         private final Map<String, Optional<StopArrivals>> stops = new HashMap<>();
         private final Map<String, Optional<RouteResult.Route>> walks = new HashMap<>();
 
-        Lookups(String guestId) {
+        Lookups(String guestId, String rain) {
             this.guestId = guestId == null || guestId.isBlank() ? null : guestId;
+            this.rain = rain;
         }
 
         Optional<StationTrains> station(OdsayPath.Place at) {
@@ -378,7 +418,7 @@ public class TransitService {
             return walks.computeIfAbsent(k, x -> {
                 try {
                     RouteResult r = route.route(new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), a.name()),
-                            new RouteRequest.Place(b.lat(), b.lon(), b.name()), night, mode, guestId));
+                            new RouteRequest.Place(b.lat(), b.lon(), b.name()), night, mode, guestId, rain));
                     // 맞춤 경로는 "safe" (최단과 같으면 하나만 옴)
                     return r.routes().stream().filter(rt -> "safe".equals(rt.kind())).findFirst()
                             .or(() -> r.routes().stream().findFirst());

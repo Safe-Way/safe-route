@@ -209,4 +209,48 @@ class TransitServiceTests {
     void namesMatchWithoutStationSuffix() {
         assertThat(TransitService.norm("문화전당역")).isEqualTo(TransitService.norm("문화 전당"));
     }
+
+    @Test
+    void rainAndEngineRouteGoToWalkLegs() {
+        // 원일님 #137 부탁: 요청 rain(on)을 걷는 구간 길찾기에 넘기고, 엔진이 준 경로를 Leg.walkRoute 에 담는다
+        when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("문화전당"));
+        stubLive(true);
+        com.saferoute.situation.WeatherDustService weather = mock(com.saferoute.situation.WeatherDustService.class);
+        TransitService withWeather = new TransitService(odsay, route, bus, subway, clock, weather);
+
+        TransitResult r = withWeather.search(new RouteRequest(HOME, GOAL, null, "senior", null, "on"));
+
+        ArgumentCaptor<RouteRequest> sent = ArgumentCaptor.forClass(RouteRequest.class);
+        verify(route, atLeastOnce()).route(sent.capture());
+        assertThat(sent.getAllValues()).extracting(RouteRequest::rain).containsOnly("on");
+        verify(weather, times(0)).judge(anyDouble(), anyDouble()); // on 이면 날씨를 묻지 않음
+        TransitResult.Leg firstWalk = r.paths().get(0).legs().get(0);
+        assertThat(firstWalk.walkRoute()).isNotNull();
+        assertThat(firstWalk.walkRoute().kind()).isEqualTo("safe");
+    }
+
+    @Test
+    void autoRainAsksWeatherOnceForAllWalkLegs() {
+        // rain 이 없으면(auto) 걷는 구간마다 묻지 않고 출발지 날씨를 한 번만 물어 on·off 로 넘긴다
+        when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("문화전당"));
+        stubLive(true);
+        com.saferoute.situation.WeatherDustService weather = mock(com.saferoute.situation.WeatherDustService.class);
+        when(weather.judge(anyDouble(), anyDouble()))
+                .thenReturn(new com.saferoute.situation.WeatherDust(true, false, false, 12.0, true, false, true));
+        TransitService withWeather = new TransitService(odsay, route, bus, subway, clock, weather);
+
+        withWeather.search(new RouteRequest(HOME, GOAL, null, "senior"));
+
+        verify(weather, times(1)).judge(anyDouble(), anyDouble());
+        ArgumentCaptor<RouteRequest> sent = ArgumentCaptor.forClass(RouteRequest.class);
+        verify(route, atLeastOnce()).route(sent.capture());
+        assertThat(sent.getAllValues()).extracting(RouteRequest::rain).containsOnly("on");
+    }
+
+    @Test
+    void wrongRainIsBadRequest() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.search(
+                new RouteRequest(HOME, GOAL, null, "senior", null, "maybe")))
+                .isInstanceOf(TransitException.class);
+    }
 }
