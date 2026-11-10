@@ -87,9 +87,11 @@ public class TripRecommender {
 
     public Plan recommend(Ask a) {
         CompletableFuture<WeatherDust> wdFuture = a.weather() == null ? weatherDust.start(a.lat(), a.lon()) : null;
+        // 비서가 받은 날씨(시험 날씨 포함)를 엔진에도 넘긴다. 날씨를 아직 모르면 null = auto (엔진·대중교통이 한 번 물음)
+        String rain = a.weather() == null ? null : a.weather().rain() ? "on" : "off";
         RouteRequest req = new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), "지금 위치"),
                 new RouteRequest.Place(a.dest().lat(), a.dest().lon(), a.dest().name()), a.night(), a.mode(),
-                blankToNull(a.guestId()));
+                blankToNull(a.guestId()), rain);
 
         List<Trip> trips = new ArrayList<>();
         boolean night = "on".equals(a.night());
@@ -110,7 +112,7 @@ public class TripRecommender {
                 trips.add(new Trip("walk", minutes, w.distanceM(), 0, near.getOrDefault(w.kind(), 0),
                         minutes + "분, " + String.format("%,d", w.distanceM()) + "m",
                         request(req), w.kind(), diff, w.events() == null ? List.of() : w.events(), false, null,
-                        w.counts() == null ? null : w.counts().get("rest")));
+                        w.counts() == null ? null : w.counts().get("rest"), List.of(), w));
                 // 최단 길이 피할 행사를 지나면 이유에 "○○ 피함"을 쓰려고 후보로만 남긴다 (점수에서 밀림)
                 for (RouteResult.Route o : r.routes()) {
                     if (o != w && o.events() != null && o.events().stream().anyMatch(RouteResult.Event::avoid)) {
@@ -118,7 +120,8 @@ public class TripRecommender {
                         trips.add(new Trip("walk", m, o.distanceM(), 0, near.getOrDefault(o.kind(), 0),
                                 m + "분, " + String.format("%,d", o.distanceM()) + "m",
                                 request(req),
-                                o.kind(), Map.of(), o.events(), false, null));
+                                o.kind(), Map.of(), o.events(), false, null,
+                                o.counts() == null ? null : o.counts().get("rest"), List.of(), o));
                     }
                 }
             }
@@ -185,6 +188,9 @@ public class TripRecommender {
                 "name", req.destination().name()));
         m.put("night", req.night());
         m.put("mode", req.mode());
+        if (req.rain() != null) {
+            m.put("rain", req.rain()); // 앱이 같은 요청으로 다시 찾아도 같은 비 판단
+        }
         return m;
     }
 
@@ -205,7 +211,7 @@ public class TripRecommender {
             int m = (int) Math.ceil(l.distanceM() / speed.speedMMin());
             out.add(new TransitResult.Leg(l.type(), l.distanceM(), m, l.from(), l.to(), l.lines(), l.way(),
                     l.stationCount(), l.safeWalk(), l.geometry(), l.sidewalks(), l.liveAvailable(), l.buses(),
-                    l.trains()));
+                    l.trains(), l.stops(), l.walkRoute()));
         }
         return out;
     }
