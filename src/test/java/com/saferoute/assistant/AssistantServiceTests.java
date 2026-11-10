@@ -571,4 +571,14 @@ class AssistantServiceTests {
         assertThat(AssistantService.mustSayTransit(full, legs, List.of("지난번 비 올 때도 대중교통을 타셨어요")))
                 .isEqualTo(full);
     }
+
+    @Test
+    void eveningWalkQuestionIsNotFood() {
+        wheelchairUser();
+        when(weatherDust.judge(anyDouble(), anyDouble()))
+                .thenReturn(new WeatherDust(false, false, false, 14.0, true, false, true));
+        AssistantReply r = ask(A, "오늘 저녁에 걸어도 괜찮을까", null);
+        assertThat(question(r)).contains("걷기 괜찮아요", "해는", "가실 곳").doesNotContain("국밥", "어떤 걸 드시");
+        assertThat(r.choices()).extracting(AssistantReply.Choice::label).doesNotContain("국밥");
+    }
 }
