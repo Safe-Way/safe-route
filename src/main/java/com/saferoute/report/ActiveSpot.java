@@ -11,14 +11,15 @@ import java.util.List;
  * @param startsOn    이번 기간 첫날 (예: 2026-11-10)
  * @param endsOn      이번 기간 마지막 날. 공사는 마지막 날 신고가 또 오면 하루씩 늘어남
  * @param reportCount 이번 기간 신고 수
+ * @param reporterCount 이번 기간 신고한 사람 수 (같은 앱 번호는 한 명, 번호 없는 신고는 한 건마다 한 명, 033)
  * @param photoCount  이번 기간 사진 수
- * @param confirmed   2건 이상이거나 팀이 확인했으면 true
+ * @param confirmed   서로 다른 사람 2명 이상이거나 팀이 확인했으면 true (033)
  * @param avoidModes  피하는 모드 (예: [senior, wheelchair])
  * @param costModes   조금 돌아가게만 하는 모드
  * @param lastAt      마지막 신고 시각 (한국 시각, 예: 2026-11-10T11:15)
  * @param lastMemo    마지막 신고 메모. 없으면 null
  */
 public record ActiveSpot(long spotId, String reportType, double lat, double lon, String startsOn, String endsOn,
-                         int reportCount, int photoCount, boolean confirmed, List<String> avoidModes,
+                         int reportCount, int reporterCount, int photoCount, boolean confirmed, List<String> avoidModes,
                          List<String> costModes, String lastAt, String lastMemo) {
 }

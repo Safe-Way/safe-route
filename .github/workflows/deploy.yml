@@ -10,6 +10,7 @@
 #   DB_ADDRESS, DB_PORT, DB_NAME, DB_USERNAME, DB_PASSWORD   학교 MySQL 접속 정보 (서버 안에서 닿는 주소)
 #   KAKAO_REST_KEY                                장소 검색, 미세먼지용 시·도 찾기
 #   DATA_GO_KR_KEY                                날씨(기상청), 미세먼지(에어코리아)
+#   REPORT_HASH_SECRET                            (선택) 같은 사람 신고를 한 명으로 세는 해시 비밀값
 #
 # 순서: (CI 테스트 통과) → secrets 확인 → 코드 받기 → jar 빌드 → 도커 이미지 빌드·압축 → 환경변수 파일 만들기
 #       → 서버로 올리기(scp) → 서버에서 deploy.sh 실행(앱 두 대 한 대씩 교체)
@@ -50,6 +51,7 @@ jobs:
       DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
       ODSAY_API_KEY: ${{ secrets.ODSAY_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      REPORT_HASH_SECRET: ${{ secrets.REPORT_HASH_SECRET }}
     steps:
       # 꼭 필요한 secret이 하나라도 비어 있으면 이름을 알려 주고 멈춘다(서버에 반쯤 올라가는 것을 막는다)
       - name: secrets 확인
@@ -105,6 +107,8 @@ jobs:
           put DATA_GO_KR_KEY "$DATA_GO_KR_KEY"
           put ODSAY_API_KEY "$ODSAY_API_KEY"
           put GEMINI_API_KEY "$GEMINI_API_KEY"
+          # 신고한 사람 해시용 비밀값 (비어 있으면 앱은 그대로 돌고 reporter_hash 만 비어 있음)
+          put REPORT_HASH_SECRET "$REPORT_HASH_SECRET"
           # 서버 코드가 쓰지 않는 키(데이터 적재 스크립트용). application.yml이 이름을 가리키고 있어 빈 값으로 둔다
           for name in SAFEMAP_KEY SAFETYDATA_POLICE_KEY SAFETYDATA_SECURITYLIGHT_KEY SAFETYDATA_COLDSHELTER_KEY \
                       SAFETYDATA_STREETLIGHT_KEY TMAP_APP_KEY; do

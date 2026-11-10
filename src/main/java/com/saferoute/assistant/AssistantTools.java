@@ -511,7 +511,7 @@ public class AssistantTools {
         if (!t.located()) {
             return "지금 위치를 몰라서 신고하지 못했어요. 위치 켜기를 눌러 주세요.";
         }
-        reports.createVoice((String) a.get("type"), t.mode(), (String) a.get("memo"), t.lat, t.lon);
+        reports.createVoice((String) a.get("type"), t.mode(), (String) a.get("memo"), t.lat, t.lon, t.guestId);
         return "신고했어요. 다른 분들 지도에도 보여요.";
     }
 

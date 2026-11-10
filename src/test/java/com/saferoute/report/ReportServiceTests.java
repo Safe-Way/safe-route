@@ -104,7 +104,7 @@ class ReportServiceTests {
     void createSavesReportAndPhotosWithNearestRoad() {
         NewReport r = service.check("steep", 35.14, 126.93, "senior", null, null, List.of(file(JPG), file(PNG)));
         when(repo.nearestEdge(35.14, 126.93, ReportService.EDGE_SNAP_M)).thenReturn(777L);
-        when(repo.insert(r, 777L)).thenReturn(12L);
+        when(repo.insert(r, 777L, "photo", null)).thenReturn(12L);
 
         ReportCreated c = service.create(r);
 
@@ -118,10 +118,34 @@ class ReportServiceTests {
         NewReport r = service.check("steep", 35.14, 126.93, null, null, null, null);
         when(repo.nearestEdge(anyDouble(), anyDouble(), anyInt()))
                 .thenThrow(new DataAccessResourceFailureException("road_edge 없음"));
-        when(repo.insert(r, null)).thenReturn(5L);
+        when(repo.insert(r, null, "photo", null)).thenReturn(5L);
 
         assertThat(service.create(r).id()).isEqualTo(5);
         verify(repo, never()).insertPhoto(anyLongArg(), anyInt(), any());
+    }
+
+    @Test
+    void guestIdIsSavedOnlyAsHash() {
+        ReporterHash hash = new ReporterHash("test-secret");
+        ReportService withHash = new ReportService(repo, hash);
+        NewReport r = withHash.check("curb", 35.14, 126.93, null, null, null, null);
+        String guest = "00000000-0000-4000-8000-000000000123";
+        when(repo.insert(eq(r), any(), eq("photo"), any())).thenReturn(8L);
+
+        withHash.create(r, guest);
+
+        verify(repo).insert(eq(r), any(), eq("photo"), eq(hash.of(guest)));
+        assertThat(hash.of(guest)).hasSize(64).doesNotContain(guest);
+    }
+
+    @Test
+    void voiceReportAlsoSavesHash() {
+        ReporterHash hash = new ReporterHash("test-secret");
+        ReportService withHash = new ReportService(repo, hash);
+        when(repo.insert(any(), any(), eq("voice"), any())).thenReturn(9L);
+
+        assertThat(withHash.createVoice("construction", "adult", null, 35.14, 126.93, "g-1")).isEqualTo(9);
+        verify(repo).insert(any(), any(), eq("voice"), eq(hash.of("g-1")));
     }
 
     private static long anyLongArg() {
