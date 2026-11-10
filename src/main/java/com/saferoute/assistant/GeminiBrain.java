@@ -236,6 +236,10 @@ class GeminiBrain {
             return Outcome.ask(cand.size() + "곳을 찾았어요. 어디로 갈까요?", buttons);
         }
         String q = o.ask() != null ? o.ask() : o.say();
+        if ((o.say() + " " + q).contains("번호")) {
+            // 버튼에는 번호가 없는데 "번호를 말씀해 주세요"라고 하면 헷갈려서 서버 문장으로 (사용성 점검)
+            return new Outcome(cand.size() + "곳을 찾았어요. 어디로 갈까요? 아래에서 골라 주세요.", null, buttons, o.ai());
+        }
         return new Outcome(o.say(), q, buttons, o.ai());
     }
 

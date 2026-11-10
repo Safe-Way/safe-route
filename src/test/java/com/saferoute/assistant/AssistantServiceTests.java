@@ -200,6 +200,17 @@ class AssistantServiceTests {
     }
 
     @Test
+    void askingIfLocationIsSavedGetsFixedAnswer() {
+        // 사용성 점검: "이 앱은 내 위치 저장해"의 답이 정확하지 않음 → 정해 둔 문장 (제미나이 안 부름)
+        AssistantReply r = ask(A, "이 앱은 내 위치 저장해?", null);
+        assertThat(r.say()).contains("저장하지 않아요", "100m", "한 점");
+        assertThat(r.tools()).isEmpty();
+        assertThat(RuleBrain.asksLocationSaved("내위치기록남아")).isTrue();
+        assertThat(RuleBrain.asksLocationSaved("집위치저장해줘")).isFalse();
+        assertThat(RuleBrain.asksLocationSaved("문화전당가자")).isFalse();
+    }
+
+    @Test
     void call119IsUrgent() {
         // 민수님 63개 비교: "119 불러 줘" → 112·보호자 버튼부터 (전화는 앱이 휴대폰에서)
         AssistantReply r = ask(A, "119 불러 줘", null);
