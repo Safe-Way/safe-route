@@ -38,6 +38,12 @@ import com.saferoute.route.engine.graph.UndergroundLinks;
  *   <li>지하 길 (2026-11-09): road_edge_excluded의 reason = underground 줄(A파트가 그린 역 출구 계단·엘리베이터, 대합실,
  *       금남지하상가 통로). 같이 읽어 두되 비 올 때 운행 시간 안에만 요청 도로망에 넣고, 출구 점(road_node_excluded tags.attach_edge)을
  *       그 지상 길 위에 잇는다 ({@link UndergroundLinks}). 그 표의 id는 road_edge.id와 겹칠 수 있어 -(10억 + id)로 바꿔 쓴다</li>
+ *   <li>보행자 광장 (2026-11-10, w13): 같은 표의 reason = plaza 줄(A파트가 OSM 광장 면에서 입구끼리 그은 곧은 길, 양 끝은 road_node).
+ *       5·18 민주광장처럼 면으로만 있는 광장을 가로지르지 못해 돌아가던 것을 막는다. 실제로 늘 걷는 땅이라 날씨·시간·모드
+ *       조건 없이 보통 평지 보도처럼 늘 넣는다(노인도 계단 없는 길로 봄, 사용자 결정 11-10). 휠체어는 쓰지 않는다
+ *       ({@link Penalty#PLAZA}, route.yml wheelchair exclude): 높낮이를 모르는 선이라 높낮이가 다른 광장에서는 계단 양 끝을
+ *       곧게 잇는 선이 있어 휠체어가 그 계단을 건너뛰게 된다 (11-10 확인, 광주 44줄, 문화전당 광장 포함. A파트 원래 메모대로).
+ *       번호는 지하 길과 같은 -(10억 + id)</li>
  * </ul>
  * route.yml의 route.road-source가 mysql일 때 쓴다 (기본값). none이면 {@link NoRoadGraphSource}.
  */
@@ -133,12 +139,13 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     }
 
     private Network read() {
-        // 지하 길 표에는 wheelchair_ramp(계단은 휠체어로 못 지남)·edge_stat(턱·육교 모름)이 없어 NULL로 읽는다
-        String sql = select("e", "e.id", "e.wheelchair_ramp", "0", "s.curb", "s.footbridge_ok")
+        // 지하 길·광장 길 표에는 wheelchair_ramp(계단은 휠체어로 못 지남)·edge_stat(턱·육교 모름)이 없어 NULL로 읽는다.
+        // 광장 길(plaza)은 지하 표시 0이라 늘 요청 도로망에 들어간다 (2026-11-10)
+        String sql = select("e", "e.id", "e.wheelchair_ramp", "0", "0", "s.curb", "s.footbridge_ok")
                 + " FROM road_edge e LEFT JOIN edge_stat s ON s.edge_id = e.id"
                 + " UNION ALL "
-                + select("x", "-(1000000000 + x.id)", "NULL", "1", "NULL", "NULL")
-                + " FROM road_edge_excluded x WHERE x.reason = 'underground'";
+                + select("x", "-(1000000000 + x.id)", "NULL", "x.reason = 'underground'", "x.reason = 'plaza'", "NULL", "NULL")
+                + " FROM road_edge_excluded x WHERE x.reason IN ('underground', 'plaza')";
         List<RoadEdge> edges = jdbc.query(sql, (rs, i) -> {
             Map<Penalty, Double> values = new EnumMap<>(Penalty.class);
             if (rs.getInt("steps") == 1) {
@@ -149,6 +156,9 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             }
             if (rs.getInt("underground") == 1) {
                 values.put(Penalty.UNDERGROUND, 1.0);
+            }
+            if (rs.getInt("plaza") == 1) {
+                values.put(Penalty.PLAZA, 1.0);
             }
             if (rs.getObject("curb") != null && rs.getInt("curb") == 1) {
                 values.put(Penalty.CURB, 1.0);
@@ -209,10 +219,11 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     }
 
     /** 지상(road_edge)·지하(road_edge_excluded) 두 표에서 같은 칸을 같은 이름으로 읽는 SELECT 부분. t는 표 별칭 */
-    private static String select(String t, String id, String ramp, String underground, String curb, String footbridge) {
+    private static String select(String t, String id, String ramp, String underground, String plaza, String curb,
+            String footbridge) {
         return "SELECT " + id + " AS id, " + t + ".from_node, " + t + ".to_node, " + t + ".length_m, " + t + ".highway, "
                 + t + ".footway, " + t + ".steps, " + ramp + " AS wheelchair_ramp, " + t + ".surface, " + t + ".covered, "
-                + t + ".name, " + underground + " AS underground,"
+                + t + ".name, " + underground + " AS underground, " + plaza + " AS plaza,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.tracktype')) AS tracktype,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.sac_scale')) AS sac_scale,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.ford')) AS ford,"

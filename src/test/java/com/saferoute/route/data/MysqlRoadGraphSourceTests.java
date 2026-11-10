@@ -1,8 +1,16 @@
 package com.saferoute.route.data;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 /** 도로망 읽기에서 DB 없이 확인할 수 있는 부분 */
 class MysqlRoadGraphSourceTests {
@@ -69,5 +77,18 @@ class MysqlRoadGraphSourceTests {
         assertThat(MysqlRoadGraphSource.attachEdge("12.5")).isNull();
         assertThat(MysqlRoadGraphSource.attachEdge("없음")).isNull();
         assertThat(MysqlRoadGraphSource.attachEdge(null)).isNull();
+    }
+
+    @Test
+    void plazaRowsAreReadAsPlainWalkways() {
+        // 광장 길(w13)은 지하 길과 같은 표에서 읽되 지하 표시를 붙이지 않는다 (늘 요청 도로망에 들어감)
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        new MysqlRoadGraphSource(jdbc).covers(126.92, 35.14);
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbc, times(2)).query(sql.capture(), any(RowMapper.class));
+        assertThat(sql.getAllValues().get(0))
+                .contains("x.reason IN ('underground', 'plaza')")
+                .contains("x.reason = 'underground' AS underground")
+                .contains("x.reason = 'plaza' AS plaza");
     }
 }

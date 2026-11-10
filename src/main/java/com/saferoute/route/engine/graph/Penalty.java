@@ -28,5 +28,11 @@ public enum Penalty {
      * 지하 길: road_edge_excluded(reason = underground)에 A파트가 직접 그린 역 출구 계단·엘리베이터, 대합실, 지하상가 통로.
      * 비 올 때 운행 시간 안에만 도로망에 넣고, 가로등·CCTV·시설 자료가 없어 기준 감점을 하지 않는다 (2026-11-09)
      */
-    UNDERGROUND
+    UNDERGROUND,
+    /**
+     * 보행자 광장 가로지르기 길: road_edge_excluded(reason = plaza)에 A파트가 광장 입구끼리 그은 곧은 길 (2026-11-10, w13).
+     * 다른 모드는 보통 평지 보도로 보고, 휠체어는 쓰지 않는다(route.yml wheelchair exclude). 높낮이를 모르는 선이라
+     * 높낮이가 다른 광장에서는 계단 양 끝을 곧게 잇는 선이 있다 (광주 44줄, 문화전당 광장 포함)
+     */
+    PLAZA
 }
