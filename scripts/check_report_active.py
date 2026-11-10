@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""road_report_active 뷰(032) 규칙 시험 (결정 57, A파트 2026-11-10).
+"""road_report_active 뷰 규칙 시험 (결정 57, A파트 2026-11-10). 뷰는 가장 최근 정의(033)로 계산.
 
 학교 DB에 꾸민 신고를 넣지 않는다(넣으면 앱 지도에 바로 보임). 032 SQL의 base 부분(@@BASE@@~@@END@@)을
 아래 꾸민 신고 줄로 바꾸고, CURDATE()(@@TODAY@@)를 정한 날짜로 바꿔 같은 SQL을 학교 DB에서 계산만 한다.
@@ -13,9 +13,9 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SQL = os.path.join(ROOT, "src", "main", "resources", "db", "migration", "032_road_report_active.sql")
+SQL = os.path.join(ROOT, "src", "main", "resources", "db", "migration", "033_road_report_reporter.sql")
 
-# 꾸민 신고: (번호, 종류, 위도, 경도, 날짜, 상태). 시험마다 위치를 멀리 둬서 서로 안 묶이게 함
+# 꾸민 신고: (번호, 종류, 위도, 경도, 날짜, 상태[, 신고자 해시]). 시험마다 위치를 멀리 둬서 서로 안 묶이게 함
 R = [
     # A 공사 하루: 11-10 → 11-16까지
     (101, "construction", 35.1000, 126.9000, "2026-11-10", "open"),
@@ -48,6 +48,12 @@ R = [
     (1003, "construction", 35.1900, 126.9000, "2026-11-16", "open"),
     # K 팀 확인(confirmed) 1건 → confirmed 1
     (1101, "broken", 35.2000, 126.9000, "2026-11-10", "confirmed"),
+    # L 같은 사람이 두 번 (033) → 2건이지만 신고자 1명, confirmed 0
+    (1201, "curb", 35.2100, 126.9000, "2026-11-10", "open", "aaaa"),
+    (1202, "curb", 35.2100, 126.9000, "2026-11-11", "open", "aaaa"),
+    # M 서로 다른 두 사람 → confirmed 1
+    (1301, "curb", 35.2200, 126.9000, "2026-11-10", "open", "aaaa"),
+    (1302, "curb", 35.2200, 126.9000, "2026-11-11", "open", "bbbb"),
 ]
 
 # (오늘, 묶음 번호, 기대: None = 안 보임, 또는 (시작, 끝, 건수, confirmed))
@@ -73,6 +79,8 @@ EXPECT = [
     ("2026-11-17", 1001, ("2026-11-10", "2026-11-17", 3, 1)),
     ("2026-11-18", 1001, None),
     ("2026-11-12", 1101, ("2026-11-10", "2026-12-09", 1, 1)),
+    ("2026-11-12", 1201, ("2026-11-10", "2026-12-09", 2, 0)),
+    ("2026-11-12", 1301, ("2026-11-10", "2026-12-09", 2, 1)),
 ]
 
 
@@ -90,12 +98,14 @@ def read_env():
 def fake_base(today):
     """그날까지 들어온 꾸민 신고만 (미래 신고는 아직 없음)"""
     rows = []
-    for i, t, lat, lon, d, st in R:
+    for r in R:
+        i, t, lat, lon, d, st = r[:6]
+        who = f"'{r[6]}'" if len(r) > 6 else "NULL"
         if d > today:
             continue
         rows.append(f"SELECT {i} AS id, '{t}' AS report_type, {lat} AS lat, {lon} AS lon, "
                     f"ST_SRID(POINT({lon}, {lat}), 0) AS geom, NULL AS edge_id, NULL AS accuracy_m, NULL AS memo, "
-                    f"'{st}' AS status, TIMESTAMP('{d} 09:00:00') AS created_at, DATE('{d}') AS d, 0 AS photos")
+                    f"'{st}' AS status, {who} AS reporter_hash, TIMESTAMP('{d} 09:00:00') AS created_at, DATE('{d}') AS d, 0 AS photos")
     # 실제 base 처럼 숨긴 신고는 뺀다
     return "SELECT * FROM (\n" + "\nUNION ALL ".join(rows) + "\n) f WHERE f.status <> 'hidden'"
 
@@ -126,7 +136,7 @@ def main():
                     sys.exit("SQL 실패: " + r.stderr.strip())
                 cache[today] = {int(c[0]): c for c in (line.split("\t") for line in r.stdout.splitlines() if line)}
             row = cache[today].get(spot)
-            got = None if row is None else (row[5], row[6], int(row[7]), int(row[14]))
+            got = None if row is None else (row[5], row[6], int(row[7]), int(row[15]))  # 7 report_count, 15 confirmed (033에서 reporter_count가 8번째로 들어감)
             ok = got == want
             bad += not ok
             print(f"  {'통과' if ok else '실패'} 오늘 {today} 묶음 {spot}: 기대 {want} → {got}")
