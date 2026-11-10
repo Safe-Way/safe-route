@@ -75,6 +75,9 @@ final class Sentences {
         return String.join(", ", names);
     }
 
+    /** 엔진 events[].kind 의 신고 (원일님 w11 RoadReport.KIND) */
+    static final String REPORT = "신고";
+
     /** recommend_trip 결과를 말로 */
     static String trip(Turn t) {
         TripRecommender.Plan plan = t.plan;
@@ -130,6 +133,10 @@ final class Sentences {
         for (Trip o : plan.scored().others()) {
             for (RouteResult.Event e : TripScorer.avoided(o)) {
                 if (walk && TripScorer.avoided(best).stream().noneMatch(b -> b.title().equals(e.title()))) {
+                    if (REPORT.equals(e.kind())) {
+                        sb.append(" ").append(e.title()).append(" 신고가 있는 곳을 피해서 안내할게요.");
+                        continue;
+                    }
                     sb.append(" '").append(e.title()).append("' ").append(e.kind())
                             .append(e.kind().equals("행사") ? "가 열려 사람이 많아서 옆길로 안내할게요." : " 구간을 피해서 안내할게요.");
                 }
@@ -137,7 +144,12 @@ final class Sentences {
         }
         if (walk) {
             for (RouteResult.Event e : best.events()) {
-                sb.append(" 가는 길에 '").append(e.title()).append("' ").append(Josa.iGa(e.kind())).append(" 있어요.");
+                if (REPORT.equals(e.kind())) {
+                    // 신고는 title 이 종류 이름뿐이라 따옴표 없이 "가는 길에 공사 신고가 있어요."
+                    sb.append(" 가는 길에 ").append(e.title()).append(" 신고가 있어요.");
+                } else {
+                    sb.append(" 가는 길에 '").append(e.title()).append("' ").append(Josa.iGa(e.kind())).append(" 있어요.");
+                }
                 sb.append(e.avoid() ? " 피할 길이 없어서 지나가요. 조심하세요." : "");
             }
         }

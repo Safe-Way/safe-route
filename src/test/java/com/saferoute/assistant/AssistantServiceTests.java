@@ -32,6 +32,7 @@ import com.saferoute.place.KakaoLocalClient;
 import com.saferoute.place.Place;
 import com.saferoute.report.ReportService;
 import com.saferoute.situation.NightJudge;
+import com.saferoute.route.api.RouteResult;
 import com.saferoute.situation.WeatherDust;
 import com.saferoute.situation.WeatherDustService;
 
@@ -139,13 +140,31 @@ class AssistantServiceTests {
     }
 
     @Test
+    void reportOnTheWayIsSaidPlainly() {
+        // 원일님 w11: 엔진이 못 피한 신고는 events[] kind "신고", title 종류 이름 → "가는 길에 공사 신고가 있어요."
+        wheelchairUser();
+        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+                new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
+        RouteResult.Event rep = new RouteResult.Event("신고", "공사", null, null, "2026-11-16T23:59", 120, 160, true,
+                null);
+        Trip walk = new Trip("walk", 9, 600, 0, 1, "걸어서 9분, 600m", Map.of(), "safe", Map.of(), List.of(rep), false,
+                null);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of()), WeatherDust.unknown(), false, null));
+        AssistantReply r = ask(A, "문화전당 가자", null);
+        assertThat(r.say()).contains("가는 길에 공사 신고가 있어요.", "피할 길이 없어서 지나가요")
+                .doesNotContain("'공사'", "신고 신고");
+    }
+
+    @Test
     void voiceReportAsksFirstThenSends() {
         wheelchairUser();
         AssistantReply first = ask(A, "여기 공사 중이라 못 지나가", null);
         assertThat(question(first)).contains("공사", "신고할까요");
         AssistantReply second = ask(A, "응 사진은 안 찍을래", first.conversationId());
-        // 엔진이 아직 신고를 피하지 않으니 피한다고 말하지 않고 조심하라고 (사용성 점검 16번)
-        assertThat(second.say()).contains("신고했어요", "조심하세요").doesNotContain("피해서");
+        // 신고 자리 = 지금 위치(출발)라 이번 길은 피하지 않음. 엔진 60초 기억이라 1분쯤 뒤부터 (w11 뒤 사실대로)
+        assertThat(second.say()).contains("신고했어요", "1분쯤 뒤", "피할 수 있으면", "조심하세요")
+                .doesNotContain("피해서 다시 안내", "아직은");
         verify(reports).createVoice(eq("construction"), eq("wheelchair"), anyString(), eq(LAT), eq(LON));
     }
 
