@@ -1193,3 +1193,66 @@ CREATE TABLE IF NOT EXISTS assistant_knowledge (
     PRIMARY KEY (id),
     FULLTEXT INDEX ft_assistant_knowledge (keywords, body) WITH PARSER ngram
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '비서 지식 조각 (앱에 대한 설명, 증강검색)';
+
+-- 032 지금 유효한 신고 지점 (결정 57: 같은 곳 묶기·종류별 기간·공사 마지막 날 연장). 시험 scripts/check_report_active.py
+CREATE OR REPLACE VIEW road_report_active AS
+WITH RECURSIVE
+base AS (
+    -- @@BASE@@
+    SELECT r.id, r.report_type, r.lat, r.lon, r.geom, r.edge_id, r.accuracy_m, r.memo, r.status, r.created_at,
+           DATE(r.created_at) AS d,
+           (SELECT COUNT(*) FROM road_report_photo ph WHERE ph.report_id = r.id) AS photos
+    FROM road_report r
+    WHERE r.status <> 'hidden'
+    -- @@END@@
+),
+spotted AS (
+    SELECT b.*,
+           (SELECT MIN(o.id) FROM base o
+            WHERE o.report_type = b.report_type AND ST_Distance_Sphere(o.geom, b.geom) <= 30) AS spot_id,
+           CASE b.report_type WHEN 'obstacle' THEN 1 WHEN 'accident' THEN 1 WHEN 'construction' THEN 7
+                              WHEN 'curb' THEN 30 WHEN 'steep' THEN 30 WHEN 'broken' THEN 30 ELSE 7 END AS days
+    FROM base b
+),
+spot_days AS (
+    SELECT spot_id, report_type, days, d, ROW_NUMBER() OVER (PARTITION BY spot_id ORDER BY d) AS rn
+    FROM (SELECT DISTINCT spot_id, report_type, days, d FROM spotted) x
+),
+periods AS (
+    SELECT spot_id, report_type, days, rn, d AS starts_on, DATE_ADD(d, INTERVAL days - 1 DAY) AS ends_on
+    FROM spot_days WHERE rn = 1
+    UNION ALL
+    SELECT n.spot_id, n.report_type, n.days, n.rn,
+           CASE WHEN n.d > p.ends_on THEN n.d ELSE p.starts_on END,
+           CASE WHEN n.d > p.ends_on THEN DATE_ADD(n.d, INTERVAL n.days - 1 DAY)
+                WHEN n.report_type = 'construction' AND n.d = p.ends_on THEN DATE_ADD(p.ends_on, INTERVAL 1 DAY)
+                ELSE p.ends_on END
+    FROM periods p JOIN spot_days n ON n.spot_id = p.spot_id AND n.rn = p.rn + 1
+),
+latest AS (
+    SELECT p.* FROM periods p
+    WHERE p.rn = (SELECT MAX(q.rn) FROM spot_days q WHERE q.spot_id = p.spot_id)
+)
+SELECT l.spot_id,
+       l.report_type,
+       a.lat, a.lon, a.edge_id,
+       l.starts_on, l.ends_on,
+       COUNT(s.id)                                        AS report_count,
+       SUM(s.photos)                                      AS photo_count,
+       MIN(s.accuracy_m)                                  AS best_accuracy_m,
+       MIN(s.created_at)                                  AS first_at,
+       MAX(s.created_at)                                  AS last_at,
+       SUBSTRING_INDEX(GROUP_CONCAT(s.memo ORDER BY s.created_at DESC SEPARATOR '\n'), '\n', 1) AS last_memo,
+       GROUP_CONCAT(DISTINCT s.edge_id ORDER BY s.edge_id) AS edge_ids,
+       CASE WHEN COUNT(s.id) >= 2 OR SUM(s.status = 'confirmed') > 0 THEN 1 ELSE 0 END AS confirmed,
+       CASE WHEN l.report_type IN ('obstacle', 'accident', 'construction') THEN 'adult,child,senior,wheelchair'
+            WHEN l.report_type IN ('curb', 'steep', 'broken') THEN 'senior,wheelchair'
+            ELSE '' END                                   AS avoid_modes,
+       CASE WHEN l.report_type IN ('curb', 'steep', 'broken') THEN 'adult,child'
+            WHEN l.report_type IN ('obstacle', 'accident', 'construction') THEN ''
+            ELSE 'adult,child,senior,wheelchair' END      AS cost_modes
+FROM latest l
+JOIN spotted a ON a.id = l.spot_id
+JOIN spotted s ON s.spot_id = l.spot_id AND s.d BETWEEN l.starts_on AND l.ends_on
+WHERE l.ends_on >= CURDATE()   -- @@TODAY@@
+GROUP BY l.spot_id, l.report_type, a.lat, a.lon, a.edge_id, l.starts_on, l.ends_on;
