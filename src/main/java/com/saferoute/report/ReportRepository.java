@@ -38,11 +38,21 @@ public class ReportRepository {
      * @param via photo 화면에서 사진과 함께, voice 비서에게 말로 (028)
      */
     public long insert(NewReport r, Long edgeId, String via) {
+        return insert(r, edgeId, via, null);
+    }
+
+    /**
+     * 신고 한 줄을 넣는다.
+     *
+     * @param via          photo 화면에서 사진과 함께, voice 비서에게 말로 (028)
+     * @param reporterHash 신고한 사람 표시 (ReporterHash, 033). 앱 번호가 없으면 null
+     */
+    public long insert(NewReport r, Long edgeId, String via, String reporterHash) {
         KeyHolder key = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(
-                    "INSERT INTO road_report (report_type, mode, memo, lon, lat, geom, accuracy_m, edge_id, via)"
-                            + " VALUES (?, ?, ?, ?, ?, ST_SRID(POINT(?, ?), 0), ?, ?, ?)",
+                    "INSERT INTO road_report (report_type, mode, memo, lon, lat, geom, accuracy_m, edge_id, via, reporter_hash)"
+                            + " VALUES (?, ?, ?, ?, ?, ST_SRID(POINT(?, ?), 0), ?, ?, ?, ?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, r.type());
             ps.setString(2, r.mode());
@@ -62,6 +72,7 @@ public class ReportRepository {
                 ps.setLong(9, edgeId);
             }
             ps.setString(10, via);
+            ps.setString(11, reporterHash);
             return ps;
         }, key);
         return key.getKey().longValue();

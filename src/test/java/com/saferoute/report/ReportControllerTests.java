@@ -31,7 +31,7 @@ class ReportControllerTests {
 
     @Test
     void postWithPhotoGives201() throws Exception {
-        when(repo.insert(any(), any())).thenReturn(12L);
+        when(repo.insert(any(), any(), any(), any())).thenReturn(12L);
         MockMultipartFile photo = new MockMultipartFile("photos", "a.jpg", "image/jpeg", ReportServiceTests.JPG);
 
         mvc.perform(multipart("/api/reports").file(photo)
