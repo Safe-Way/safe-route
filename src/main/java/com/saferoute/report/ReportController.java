@@ -24,9 +24,9 @@ import com.saferoute.common.ErrorResponse;
  * 불편 신고 창구 (FR-49, 2차).
  * <ul>
  *   <li>POST /api/reports (multipart/form-data): type, lat, lon, mode, memo, accuracyM, photos(0~3장), guestId(선택, 해시로만 저장) → 201</li>
- *   <li>GET /api/reports?bbox=서,남,동,북 : 지도 범위 안 신고 (숨긴 것 빼고, 최근 순 300개까지)</li>
+ *   <li>GET /api/reports?bbox=서,남,동,북 : 지도 범위 안 신고 (숨긴 것·기간 끝난 것 빼고, 최근 순 300개까지, 결정 59)</li>
  *   <li>GET /api/reports/active?bbox=서,남,동,북 : 지금 유효한 신고 지점 (같은 곳 묶음·기간은 032 뷰가 계산)</li>
- *   <li>GET /api/reports/{id}/photos/{seq} : 사진 한 장</li>
+ *   <li>GET /api/reports/{id}/photos/{seq} : 사진 한 장 (숨긴 신고·기간 끝난 신고면 404)</li>
  * </ul>
  * 처음에는 지도에 "신고된 곳"으로만 보이고 경로 계산에는 쓰지 않는다 (023 표 설명).
  */
