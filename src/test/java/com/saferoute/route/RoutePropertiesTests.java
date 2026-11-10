@@ -42,7 +42,8 @@ class RoutePropertiesTests {
 
         RouteProperties.Profile wheel = p.profile("wheelchair");
         assertThat(wheel.maxDetour()).isEqualTo(1.2);
-        assertThat(wheel.exclude()).containsExactly(Penalty.STAIRS, Penalty.CURB, Penalty.FOOTBRIDGE, Penalty.TRAIL, Penalty.FORD);
+        assertThat(wheel.exclude()).containsExactly(Penalty.STAIRS, Penalty.CURB, Penalty.FOOTBRIDGE, Penalty.TRAIL, Penalty.FORD,
+                Penalty.PLAZA);
         assertThat(wheel.avoidUnpaved()).isTrue();
         assertThat(p.profile("senior").avoidUnpaved()).isFalse();
         assertThat(wheel.day().hasWeights()).isFalse();
