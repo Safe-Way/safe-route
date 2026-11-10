@@ -142,6 +142,18 @@ class GeminiBrain {
     static final Outcome RETRY = new Outcome("", null, List.of(), true);
 
     /** 할 수 없다는 말 (첫 답에서 도구를 안 부르고 이렇게 말하면 도구가 모자란 것으로 봄) */
+    /** 하겠다고만 하는 말 ("화장실 찾아 드릴게요"). 도구를 안 부르고 이렇게 끝내면 말만 하고 행동은 안 한 것 */
+    private static final Pattern PROMISE = Pattern.compile(
+            "(찾아|알려|보여|안내해|검색해|확인해|살펴)\\s*(드릴게요|볼게요|드리겠|보겠)");
+    static final String DO_IT = "방금 하겠다고만 말하고 도구를 부르지 않았어요. 알맞은 도구를 지금 불러서 실제로 하고 결과로 답하세요."
+            + " 도구로 할 수 없는 일이면 못 한다고 말하세요.";
+
+    /** 도구를 안 부르고 하겠다고만 말했으면 true (질문으로 끝나면 사용자 답을 기다리는 것이라 아님) */
+    static boolean promiseOnly(String said) {
+        String s = said.strip();
+        return !s.endsWith("?") && PROMISE.matcher(s).find();
+    }
+
     private static final List<String> CANT = List.of("할 수 없", "못 해요", "못해요", "기능이 없", "도와드릴 수 없", "지원하지 않");
 
     private Outcome run(Turn t, String system, String reference, List<Map<String, Object>> declarations,
@@ -173,6 +185,15 @@ class GeminiBrain {
                 String said = text.toString().strip();
                 if (narrowed && round == 0 && CANT.stream().anyMatch(said::contains)) {
                     return RETRY;
+                }
+                if (round == 0 && t.tools.isEmpty() && promiseOnly(said)) {
+                    // 말만 하고 행동 안 함 (사용성 점검): 좁혀 보냈으면 7개로 다시, 아니면 한 번 더 시킨다
+                    if (narrowed) {
+                        return RETRY;
+                    }
+                    contents.add(json.convertValue(content, Map.class));
+                    contents.add(Map.of("role", "user", "parts", List.of(Map.of("text", DO_IT))));
+                    continue;
                 }
                 return withPlaceButtons(t, finish(t, said, facts.toString()));
             }

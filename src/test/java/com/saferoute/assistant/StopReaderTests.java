@@ -18,6 +18,14 @@ class StopReaderTests {
     }
 
     @Test
+    void wentThereThenStopThenHome() {
+        // 사용성 점검: "병원 갔다가 약국 들러서 집에 갈래" → 병원·약국 들르고 집
+        StopReader.Read r = StopReader.read("병원 갔다가 약국 들러서 집에 갈래");
+        assertThat(r.stops()).extracting(Stop::query).containsExactly("병원", "약국");
+        assertThat(r.dest()).isEqualTo("집");
+    }
+
+    @Test
     void keepsSpokenOrder() {
         StopReader.Read r = StopReader.read("먼저 다이소, 그다음 약국 들렀다가 집에 가자");
         assertThat(r.stops()).extracting(Stop::query).containsExactly("다이소", "약국");

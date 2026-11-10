@@ -94,6 +94,15 @@ class GeminiBrainTests {
     }
 
     @Test
+    void promiseWithoutToolIsCaught() {
+        // 사용성 점검: "화장실 찾아 드릴게요"라고 하고 도구를 안 부름
+        assertThat(GeminiBrain.promiseOnly("가까운 화장실을 찾아 드릴게요.")).isTrue();
+        assertThat(GeminiBrain.promiseOnly("길을 알려드릴게요!")).isTrue();
+        assertThat(GeminiBrain.promiseOnly("어디로 가실지 말씀해 주시면 찾아 드릴게요?")).isFalse();
+        assertThat(GeminiBrain.promiseOnly("문화전당까지 걸어서 12분이에요.")).isFalse();
+    }
+
+    @Test
     void referenceWordsAreNotSaid() {
         // 재휘님 점검(11/09): 답 첫머리에 "[참고] 내용에 따르면"이라고 그대로 말함 → 서버가 지운다
         assertThat(GeminiBrain.dropReferenceWords("[참고] 내용에 따르면, AI는 정확한 위치를 몰라요."))
@@ -114,7 +123,7 @@ class GeminiBrainTests {
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("[도구: 가까운 곳]")))
                 .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("[도구: 길]"))))
                 .andRespond(withSuccess("""
-                        {"candidates":[{"content":{"role":"model","parts":[{"text":"화장실을 찾아볼게요."}]}}]}
+                        {"candidates":[{"content":{"role":"model","parts":[{"text":"화장실이 가까이 있어요."}]}}]}
                         """, MediaType.APPLICATION_JSON));
         ask("화장실 어디야");
         server.verify();
@@ -307,6 +316,28 @@ class GeminiBrainTests {
         assertThat(r.usage().retried()).isTrue(); // 7개로 다시 물음
         assertThat(r.usage().tools()).isEqualTo(ToolPicker.ALL);
         assertThat(r.usage().prompt()).isZero(); // 가짜 답에 usageMetadata 가 없음
+    }
+
+    @Test
+    void promiseOnlyAnswerIsToldToActuallyDoIt() {
+        // 좁혀 보냈는데 "찾아 드릴게요"만 → 7개로 다시 → 또 말만 → "실제로 하세요"를 붙여 한 번 더
+        server.expect(requestTo(URL)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"화장실을 찾아 드릴게요."}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"name\":\"update_my_info\"")))
+                .andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"화장실을 찾아 드릴게요."}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("하겠다고만")))
+                .andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"근처에서 화장실을 못 찾았어요."}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        AssistantReply r = ask("화장실 어디야");
+        server.verify();
+        assertThat(r.say()).contains("못 찾았어요");
+        assertThat(r.usage().retried()).isTrue();
     }
 
     @Test
