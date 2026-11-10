@@ -1,5 +1,6 @@
 package com.saferoute.route;
 
+import java.time.LocalTime;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +25,8 @@ import com.saferoute.route.engine.search.RouteFinder;
  * @param darkStretch 걷는 동안 "앞으로 ○m는 조명이 적습니다" 안내에 쓸 어두운 구간 기준 (FR-31)
  * @param turn        걷는 동안 "80m 앞 왼쪽" 안내에 쓸 꺾는 곳 기준 (FR-34)
  * @param events      길 위의 행사·돌발상황을 다루는 기준 (2026-11-06)
+ * @param rain        비 오는 날 기준 (2026-11-09). 없으면 비 기준을 쓰지 않는다
+ * @param underground 지하 길을 지날 수 있는 시간 (2026-11-09). 없으면 지하 길을 쓰지 않는다
  */
 @ConfigurationProperties("route")
 public record RouteProperties(
@@ -39,10 +42,55 @@ public record RouteProperties(
         double tooFarM,
         DarkStretch darkStretch,
         Turn turn,
-        Events events) {
+        Events events,
+        Rain rain,
+        Underground underground) {
 
     public RouteProperties {
         events = events == null ? new Events(List.of()) : events;
+        rain = rain == null ? Rain.OFF : rain;
+        underground = underground == null ? Underground.NONE : underground;
+    }
+
+    /**
+     * 비 오는 날 기준 (2026-11-09). 밤처럼 단계를 새로 두지 않고 그때의 낮·밤 기준에 지붕 기준(ROOF)을 곱한다 (비 오는 밤도 있으므로).
+     * 지붕 없는 길의 부담 전체(거리 + 그 모드 기준 부담)를 (1 + walkMore)배로 본다. 지상 길끼리는 같은 배수라 순위가 맑은 날과 같고
+     * (기준이 묽어지지 않음), 지붕 아래 길만 상대적으로 가벼워진다. 우회 한도도 같은 값에서 나온다 ({@link Rain#widen})
+     *
+     * @param walkMore 젖지 않으려고 더 걸을 수 있는 비율 (0.4면 지붕 아래 길을 1.4배까지). 0이면 비 기준을 쓰지 않는다
+     * @param note     지붕 있는 길로 돌았는데 말할 차이가 없을 때 문장
+     */
+    public record Rain(double walkMore, String note) {
+
+        public static final Rain OFF = new Rain(0, null);
+
+        /**
+         * 비 올 때 넓힌 우회 한도 = max(그 사람의 한도, 1 + walkMore). 전부 지붕 아래인 길이 (1 + walkMore)배 길이까지면 지상 길과
+         * 비용이 같으므로 한도도 그만큼. 넓힌 한도는 지붕 이득이 있을 때만 쓴다 (RouteService). 한도 없음(0)은 그대로
+         */
+        public double widen(double maxDetour) {
+            return maxDetour > 0 && walkMore > 0 ? Math.max(maxDetour, 1 + walkMore) : maxDetour;
+        }
+    }
+
+    /**
+     * 지하 길을 지날 수 있는 시간 (2026-11-09). 지하상가 통로는 두 역 대합실 사이에만 있어 대합실이 닫히면 못 쓴다.
+     *
+     * @param open  "05:30"
+     * @param close "24:00"이면 자정까지. 설정이 없으면 지하를 쓰지 않는다 (안전한 쪽)
+     */
+    public record Underground(String open, String close) {
+
+        public static final Underground NONE = new Underground(null, null);
+
+        public boolean openAt(LocalTime t) {
+            if (open == null || close == null) {
+                return false;
+            }
+            LocalTime o = LocalTime.parse(open);
+            // "24:00"은 LocalTime으로 읽을 수 없어 자정까지로 본다
+            return "24:00".equals(close) ? !t.isBefore(o) : !t.isBefore(o) && t.isBefore(LocalTime.parse(close));
+        }
     }
 
     /**
@@ -136,6 +184,17 @@ public record RouteProperties(
             }
             return new Phase(weights, helpM, restEveryM / 2.0, schoolM, note);
         }
+
+        /**
+         * 비 올 때: 이 기준에 지붕 기준(값 = walk-more)을 둔다. 비용은 RouteScorer가 곱하기로 계산하고, 여기 두는 것은
+         * covered.roof 응답과 설명이 그대로 동작하게 하려는 것이다. 문장(note)은 이 기준에 없을 때만 비 문장으로 (2026-11-09)
+         */
+        Phase withRoof(Rain r) {
+            Map<Criterion, Double> w = new EnumMap<>(Criterion.class);
+            w.putAll(weights);
+            w.put(Criterion.ROOF, r.walkMore());
+            return new Phase(w, helpM, restM, schoolM, note == null || note.isBlank() ? r.note() : note);
+        }
     }
 
     /**
@@ -224,6 +283,18 @@ public record RouteProperties(
             }
             return new Profile(detour, walkSpeedMPerMin, nightLeadMin, ex, stairs, avoidUnpaved, avoidEvents,
                     day.withRestM(p.restEveryM()), night.withRestM(p.restEveryM()));
+        }
+
+        /**
+         * 비 올 때 기준 (2026-11-09): 낮·밤 기준에 지붕 기준을 둔다. 우회 한도는 그대로이고, 넓힌 한도({@link Rain#widen})는
+         * RouteService가 지붕 이득이 있을 때만 쓴다
+         */
+        public Profile rainy(Rain r) {
+            if (r == null || r.walkMore() <= 0) {
+                return this;
+            }
+            return new Profile(maxDetour, walkSpeedMPerMin, nightLeadMin, exclude, avoidStairs, avoidUnpaved, avoidEvents,
+                    day.withRoof(r), night.withRoof(r));
         }
 
         /** 계단만 빼고 찾는 사람 (계단을 못 가는 사람 설정). 휠체어 모드와 설명 문장을 나눈다 */

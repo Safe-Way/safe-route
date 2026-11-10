@@ -61,4 +61,13 @@ class MysqlRoadGraphSourceTests {
         assertThat(MysqlRoadGraphSource.parseLineString("LINESTRING(126.93 35.14,126.931 35.141)"))
                 .containsExactly(new double[] {126.93, 35.14}, new double[] {126.931, 35.141});
     }
+
+    @Test
+    void badAttachEdgeIsSkippedNotFatal() {
+        // 지하 출구 한 줄을 못 읽어도 도로망 전체를 읽는다 (그 출구만 잇지 않음)
+        assertThat(MysqlRoadGraphSource.attachEdge("127396")).isEqualTo(127396L);
+        assertThat(MysqlRoadGraphSource.attachEdge("12.5")).isNull();
+        assertThat(MysqlRoadGraphSource.attachEdge("없음")).isNull();
+        assertThat(MysqlRoadGraphSource.attachEdge(null)).isNull();
+    }
 }

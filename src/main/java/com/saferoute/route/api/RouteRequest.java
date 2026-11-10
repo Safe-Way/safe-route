@@ -8,8 +8,14 @@ package com.saferoute.route.api;
  *              2차에 요청에 추가되는 값 (8.3)
  * @param guestId 앱이 처음 실행 때 만든 게스트 번호. 있으면 그 사람이 정한 선호(user_profile의 계단·우회 한도·쉬는 간격)를
  *                모드 기준 대신 쓴다. 없으면 모드 기준 (2026-11-09)
+ * @param rain  auto(기본, 기상청 지금 날씨)·on·off. 비면 지붕 있는 길을 먼저 찾는다 (2026-11-09). 시연 때 on
  */
-public record RouteRequest(Place origin, Place destination, String night, String mode, String guestId) {
+public record RouteRequest(Place origin, Place destination, String night, String mode, String guestId, String rain) {
+
+    /** 비 판단 없이 (auto, 날씨를 따름) */
+    public RouteRequest(Place origin, Place destination, String night, String mode, String guestId) {
+        this(origin, destination, night, mode, guestId, null);
+    }
 
     /** mode 없이 (1차 요청 모양) */
     public RouteRequest(Place origin, Place destination, String night) {

@@ -33,6 +33,9 @@ class GeminiBrain {
     static final int MAX_ROUNDS = 5;
     static final String AGAIN = "그때 다시 여쭤볼게요.";
     private static final Pattern NUMBER = Pattern.compile("\\d+");
+    /** 답에 새어 나온 [참고] 말 ("[참고] 내용에 따르면", "참고 자료를 보면" 등). 사용자에게는 이상하게 들려서 지운다 */
+    private static final Pattern REFERENCE_WORDS = Pattern.compile(
+            "\\[?참고\\]?\\s*(내용|자료|글|정보)?\\s*(에|을|를)?\\s*(따르면|의하면|보면)\\s*,?\\s*|\\[참고\\]\\s*");
     /** 도구가 성공했을 때만 쓸 수 있는 말 (재휘님 규칙 "했다고 말하지 않는다") */
     private static final List<String> DONE_WORDS = List.of("신고했", "저장했", "바꿨", "바꾸었", "기억했", "등록했",
             "보냈", "전화했", "알렸");
@@ -215,8 +218,14 @@ class GeminiBrain {
         return new Outcome(o.say(), q, buttons, o.ai());
     }
 
+    /** 답에서 [참고] 말을 지운다. 지시문에도 쓰지 말라고 했지만 제미나이가 가끔 그대로 말해서 서버가 한 번 더 지운다 */
+    static String dropReferenceWords(String text) {
+        return REFERENCE_WORDS.matcher(text).replaceAll("").strip();
+    }
+
     /** 제미나이 마지막 말을 검사한다. 숫자가 도구 결과에 없거나 하지 않은 일을 했다고 하면 규칙 문장으로 */
     Outcome finish(Turn t, String text, String facts) {
+        text = dropReferenceWords(text);
         if (text.isEmpty()) {
             return null;
         }

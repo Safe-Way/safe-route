@@ -13,4 +13,9 @@ public interface RoadGraphSource {
 
     /** 범위 안의 길과 감점 */
     RoadGraph load(BBox box);
+
+    /** underground: 지하 길(역 출구·대합실·지하상가)도 넣고 출구를 지상 길에 잇는지. 비 올 때 운행 시간 안에만 true (2026-11-09) */
+    default RoadGraph load(BBox box, boolean underground) {
+        return load(box);
+    }
 }

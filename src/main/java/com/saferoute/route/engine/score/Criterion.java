@@ -14,5 +14,7 @@ public enum Criterion {
     /** 어린이보호구역 대상 시설(학교·유치원 등)에서 반경 school-m(300m) 안 */
     SCHOOL,
     /** 지금 이용 가능한 쉼터·공중화장실에서 반경 rest-m 안 */
-    REST
+    REST,
+    /** 지붕 있는 길 (road_edge.covered). 시설이 아니라 길 성질이라 커버율은 0 또는 1. 비 올 때만 비중을 둔다 (2026-11-09) */
+    ROOF
 }

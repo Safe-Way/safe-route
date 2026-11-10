@@ -68,28 +68,35 @@ public class RouteResultAssembler {
         int shortM = (int) Math.round(found.shortest().lengthM() + snapM);
         int safeM = (int) Math.round(found.safe().lengthM() + snapM);
 
-        // 경로 고를 때처럼 지금 쓸 수 있는 시설만 센다 (밤 도움 시설, 운영 시간)
+        // 경로 고를 때처럼 지금 쓸 수 있는 시설만 센다 (밤 도움 시설, 운영 시간).
+        // 지하 구간은 빼고 지상 조각만 센다: 지하를 걷는 사람은 바로 위 지상 가로등·CCTV를 지나지 않는다 (2026-11-09).
+        // 아이콘의 경로 위 자리(along)는 전체 선 기준 그대로
         List<Poi> pois = nearby.pois().stream().filter(p -> RouteScorer.usableNow(p, cond.night(), nearby)).toList();
-        List<Counts> counts = counter.countAlong(List.of(shortLine, safeLine), pois);
+        List<Counts> counts = counter.countAlongPieces(List.of(found.shortest().surfaceLines(start, end),
+                found.safe().surfaceLines(start, end)), pois);
         Counts shortCounts = counts.get(0);
         Counts safeCounts = counts.get(1);
 
         List<RouteResult.Event> shortEvents = events(events, shortLine, avoids);
         List<RouteResult.Event> safeEvents = events(events, safeLine, avoids);
+        // 응답 covered와 설명의 지붕 있는 길 차이가 같은 값을 쓰도록 한 번만 계산한다
+        Map<String, Integer> shortCovered = same ? Map.of() : covered(found.shortest(), phase, cov);
+        Map<String, Integer> safeCovered = covered(found.safe(), phase, cov);
 
         List<RouteResult.Route> routes = new ArrayList<>();
         if (!same) {
             routes.add(route("shortest", shortM, profile.minutes(shortM), shortLine, shortCounts,
-                    covered(found.shortest(), phase, cov),
+                    shortCovered,
                     Sidewalks.along(found.shortest(), found.shortest().startOffset(start)),
                     dark(cond, found.shortest(), start, cov), turns(found.shortest(), start),
-                    crossings(found.shortest(), start), stairs(found.shortest(), start), shortEvents));
+                    crossings(found.shortest(), start), stairs(found.shortest(), start), shortEvents,
+                    found.shortest()));
         }
         routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts,
-                covered(found.safe(), phase, cov),
+                safeCovered,
                 Sidewalks.along(found.safe(), found.safe().startOffset(start)),
                 dark(cond, found.safe(), start, cov), turns(found.safe(), start),
-                crossings(found.safe(), start), stairs(found.safe(), start), safeEvents));
+                crossings(found.safe(), start), stairs(found.safe(), start), safeEvents, found.safe()));
 
         int extraM = same ? 0 : safeM - shortM;
         // 반올림을 따로 하면 "22분 / 24분"인데 "(1분) 더"가 나올 수 있어, 두 경로 시간의 차로 구한다
@@ -99,14 +106,16 @@ public class RouteResultAssembler {
                 profile.avoidStairs() && avoids(found, RouteFinder::isStairs),
                 profile.avoidUnpaved() && avoids(found, RouteFinder::isUnpaved),
                 !ExplanationBuilder.avoided(shortEvents, safeEvents).isEmpty());
+        int roofGainM = same ? 0 : safeCovered.getOrDefault("roof", 0) - shortCovered.getOrDefault("roof", 0);
         String summary = ExplanationBuilder.text(cond, profile, phase, same, found.detourCapped(), extraM, extraMin,
-                diff, avoided);
+                diff, avoided, roofGainM);
         summary = ExplanationBuilder.withEvents(summary, extraM, extraMin, same ? List.of() : shortEvents, safeEvents);
         List<RouteResult.Note> notes = new ArrayList<>();
         if (profile.avoidStairs()) {
             notes.addAll(ExplanationBuilder.stairsNotes(stairs(found.safe(), start).size(), found.avoidFree() != null));
         }
         notes.addAll(ExplanationBuilder.eventNotes(summary, same ? List.of() : shortEvents, safeEvents));
+        ExplanationBuilder.undergroundNote(found.safe()).ifPresent(notes::add);
         summary = ExplanationBuilder.withWarnings(summary, notes);
 
         return new RouteResult(
@@ -119,13 +128,15 @@ public class RouteResultAssembler {
 
     private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts,
             Map<String, Integer> covered, List<RouteResult.Sidewalk> sidewalks, List<RouteResult.Stretch> dark, List<RouteResult.Turn> turns,
-            List<RouteResult.Stretch> crossings, List<RouteResult.Stair> stairs, List<RouteResult.Event> events) {
+            List<RouteResult.Stretch> crossings, List<RouteResult.Stair> stairs, List<RouteResult.Event> events,
+            RoadPath path) {
         return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()), covered,
                 sidewalks,
-                dark, turns, crossings, stairs, events);
+                dark, turns, crossings, stairs, events, (int) Math.round(path.lengthM(RouteFinder::isUnpaved)),
+                (int) Math.round(path.lengthM(RouteFinder::isSurfaceUnknown)));
     }
 
-    /** 이 요청 기준마다 경로가 그 범위 안을 걷는 길이(m). 키는 기준 이름 소문자 (school, help, rest, light, cctv) */
+    /** 이 요청 기준마다 경로가 그 범위 안을 걷는 길이(m). 키는 기준 이름 소문자 (school, help, rest, light, cctv, 비 오는 날 roof) */
     static Map<String, Integer> covered(RoadPath path, RouteProperties.Phase phase, Coverage cov) {
         Map<String, Integer> out = new LinkedHashMap<>();
         for (com.saferoute.route.engine.score.Criterion c : phase.weights().keySet()) {
