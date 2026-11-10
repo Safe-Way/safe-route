@@ -112,6 +112,39 @@ public class ReportRepository {
         return out;
     }
 
+    /**
+     * 지도 범위 안 지금 유효한 신고 지점 (road_report_active 뷰, 032). 마지막 신고가 최근인 순으로 limit 개까지.
+     * 뷰가 기간·같은 곳 묶기를 계산하니 여기서는 범위만 거른다.
+     */
+    public List<ActiveSpot> active(double west, double south, double east, double north, int limit) {
+        return jdbc.query("SELECT spot_id, report_type, lat, lon,"
+                        + " DATE_FORMAT(starts_on, '%Y-%m-%d') AS starts, DATE_FORMAT(ends_on, '%Y-%m-%d') AS ends,"
+                        + " report_count, photo_count, confirmed, avoid_modes, cost_modes,"
+                        + " DATE_FORMAT(last_at, '%Y-%m-%dT%H:%i') AS last, last_memo"
+                        + " FROM road_report_active"
+                        + " WHERE lon BETWEEN ? AND ? AND lat BETWEEN ? AND ?"
+                        + " ORDER BY last_at DESC, spot_id DESC LIMIT ?",
+                (rs, n) -> new ActiveSpot(rs.getLong("spot_id"), rs.getString("report_type"), rs.getDouble("lat"),
+                        rs.getDouble("lon"), rs.getString("starts"), rs.getString("ends"), rs.getInt("report_count"),
+                        rs.getInt("photo_count"), rs.getInt("confirmed") == 1, modes(rs.getString("avoid_modes")),
+                        modes(rs.getString("cost_modes")), rs.getString("last"), rs.getString("last_memo")),
+                west, east, south, north, limit);
+    }
+
+    /** "senior,wheelchair" → [senior, wheelchair], 빈 칸이면 빈 목록 */
+    static List<String> modes(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (String m : csv.split(",")) {
+            if (!m.isBlank()) {
+                out.add(m.strip());
+            }
+        }
+        return List.copyOf(out);
+    }
+
     /** 사진 한 장. 신고가 없거나 숨긴 신고면 null */
     public NewReport.Photo photo(long reportId, int seq) {
         List<NewReport.Photo> found = jdbc.query(
