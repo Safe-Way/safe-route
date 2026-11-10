@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import com.saferoute.route.RouteProperties;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.condition.Conditions;
+import com.saferoute.route.engine.event.RoadReport;
 import com.saferoute.route.engine.facility.FacilityGroup;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
@@ -219,6 +220,8 @@ public final class ExplanationBuilder {
      *   <li>다른 이유로 돌면서 피하기도 했으면: 알림 "○○ 행사 둘레도 피했습니다"</li>
      *   <li>안내하는 길이 피할 것을 지나면(피하는 길이 우회 한도를 넘음): 주의 "○○ 구간을 지납니다. 피해 가는 길은 너무 멉니다"</li>
      *   <li>지나도 되는 것(어른의 행사, 차 없는 거리 등)을 지나면: 알림 "○○ 구간을 지납니다"</li>
+     *   <li>신고(진행표 w11)는 지점이라 "구간" 대신 "앞에 공사 신고가 있는 곳을 지나요". 피할 신고를 못 피했으면 주의, 비용만
+     *       더하는 신고면 알림</li>
      *   <li>출발·도착이 행사 범위 안이면(그 행사장에서 출발하거나 그리로 가는 길) "지난다" 대신 한 번만:
      *       알림 "출발지 근처에서 ○○ 행사가 열리고 있어요" (도착지, 출발지와 도착지)</li>
      * </ul>
@@ -243,7 +246,8 @@ public final class ExplanationBuilder {
             return "행사".equals(e.kind()) ? place + " 근처에서 " + name + iGa(name) + " 열리고 있어요"
                     : place + " 근처에 " + name + iGa(name) + " 있어요";
         }).distinct().forEach(t -> out.add(RouteResult.Note.info("event", t)));
-        List<RouteResult.Event> passing = safeEvents.stream().filter(e -> e.near() == null).toList();
+        List<RouteResult.Event> passing = safeEvents.stream().filter(e -> e.near() == null && !report(e)).toList();
+        List<RouteResult.Event> reports = safeEvents.stream().filter(e -> e.near() == null && report(e)).toList();
         String warn = names(passing.stream().filter(RouteResult.Event::avoid).map(ExplanationBuilder::label)
                 .toList());
         if (!warn.isEmpty()) {
@@ -252,6 +256,17 @@ public final class ExplanationBuilder {
         String notice = names(passing.stream().filter(e -> !e.avoid()).map(ExplanationBuilder::label).toList());
         if (!notice.isEmpty()) {
             out.add(RouteResult.Note.info("event", notice + " 구간을 지납니다"));
+        }
+        // "공사 신고가", 셋 넘으면 "공사 신고, 턱 신고 외 1곳이"
+        String warnReports = names(reports.stream().filter(RouteResult.Event::avoid).map(ExplanationBuilder::label)
+                .toList());
+        if (!warnReports.isEmpty()) {
+            out.add(RouteResult.Note.warn("event", "앞에 " + warnReports + iGa(warnReports) + " 있는 곳을 지나요"));
+        }
+        String noticeReports = names(reports.stream().filter(e -> !e.avoid()).map(ExplanationBuilder::label)
+                .toList());
+        if (!noticeReports.isEmpty()) {
+            out.add(RouteResult.Note.info("event", "앞에 " + noticeReports + iGa(noticeReports) + " 있는 곳을 지나요"));
         }
         return out;
     }
@@ -262,10 +277,13 @@ public final class ExplanationBuilder {
         return warn && SAME.equals(summary) ? SHORTEST : summary;
     }
 
-    /** 최단 경로가 지나는 피할 행사·돌발 중 안전 경로가 지나지 않는 것의 이름 */
+    /**
+     * 최단 경로가 지나는 피할 행사·돌발 중 안전 경로가 지나지 않는 것의 이름.
+     * 신고는 비용만 더하는 모드(avoid false)여도 넣는다: 그 비용으로 돌았는데 "가장 짧은 길을 안내합니다"라고 하지 않게
+     */
     static String avoided(List<RouteResult.Event> shortEvents, List<RouteResult.Event> safeEvents) {
         Set<String> passed = safeEvents.stream().map(ExplanationBuilder::label).collect(Collectors.toSet());
-        return names(shortEvents.stream().filter(RouteResult.Event::avoid).map(ExplanationBuilder::label)
+        return names(shortEvents.stream().filter(e -> e.avoid() || report(e)).map(ExplanationBuilder::label)
                 .filter(n -> !passed.contains(n)).toList());
     }
 
@@ -296,7 +314,11 @@ public final class ExplanationBuilder {
         return c >= '가' && c <= '힣' && (c - '가') % 28 != 0 ? "이" : "가";
     }
 
-    /** 돌발은 이름에 종류가 이미 들어 있다 ("무진대로 공사") */
+    private static boolean report(RouteResult.Event e) {
+        return RoadReport.KIND.equals(e.kind());
+    }
+
+    /** 돌발은 이름에 종류가 이미 들어 있다 ("무진대로 공사"). 신고는 "공사 신고" */
     static String label(RouteResult.Event e) {
         return e.title().contains(e.kind()) ? e.title() : e.title() + " " + e.kind();
     }

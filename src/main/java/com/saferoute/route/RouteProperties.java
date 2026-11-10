@@ -308,9 +308,14 @@ public record RouteProperties(
         }
     }
 
+    /** 요청 mode를 모드 이름으로 (비어 있으면 기본 모드). 신고 뷰의 avoid_modes·cost_modes와 비교할 때도 쓴다 */
+    public static String modeName(String name) {
+        return name == null || name.isBlank() ? DEFAULT_PROFILE : name.trim().toLowerCase();
+    }
+
     /** 모드 이름으로 값을 찾는다. 비어 있으면 기본 모드, 모르는 이름이면 IllegalArgumentException */
     public Profile profile(String name) {
-        String key = name == null || name.isBlank() ? DEFAULT_PROFILE : name.trim().toLowerCase();
+        String key = modeName(name);
         Profile p = profiles == null ? null : profiles.get(key);
         if (p == null) {
             throw new IllegalArgumentException("mode는 " + (profiles == null ? "[]" : profiles.keySet()) + " 중 하나여야 합니다");

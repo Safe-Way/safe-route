@@ -27,6 +27,7 @@ import com.saferoute.route.data.UserPreferences;
 import com.saferoute.route.engine.condition.Conditions;
 import com.saferoute.route.engine.event.RoadEvent;
 import com.saferoute.route.engine.event.RoadEvents;
+import com.saferoute.route.engine.event.RoadReport;
 import com.saferoute.route.engine.explain.ExplanationBuilder;
 import com.saferoute.route.engine.explain.RouteResultAssembler;
 import com.saferoute.route.engine.facility.Nearby;
@@ -58,7 +59,9 @@ import com.saferoute.situation.WeatherDustService;
  *       대중교통 걷는 구간·비서 추천은 길찾기 창구를 거치지 않아, 밤처럼 엔진이 C파트에 직접 묻는다</li>
  *   <li>주변 도로망 읽기, 출발·도착을 길에 붙이기: {@link RoadGraphSource}. 휠체어는 지날 수 있는 길로 이어진 곳에 붙인다</li>
  *   <li>주변 시설을 한 번 읽기: {@link PoiSource}. 점수·설명·지도 아이콘이 같은 목록을 쓴다</li>
- *   <li>지금 진행 중인 행사·돌발상황 읽기: 모드에 따라 둘레를 조건부로 피하거나({@link RouteProperties.Events}) 지날 때 알린다</li>
+ *   <li>지금 진행 중인 행사·돌발상황 읽기: 모드에 따라 둘레를 조건부로 피하거나({@link RouteProperties.Events}) 지날 때 알린다.
+ *       지금 유효한 신고 지점(진행표 w11)도 kind "신고"인 행사처럼 넣는다: 뷰의 avoid_modes면 그 길을 조건부로 피하고,
+ *       cost_modes면 그 길에 그 모드 걸음 1분만큼 비용만 더한다</li>
  *   <li>모드·낮밤 기준으로 길마다 더할 비용: {@link RouteScorer} (시설 커버율을 요청 때 계산)</li>
  *   <li>최단·안전 경로: {@link RouteFinder}. 못 찾으면 범위를 넓혀 한 번 더 찾는다.
  *       휠체어가 비포장을 지나면 피할 때 얼마나 더 걸리는지 설명에 알린다</li>
@@ -183,17 +186,34 @@ public class RouteService {
         boolean underground = rain && props.underground().openAt(now.toLocalTime());
 
         // 다시 찾을 때의 넓은 범위까지 한 번에 읽는다. 도로망·행사 범위에는 들를 곳도 넣는다
-        List<RoadEvent> events = pois.events(BBox.around(points,
-                Math.max(props.searchMarginM(), props.retryMarginM()) + EVENT_MARGIN_M), now.toLocalDateTime());
+        BBox eventBox = BBox.around(points, Math.max(props.searchMarginM(), props.retryMarginM()) + EVENT_MARGIN_M);
+        List<RoadEvent> events = new ArrayList<>(pois.events(eventBox, now.toLocalDateTime()));
         // 출발·들를 곳·도착이 반경 안이면 그 행사에 가는 길이라 피하지 않고 알리기만 한다
-        List<RoadEvent> avoided = events.stream().filter(e -> props.events().avoids(profile, e)
-                && points.stream().allMatch(p -> Geo.distance(p, e.point()) > e.radiusM()))
-                .toList();
+        java.util.function.Predicate<RoadEvent> away = e -> points.stream()
+                .allMatch(p -> Geo.distance(p, e.point()) > e.radiusM());
+        List<RoadEvent> avoided = new ArrayList<>(events.stream()
+                .filter(e -> props.events().avoids(profile, e) && away.test(e)).toList());
+        // 신고 (진행표 w11, 2026-11-10): 모드는 뷰가 종류로 정한 목록과 비교한다. 사람 선호는 모드 이름을 바꾸지 않는다
+        String mode = RouteProperties.modeName(req.mode());
+        List<RoadEvent> reports = new ArrayList<>();
+        List<RoadEvent> costed = new ArrayList<>();
+        for (RoadReport r : pois.reports(eventBox)) {
+            RoadEvent e = r.event();
+            events.add(e);
+            reports.add(e);
+            if (away.test(e)) {
+                if (r.avoidModes().contains(mode)) {
+                    avoided.add(e);
+                } else if (r.costModes().contains(mode)) {
+                    costed.add(e);
+                }
+            }
+        }
 
         Attempt a;
         RoadGraph near = roads.load(BBox.around(points, props.searchMarginM()), underground);
         try {
-            a = attempt(near, underground, points, stops, cond, profile, wideDetour, phase, now, avoided);
+            a = attempt(near, underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed, reports);
         } catch (RouteException e) {
             // 넓혀 다시 찾는 것은 길을 못 찾았을 때만 (이은 길이 빈 SAME_POINT 안전망은 넓혀도 같다)
             if (e.error() != RouteError.NO_ROUTE || props.retryMarginM() <= props.searchMarginM()) {
@@ -201,10 +221,12 @@ public class RouteService {
             }
             // 강·철도·큰 도로를 범위 밖 다리로 돌아가야 하는 길. 넓혀 한 번 더 찾는다 (우회 한도 등 규칙은 같다)
             a = attempt(roads.load(BBox.around(points, props.retryMarginM()), underground),
-                    underground, points, stops, cond, profile, wideDetour, phase, now, avoided);
+                    underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed, reports);
         }
+        java.util.Map<RoadEvent, Long> reportEdges = a.reportEdges();
         RouteResult result = withStops(assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(),
-                a.nearby(), a.coverage(), events, a.avoided()::contains), a, start, stops);
+                a.nearby(), a.coverage(), events, a.avoided()::contains, (e, path) -> passes(e, path, reportEdges)),
+                a, start, stops);
         if (profile.avoidUnpaved()) {
             result = withNotes(result, surfaceNotes(a.found(), profile));
         }
@@ -213,10 +235,38 @@ public class RouteService {
 
     /**
      * 한 도로망에서 찾은 결과. snapNotes: 휠체어가 가장 가까운 길이 아닌 곳에 붙었을 때 주의 (없으면 빈 목록).
-     * avoided: 실제로 둘레를 피하려 한 행사·돌발. legs: 들를 곳 사이 구간마다 찾은 것 (들를 곳이 없으면 found 하나)
+     * avoided: 실제로 둘레를 피하려 한 행사·돌발. legs: 들를 곳 사이 구간마다 찾은 것 (들를 곳이 없으면 found 하나).
+     * reportEdges: 신고마다 이 도로망에서 신고된 길 번호 (20m 안에 길이 없는 신고는 없음)
      */
     private record Attempt(RouteFinder.Found found, List<RouteFinder.Found> legs, double snapM, Nearby nearby,
-            List<RouteResult.Note> snapNotes, Coverage coverage, List<RoadEvent> avoided) {
+            List<RouteResult.Note> snapNotes, Coverage coverage, List<RoadEvent> avoided,
+            java.util.Map<RoadEvent, Long> reportEdges) {
+    }
+
+    /**
+     * 신고마다 신고된 길 하나 ({@link RoadEvents#zoneNearest}). 길을 피할 때·비용을 더할 때·경로가 신고를 지나는지 볼 때 같은 길을 쓴다
+     */
+    private static java.util.Map<RoadEvent, Long> reportEdges(RoadGraph graph, List<RoadEvent> reports) {
+        java.util.Map<RoadEvent, Long> out = new java.util.HashMap<>();
+        for (RoadEvent r : reports) {
+            Long id = RoadReport.KIND.equals(r.kind()) ? RoadEvents.zoneNearest(graph, r) : null;
+            if (id != null) {
+                out.put(r, id);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 경로가 이 행사·신고를 지나는지 (응답 events에 넣을지). 행사는 반경 안을 지나면, 신고는 신고된 길을 지날 때만.
+     * 신고는 그 길 하나만 피하므로, 길 건너 보도로 피한 경로가 20m 안이라고 "앞에 공사 신고가 있는 곳을 지나요"가 붙지 않게
+     */
+    private static boolean passes(RoadEvent e, RoadPath path, java.util.Map<RoadEvent, Long> reportEdges) {
+        if (!RoadReport.KIND.equals(e.kind())) {
+            return true;
+        }
+        Long id = reportEdges.get(e);
+        return id != null && path.edges().stream().anyMatch(x -> x.id() == id);
     }
 
     /**
@@ -229,9 +279,44 @@ public class RouteService {
                 .allMatch(s -> Geo.distance(graph.point(s.node()), e.point()) > e.radiusM())).toList();
     }
 
-    private static java.util.function.Predicate<RoadEdge> aside(RoadGraph graph, List<RoadEvent> events) {
-        Set<Long> zone = RoadEvents.zone(graph, events);
-        return zone.isEmpty() ? null : e -> zone.contains(e.id());
+    /**
+     * 차례로 조건부 제외할 길 묶음: 행사·돌발 둘레 하나, 피할 신고마다 그 길 하나 (2026-11-10).
+     * 신고를 행사 둘레와 한 묶음으로 두면 하나라도 못 피할 때 전부 안 피한다
+     */
+    private static List<java.util.function.Predicate<RoadEdge>> asides(RoadGraph graph, List<RoadEvent> events,
+            java.util.Map<RoadEvent, Long> reportEdges) {
+        List<java.util.function.Predicate<RoadEdge>> out = new ArrayList<>();
+        Set<Long> zone = RoadEvents.zone(graph, events.stream().filter(e -> !RoadReport.KIND.equals(e.kind())).toList());
+        if (!zone.isEmpty()) {
+            out.add(e -> zone.contains(e.id()));
+        }
+        for (RoadEvent r : events) {
+            Long id = reportEdges.get(r);
+            if (id != null) {
+                out.add(e -> e.id() == id);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 비용만 더할 신고(costed)의 길에 그 모드 걸음 1분만큼(m) 더한다 (2026-11-10 사용자 확정). λ가 곱해져 우회 한도 안에서만 작용한다.
+     * "1분 더 걸어서 신고된 곳을 지나지 않을 수 있으면 그렇게"라는 작은 선호. 기준이 없는 낮(extra null)에도 이 비용만으로 만든다
+     */
+    private static ToDoubleFunction<RoadEdge> withReports(ToDoubleFunction<RoadEdge> extra, List<RoadEvent> costed,
+            java.util.Map<RoadEvent, Long> reportEdges, RouteProperties.Profile profile) {
+        Set<Long> ids = new java.util.HashSet<>();
+        for (RoadEvent r : costed) {
+            Long id = reportEdges.get(r);
+            if (id != null) {
+                ids.add(id);
+            }
+        }
+        if (ids.isEmpty()) {
+            return extra;
+        }
+        double minute = profile.walkSpeedMPerMin();
+        return e -> (extra == null ? 0 : extra.applyAsDouble(e)) + (ids.contains(e.id()) ? minute : 0);
     }
 
     /** 길에 붙인 곳. moved: 모든 길 기준으로 가장 가까운 곳이 아닌 곳에 붙였는지 (휠체어) */
@@ -245,7 +330,7 @@ public class RouteService {
      */
     private Attempt attempt(RoadGraph graph, boolean underground, List<double[]> points, List<Place> stops,
             Conditions cond, RouteProperties.Profile profile, double wideDetour, RouteProperties.Phase phase,
-            ZonedDateTime now, List<RoadEvent> avoided) {
+            ZonedDateTime now, List<RoadEvent> avoided, List<RoadEvent> costed, List<RoadEvent> reports) {
         // 지하를 넣었으면 출발·도착은 지상 길(출구 포함)에만 붙인다 (2026-11-09). 요청 좌표는 위도·경도뿐이라 지상·지하를 모르는데,
         // 앱 사용자는 대개 지상(GPS)에 있고, 지하 점에 붙이면 내려가는 출구(계단·엘리베이터)가 경로에서 빠진다
         // (휠체어가 계단 출구로 내려가게 될 수 있음). 출구 점은 연결 길로 지상과 이어져 있어 출구에서 출발·도착하면 그대로 출구에 붙는다.
@@ -262,12 +347,15 @@ public class RouteService {
         Nearby nearby = nearby(graph, phase, now);
         // 커버율은 한 번만 계산해 경로 고르기와 어두운 구간 안내(FR-31)에 같이 쓴다
         Coverage cov = scorer.coverage(graph, phase, cond.night(), nearby);
-        ToDoubleFunction<RoadEdge> extra = scorer.extraCost(cov, phase);
+        ToDoubleFunction<RoadEdge> score = scorer.extraCost(cov, phase);
         List<RoadEvent> av = reachable(graph, avoided, snaps);
+        // 붙인 뒤에 찾는다: 출발·도착을 붙이며 나눈 길이면 신고 자리 쪽 조각
+        java.util.Map<RoadEvent, Long> edges = reportEdges(graph, reports);
+        ToDoubleFunction<RoadEdge> extra = withReports(score, reachable(graph, costed, snaps), edges, profile);
         RouteException failed;
         try {
-            return joined(legs(graph, snaps, extra, profile, wideDetour, aside(graph, av), cov, stops), snaps,
-                    nearby, List.of(), cov, av, profile.avoid());
+            return joined(legs(graph, snaps, extra, score, profile, wideDetour, asides(graph, av, edges), cov, stops), snaps,
+                    nearby, List.of(), cov, av, edges, profile.avoid());
         } catch (RouteException e) {
             if (profile.exclude().isEmpty()) {
                 throw e;
@@ -292,32 +380,36 @@ public class RouteService {
         }
         List<RoadGraph.Snap> moved = placed.stream().map(Placed::snap).toList();
         List<RoadEvent> movedAv = reachable(graph, avoided, moved);
+        // 다시 붙이며 길을 나눴으면 그 길은 지워지고 임시 조각 둘이 된다. 신고된 길이었으면 예전 번호로는 피하기·비용·지났는지에서
+        // 그 신고가 조용히 빠지므로 다시 찾는다
+        java.util.Map<RoadEvent, Long> movedEdges = reportEdges(graph, reports);
         List<RouteResult.Note> notes = new ArrayList<>();
         for (int k = 0; k < placed.size(); k++) {
             String which = k == 0 ? "출발점" : k == placed.size() - 1 ? "도착점" : stopName(stops, k - 1);
             placeNote(which, placed.get(k), profile).ifPresent(notes::add);
         }
-        return joined(legs(graph, moved, extra, profile, wideDetour, aside(graph, movedAv), cov, stops), moved,
-                nearby, notes, cov, movedAv, profile.avoid());
+        return joined(legs(graph, moved, withReports(score, reachable(graph, costed, moved), movedEdges, profile), score,
+                profile, wideDetour, asides(graph, movedAv, movedEdges), cov, stops), moved,
+                nearby, notes, cov, movedAv, movedEdges, profile.avoid());
     }
 
     /** 구간 결과를 이어 하나의 시도로. 붙인 거리는 출발·도착만 더한다 (들를 곳 가게에서 길까지는 머무는 일에 가깝다) */
     private static Attempt joined(List<RouteFinder.Found> legs, List<RoadGraph.Snap> at, Nearby nearby,
             List<RouteResult.Note> notes, Coverage cov, List<RoadEvent> avoided,
-            java.util.function.Predicate<RoadEdge> avoid) {
+            java.util.Map<RoadEvent, Long> reportEdges, java.util.function.Predicate<RoadEdge> avoid) {
         return new Attempt(join(legs, avoid), legs, at.get(0).distanceM() + at.get(at.size() - 1).distanceM(), nearby, notes,
-                cov, avoided);
+                cov, avoided, reportEdges);
     }
 
     /** 붙인 점 사이 구간마다 최단·안전 경로를 찾는다. 우회 한도는 구간마다 따로 지킨다 */
     private List<RouteFinder.Found> legs(RoadGraph graph, List<RoadGraph.Snap> at, ToDoubleFunction<RoadEdge> extra,
-            RouteProperties.Profile profile, double wideDetour, java.util.function.Predicate<RoadEdge> aside,
+            ToDoubleFunction<RoadEdge> score, RouteProperties.Profile profile, double wideDetour, List<java.util.function.Predicate<RoadEdge>> asides,
             Coverage cov, List<Place> stops) {
         List<RouteFinder.Found> out = new ArrayList<>();
         for (int k = 1; k < at.size(); k++) {
             try {
-                out.add(find(graph, at.get(k - 1).node(), at.get(k).node(), extra, profile, wideDetour,
-                        props.rain().walkMore(), aside, cov));
+                out.add(find(graph, at.get(k - 1).node(), at.get(k).node(), extra, score, profile, wideDetour,
+                        props.rain().walkMore(), asides, cov));
             } catch (RouteException e) {
                 throw noRoute(stops, k);
             }
@@ -395,22 +487,35 @@ public class RouteService {
      * 다른 기준만 더 챙기면 비를 맞으며 더 걷게 된다 (하네스: 노인 낮 평균 +104m 중 지붕 15m)
      */
     private static RouteFinder.Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
-            RouteProperties.Profile profile, double wideDetour, double walkMore, java.util.function.Predicate<RoadEdge> aside,
-            Coverage cov) {
-        RouteFinder.Found narrow = RouteFinder.find(graph, from, to, extra, profile.maxDetour(), profile::passable,
-                profile.avoid(), aside);
+            ToDoubleFunction<RoadEdge> score, RouteProperties.Profile profile, double wideDetour, double walkMore,
+            List<java.util.function.Predicate<RoadEdge>> asides, Coverage cov) {
+        RouteFinder.Found narrow = findOnce(graph, from, to, extra, score, profile.maxDetour(), profile, asides);
         // 범위에 지붕 길이 하나도 없으면 지붕 이득도 없어 결과가 같다. 광주는 걷는 지붕 길이 2.8km뿐이라 대부분의 비 요청이 여기서 끝난다
         if (wideDetour <= profile.maxDetour() || graph.graph().edgeSet().stream()
                 .noneMatch(e -> e.penalty().get(Penalty.COVERED) >= 1 || RouteFinder.isUnderground(e))) {
             return narrow;
         }
-        RouteFinder.Found wide = RouteFinder.find(graph, from, to, extra, wideDetour, profile::passable, profile.avoid(),
-                aside);
+        RouteFinder.Found wide = findOnce(graph, from, to, extra, score, wideDetour, profile, asides);
         // 비 오는 날 지붕 없는 1m = 지붕 아래 (1 + r)m (F1과 같은 교환비). 더 걷는 거리만큼의 젖는 부담을 지붕 이득이 갚을 때만
         // 넓힌 한도를 쓴다: r × 지붕 이득 ≥ (1 + r) × 더 걷는 길이. 예전 1m 조건은 지붕 10m 때문에 비를 맞으며 380m를 더 걷는 길도 골랐다
         double gain = roofM(wide.safe(), cov) - roofM(narrow.safe(), cov);
         double more = wide.safe().lengthM() - narrow.safe().lengthM();
         return gain > 0 && walkMore * gain >= (1 + walkMore) * more ? wide : narrow;
+    }
+
+    /**
+     * 한 번 찾기. 비용만 신고의 비용(extra에만 있고 score에는 없음) 때문에 우회 한도에 걸렸으면 그 비용 없이 다시 찾아 그 결과를 쓴다 (2026-11-10).
+     * 걸림(detourCapped)은 "기준에 맞춘 길이 한도를 넘었다"는 뜻이라 "지붕 있는 길은 너무 많이 돌아서…"·"더 안전한 길은…"으로 말하는데,
+     * 신고를 피하는 길이 한도를 넘은 것이면 틀린 문장이 된다. 걸렸으면 안전 경로가 최단(피하기 뒤 기준 경로) 그대로라 신고 비용이 얻은 것도 없고,
+     * 비용 없이 찾은 쪽은 기준에 맞춘 길을 줄 수 있으면 그 길을, 아니면 같은 길을 준다. 다시 찾는 것은 걸렸고 비용만 신고가 있을 때뿐이다
+     */
+    private static RouteFinder.Found findOnce(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
+            ToDoubleFunction<RoadEdge> score, double maxDetour, RouteProperties.Profile profile,
+            List<java.util.function.Predicate<RoadEdge>> asides) {
+        RouteFinder.Found f = RouteFinder.find(graph, from, to, extra, maxDetour, profile::passable, profile.avoid(), asides);
+        // withReports는 비용만 신고가 없으면 score를 그대로 돌려준다
+        return f.detourCapped() && extra != score
+                ? RouteFinder.find(graph, from, to, score, maxDetour, profile::passable, profile.avoid(), asides) : f;
     }
 
     /** 경로가 지붕 아래(지하 포함)를 걷는 길이(m) */

@@ -62,6 +62,16 @@ public class RouteResultAssembler {
     public RouteResult assemble(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
             RouteFinder.Found found, double[] start, double[] end, double snapM, Nearby nearby, Coverage cov,
             List<RoadEvent> events, java.util.function.Predicate<RoadEvent> avoids) {
+        return assemble(cond, profile, phase, found, start, end, snapM, nearby, cov, events, avoids, (e, path) -> true);
+    }
+
+    /**
+     * @param passes 경로가 그 행사·신고를 지나는지 (반경 안을 지난 것 중에서 더 거른다). 신고는 신고된 길을 지날 때만 (2026-11-10)
+     */
+    public RouteResult assemble(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
+            RouteFinder.Found found, double[] start, double[] end, double snapM, Nearby nearby, Coverage cov,
+            List<RoadEvent> events, java.util.function.Predicate<RoadEvent> avoids,
+            java.util.function.BiPredicate<RoadEvent, RoadPath> passes) {
         boolean same = found.safe().sameAs(found.shortest());
         List<double[]> shortLine = found.shortest().lineFrom(start, end);
         List<double[]> safeLine = found.safe().lineFrom(start, end);
@@ -77,8 +87,9 @@ public class RouteResultAssembler {
         Counts shortCounts = counts.get(0);
         Counts safeCounts = counts.get(1);
 
-        List<RouteResult.Event> shortEvents = events(events, shortLine, avoids);
-        List<RouteResult.Event> safeEvents = events(events, safeLine, avoids);
+        List<RouteResult.Event> shortEvents = events(events, shortLine, avoids,
+                e -> passes.test(e, found.shortest()));
+        List<RouteResult.Event> safeEvents = events(events, safeLine, avoids, e -> passes.test(e, found.safe()));
         // 응답 covered와 설명의 지붕 있는 길 차이가 같은 값을 쓰도록 한 번만 계산한다
         Map<String, Integer> shortCovered = same ? Map.of() : covered(found.shortest(), phase, cov);
         Map<String, Integer> safeCovered = covered(found.safe(), phase, cov);
@@ -179,13 +190,16 @@ public class RouteResultAssembler {
         return out;
     }
 
-    /** 경로 선이 영향 반경을 지나는 행사·돌발상황. 들어가는 곳 순서 */
+    /**
+     * 경로 선이 영향 반경을 지나는 행사·돌발상황. 들어가는 곳 순서.
+     * 출발·도착이 반경 안(near)이면 passes와 상관없이 넣는다 (그곳에서 출발하거나 그리로 가는 길)
+     */
     private static List<RouteResult.Event> events(List<RoadEvent> events, List<double[]> line,
-            java.util.function.Predicate<RoadEvent> avoids) {
+            java.util.function.Predicate<RoadEvent> avoids, java.util.function.Predicate<RoadEvent> passes) {
         List<RouteResult.Event> out = new ArrayList<>();
         for (RoadEvent e : events) {
             double[] s = RoadEvents.stretch(e, line);
-            if (s != null) {
+            if (s != null && (passes.test(e) || near(e, line) != null)) {
                 out.add(new RouteResult.Event(e.kind(), e.title(), e.place(), e.message(),
                         e.endsAt() == null ? null : e.endsAt().format(ENDS),
                         (int) Math.round(s[0]), (int) Math.round(s[1]), avoids.test(e), near(e, line)));
