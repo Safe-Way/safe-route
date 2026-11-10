@@ -2,10 +2,10 @@
 
 - 시연 게스트(scripts/seed_demo.py)로 보낸다: A = …de01 휠체어, B = …de02 어르신, C = …de03 임시 휠체어.
   new는 매번 새 무작위 번호(처음 쓰는 사람).
-- 점검: expect의 말이 답(say·ask·버튼 글자)에 모두 들어 있는지, must_not의 말이 하나도 없는지.
+- 점검: expect의 말이 답(say·ask·버튼 글자)에 모두 들어 있는지("지하철|버스"는 둘 중 하나), must_not의 말이 하나도 없는지.
   제미나이는 같은 뜻을 매번 조금 다르게 말하므로 expect에는 꼭 들어가야 하는 짧은 말만 둔다.
   서버가 응답에 tools(부른 도구 이름 목록)를 넣어 주면 expect_tools 순서도 본다(없으면 건너뜀).
-- "context": "N번 바로 뒤"인 질문은 같은 대화로 이어 보낸다(서버가 conversationId를 돌려주면 그대로 씀).
+- "context": "N번 바로 뒤"인 질문은 N번 질문의 대화로 이어 보낸다(서버가 돌려준 conversationId, 중간에 다른 질문이 있어도).
 - 날씨·시각(weather, time)은 서버가 시험용으로 받아 주면 쓴다(body의 test 칸). 안 받으면 지금 날씨로 답한다.
 - 앱처럼 휴대폰의 자주 가는 곳(favorites)을 같이 보낸다. 집 좌표는 서버에 없고 휴대폰에만 있어서, 안 보내면 "집에 가자"를 못 한다.
   A의 집은 seed_demo.py의 HOME_A와 같은 꾸민 값, B의 집도 꾸민 값(충장동 둘레)이다.
@@ -18,6 +18,7 @@
 비서 창구(POST /api/assistant)가 아직 없으면 404로 알려 주고 멈춘다.
 """
 import json
+import re
 import os
 import sys
 import urllib.error
@@ -58,7 +59,8 @@ def check(q, status, ans):
     # 사용자가 보는 것: 말(say·ask)과 버튼 글자(choices.label, 예 "동구종로약국 · 120m")
     labels = [str(c.get("label") or "") for c in ans.get("choices") or [] if isinstance(c, dict)]
     text = " ".join([str(ans.get(k) or "") for k in ("say", "ask")] + labels)
-    miss = [w for w in q.get("expect", []) if w not in text]
+    # "지하철|버스"처럼 | 로 나눈 말은 그중 하나만 있어도 됨 (그날 버스 도착에 따라 1등이 바뀌는 경우)
+    miss = [w for w in q.get("expect", []) if not any(x in text for x in w.split("|"))]
     bad = [w for w in q.get("must_not", []) if w in text]
     tools_ok = None
     if isinstance(ans.get("tools"), list) and q.get("expect_tools") is not None:
@@ -73,7 +75,8 @@ def main():
     write = "--write" in sys.argv
     all_tools = "--all-tools" in sys.argv  # 도구 7개 다 보내기 (토큰 줄이기 전 기준값 재기)
     qs = json.load(open(QUESTIONS, encoding="utf-8"))["questions"]
-    results, convo, new_guest = [], {}, str(uuid.uuid4())
+    # convo: 게스트마다 마지막 대화, by_id: 질문 번호마다 그 대화 ("N번 바로 뒤"는 N번 대화에 이어 붙임)
+    results, convo, by_id, new_guest = [], {}, {}, str(uuid.uuid4())
     for q in qs:
         if only and q["id"] not in only:
             continue
@@ -87,13 +90,19 @@ def main():
                 "now": datetime.now().isoformat(timespec="minutes"), "favorites": FAVORITES.get(who, []),
                 "test": {"weather": q.get("weather"), "time": q.get("time"),
                          "ai": q.get("ai") or ("all_tools" if all_tools else None)}}
-        if q.get("context") and who in convo:
-            body["conversationId"] = convo[who]
+        if q.get("context"):
+            m = re.match(r"(\d+)번", q["context"])
+            ref = int(m.group(1)) if m else None
+            if ref in by_id:
+                body["conversationId"] = by_id[ref]
+            elif who in convo:
+                body["conversationId"] = convo[who]
         status, ans = post(base, body)
         if status == 404 and not results:
             sys.exit(f"비서 창구가 아직 없어요 ({base}/api/assistant → 404). C파트가 만든 뒤 다시 돌려 주세요.")
         if ans.get("conversationId"):
             convo[who] = ans["conversationId"]
+            by_id[q["id"]] = ans["conversationId"]
         ok, miss, bad, tools_ok, text = check(q, status, ans)
         results.append({"id": q["id"], "ok": ok, "status": status, "missing": miss, "forbidden": bad,
                         "tools_ok": tools_ok, "tools": ans.get("tools"), "answer": text[:300],
