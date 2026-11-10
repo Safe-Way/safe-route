@@ -2,12 +2,16 @@
 
 - Overpass에서 중심점 둘레 네모 범위의 길(way)과 그 점(node)을 받는다. 받은 원본은 data/raw/osm/ 에 남긴다.
 - 길을 교차점(두 길 이상이 만나는 점)·끝점·표시가 있는 점(횡단보도, 신호, 엘리베이터, 보도턱)에서 잘라 구간으로 만든다.
+  한 길 안에 같은 점이 두 번 나오면(줄기 + 끝이 고리인 막대사탕 모양) 그 점에서도 자른다. 안 자르면 고리가 닫히는 끝점에서
+  출발·도착할 때 엔진이 고리를 한 바퀴 돌아야 줄기로 나갈 수 있다고 본다 (2026-11-10, 원일님 확인 182줄).
 - 걷는 방향은 양쪽 모두로 본다(일방통행은 차에만 해당).
 - 같은 OSM 길·점을 다시 넣으면 지우고 새로 넣으므로 여러 번 실행해도 된다.
 - 표는 먼저 만든다: src/main/resources/db/migration/007_road_network.sql
 - 계단의 휠체어 경사로(wheelchair_ramp, 018)는 tags의 ramp:wheelchair·ramp로 DB가 계산하므로 여기서 따로 넣지 않는다.
 
-실행: python3 scripts/load_road_network.py [--json 받아 둔 응답] [--sql-only] [위도 경도 반경m 이름 | --area 코드 이름]
+실행: python3 scripts/load_road_network.py [--json 받아 둔 응답] [--sql-only] [--ways 길번호,… | --changed-only] [위도 경도 반경m 이름 | --area 코드 이름]
+- --changed-only: 한 길 안에 같은 점이 두 번 나오는 길(막대사탕 모양)만 지우고 다시 넣는다. 다른 길의 road_edge.id는 그대로라
+  edge_stat·edge_poi는 build_edge_stat.py·build_edge_poi.py를 다시 돌리면 된다. --ways는 고른 OSM 길만.
 기본: 국립아시아문화전당(35.1466, 126.9204) 둘레 2km, 이름 acc
 광주 전체: python3 scripts/load_road_network.py --area KR-29 gwangju (OSM 행정구역 경계 안, 2026-11-03부터 이 범위)
 DB 접속은 .env의 DB_URL·DB_USERNAME·DB_PASSWORD를 쓰고, mysql 명령으로 넣는다.
@@ -158,6 +162,30 @@ def meters(lat1, lon1, lat2, lon2):
     return 2 * r * math.asin(math.sqrt(a))
 
 
+def repeated_nodes(ids):
+    """한 길 안에서 두 번 넘게 나오는 점. 처음과 끝만 같은 닫힌 고리는 끝에서 이미 잘리므로 빼고 본다"""
+    inner = ids[:-1] if len(ids) > 2 and ids[0] == ids[-1] else ids
+    seen, rep = set(), set()
+    for nid in inner:
+        (rep if nid in seen else seen).add(nid)
+    return rep
+
+
+def lollipop_way_ids(data):
+    """한 길 안에 같은 점이 두 번 나오는 걸을 수 있는 길 (--changed-only로 다시 넣을 길)"""
+    nodes = {e["id"] for e in data["elements"] if e["type"] == "node"}
+    return {w["id"] for w in data["elements"] if w["type"] == "way" and walkable(w.get("tags", {}))
+            and repeated_nodes([n for n in w["nodes"] if n in nodes])}
+
+
+def only_ways(way_ids, vertices, edges, dropped, dropped_nodes):
+    """고른 길만 남긴다. 점은 그 길 구간의 양 끝만"""
+    edges = [e for e in edges if e["way_id"] in way_ids]
+    dropped = [e for e in dropped if e["way_id"] in way_ids]
+    used = {x for e in edges for x in (e["from"], e["to"])}
+    return [v for v in vertices if v["id"] in used], edges, dropped, []
+
+
 def build(data):
     """(점 목록, 구간 목록)을 만든다. 구간 = 교차점·끝점·표시가 있는 점 사이"""
     nodes = {e["id"]: e for e in data["elements"] if e["type"] == "node"}
@@ -177,9 +205,10 @@ def build(data):
         if len(ids) < 2:
             continue
         tags = w.get("tags", {})
+        repeated = repeated_nodes(ids)  # 한 길 안에서 두 번 나오는 점 (고리가 닫히는 점)
         start, seq = 0, 0
         for i in range(1, len(ids)):
-            if i == len(ids) - 1 or is_split(ids[i]):
+            if i == len(ids) - 1 or is_split(ids[i]) or ids[i] in repeated:
                 part = ids[start:i + 1]
                 pts = [(nodes[x]["lon"], nodes[x]["lat"]) for x in part]
                 length = sum(meters(pts[j][1], pts[j][0], pts[j + 1][1], pts[j + 1][0]) for j in range(len(pts) - 1))
@@ -228,7 +257,7 @@ def node_row(n):
             f"{q(json.dumps(tags, ensure_ascii=False)) if tags else 'NULL'})")
 
 
-def write_sql(path, vertices, edges, title, total_ways, dropped=(), dropped_nodes=()):
+def write_sql(path, vertices, edges, title, total_ways, dropped=(), dropped_nodes=(), source_row=True):
     way_ids = sorted({e["way_id"] for e in edges} | {e["way_id"] for e in dropped})
     with open(path, "w", encoding="utf-8") as f:
         f.write("SET NAMES utf8mb4;\n")
@@ -257,7 +286,7 @@ def write_sql(path, vertices, edges, title, total_ways, dropped=(), dropped_node
             f.write("INSERT INTO road_node_excluded (id, lon, lat, geom, tags, reason) VALUES\n"
                     + ",\n".join(node_row(n)[:-1] + ",'excluded_edge')" for n in chunk)
                     + "\nON DUPLICATE KEY UPDATE lon = VALUES(lon), lat = VALUES(lat), geom = VALUES(geom), tags = VALUES(tags);\n")
-        for typ, n in (("road_node", len(vertices)), ("road_edge", len(edges))):
+        for typ, n in (("road_node", len(vertices)), ("road_edge", len(edges))) if source_row else ():
             f.write(f"""INSERT INTO data_source (type, source, title, api, license, total_count, loaded_count,
                     skipped_count, complete, loaded_at)
 VALUES ('{typ}', 'osm', {q(title)}, 'Overpass API (overpass-api.de)', 'ODbL (출처 표시)', {n}, {n}, 0, 1, NOW())
@@ -283,7 +312,13 @@ def main():
     if args[:1] == ["--json"]:
         cached, args = args[1], args[2:]
     sql_only = "--sql-only" in args
-    args = [a for a in args if a != "--sql-only"]
+    changed_only = "--changed-only" in args
+    args = [a for a in args if a not in ("--sql-only", "--changed-only")]
+    pick = None
+    if "--ways" in args:
+        k = args.index("--ways")
+        pick = {int(x) for x in args[k + 1].split(",") if x}
+        args = args[:k] + args[k + 2:]
     area = None
     if args[:1] == ["--area"]:
         # 행정구역 전체: --area KR-29 gwangju
@@ -314,10 +349,24 @@ def main():
         km = sum(e["length"] for e in dropped) / 1000
         print(f"자동차전용도로 구간 {len(dropped)}개({km:.1f}km)는 road_edge_excluded로 뺌 (motorroad·expressway=yes), "
               f"그 길에만 쓰이던 점 {len(dropped_nodes)}개는 road_node_excluded로 뺌")
+    if changed_only:
+        pick = lollipop_way_ids(data)
+        print(f"한 길 안에 같은 점이 두 번 나오는 길 {len(pick)}개만 다시 넣음")
+    if pick is not None:
+        vertices, edges, dropped, dropped_nodes = only_ways(pick, vertices, edges, dropped, dropped_nodes)
+        name += "_part"
     steps = sum(1 for x in edges if x["tags"].get("highway") == "steps")
     crossings = sum(1 for v in vertices if v.get("tags", {}).get("highway") == "crossing")
     print(f"길 {total_ways}개 → 구간 {len(edges)}개, 점 {len(vertices)}개 (계단 구간 {steps}, 횡단보도 점 {crossings})")
 
+    if pick is not None:
+        sql = os.path.join(OUT, f"road_network_{name}.sql")
+        write_sql(sql, vertices, edges, None, total_ways, dropped, dropped_nodes, source_row=False)
+        print("SQL:", sql)
+        if not sql_only:
+            run_sql(sql)
+            print("DB 적재 끝 (고른 길만). edge_stat·edge_poi를 다시 계산하세요")
+        return
     title = (f"OpenStreetMap 도로망 ({name}: 행정구역 {area} 전체)" if area
              else f"OpenStreetMap 도로망 ({name}: {lat}, {lon} 둘레 {radius}m)")
     sql = os.path.join(OUT, f"road_network_{name}.sql")
