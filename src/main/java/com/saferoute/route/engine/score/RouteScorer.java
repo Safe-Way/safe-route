@@ -20,6 +20,7 @@ import com.saferoute.route.engine.graph.RoadGraph;
 /**
  * 모드·낮밤 기준에 맞춰 길마다 더할 비용을 만든다.
  * 추가 비용 = 길이 × Σ 비중 × (범위 밖 비율). 범위 안에 다 들면 0, 다 밖이면 길이 × 비중 합.
+ * 비 오는 날 지붕 기준은 더하지 않고 곱한다: 지붕 없는 길은 (길이 + 추가 비용)을 (1 + walk-more)배로 (2026-11-09).
  *
  * <p>시설 고르기 (2026-11-02·03 결정)
  * <ul>
@@ -27,6 +28,7 @@ import com.saferoute.route.engine.graph.RoadGraph;
  *       (A파트 밤 도움 지점 정의, migration 016). 그다음 지금 이용 가능한 곳만 남긴다 ({@link Availability})</li>
  *   <li>쉼 곳: 쉼터·공중화장실 중 지금 이용 가능한 곳</li>
  *   <li>조명·CCTV·보호구역: 시간과 상관없이 모두</li>
+ *   <li>지붕(비 오는 날, 2026-11-09): 시설이 아니라 길 성질(road_edge.covered)이라 시설 층을 만들지 않는다</li>
  * </ul>
  */
 @Component
@@ -47,31 +49,41 @@ public class RouteScorer {
             return null;
         }
         Map<Criterion, Double> w = phase.weights();
+        double roof = phase.weight(Criterion.ROOF);
         return e -> {
             double missing = 0;
             for (Map.Entry<Criterion, Double> c : w.entrySet()) {
-                missing += c.getValue() * cov.missing(e, c.getKey());
+                if (c.getKey() != Criterion.ROOF) {
+                    missing += c.getValue() * cov.missing(e, c.getKey());
+                }
             }
-            return e.lengthM() * missing;
+            double base = e.lengthM() * missing;
+            // 비 (2026-11-09): 지붕 없는 길은 부담 전체(거리 + 기준 부담)를 (1 + roof)배로 본다. λ=1에서 (길이 + base)(1 + roof).
+            // 지상 길끼리는 같은 배수라 순위가 맑은 날과 같고(더하기로 넣었을 때는 거리 벌점처럼 작동해 쉼 곳·밝기 기준이 묽어졌다),
+            // 지붕 아래 길만 상대적으로 가벼워진다
+            return base + roof * cov.missing(e, Criterion.ROOF) * (e.lengthM() + base);
         };
     }
 
     /** 이 기준에 쓰는 커버율 */
     public Coverage coverage(RoadGraph graph, Phase phase, boolean night, Nearby nearby) {
-        Set<Criterion> wanted = phase.weights().keySet();
-        if (wanted.isEmpty() || graph.isEmpty()) {
+        if (!phase.hasWeights() || graph.isEmpty()) {
             return Coverage.NONE;
         }
         List<Poi> all = nearby.pois();
         Map<Criterion, Coverage.Layer> layers = new EnumMap<>(Criterion.class);
-        for (Criterion c : wanted) {
+        for (Criterion c : phase.weights().keySet()) {
             Predicate<Poi> keep = switch (c) {
                 case LIGHT -> p -> p.kind().equals("light");
                 case CCTV -> p -> p.kind().equals("cctv");
                 case SCHOOL -> p -> p.kind().equals("school_zone");
                 case HELP -> p -> HELP_KINDS.contains(p.kind()) && usableNow(p, night, nearby);
                 case REST -> p -> REST_KINDS.contains(p.kind()) && usableNow(p, night, nearby);
+                case ROOF -> null; // 시설이 아니라 길 성질(지붕). Coverage.compute가 길마다 정한다
             };
+            if (keep == null) {
+                continue;
+            }
             List<double[]> points = all.stream().filter(keep).map(Poi::point).toList();
             boolean alongRoad = c == Criterion.LIGHT || c == Criterion.CCTV;
             layers.put(c, new Coverage.Layer(points, radius(c, phase), alongRoad));
@@ -106,6 +118,7 @@ public class RouteScorer {
             case HELP -> phase.helpM();
             case REST -> phase.restM();
             case SCHOOL -> phase.schoolM();
+            case ROOF -> 0;
         };
     }
 }

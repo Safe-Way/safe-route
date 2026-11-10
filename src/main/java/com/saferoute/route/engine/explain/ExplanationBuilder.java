@@ -1,9 +1,11 @@
 package com.saferoute.route.engine.explain;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -11,6 +13,10 @@ import com.saferoute.route.RouteProperties;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.condition.Conditions;
 import com.saferoute.route.engine.facility.FacilityGroup;
+import com.saferoute.route.engine.graph.Penalty;
+import com.saferoute.route.engine.graph.RoadEdge;
+import com.saferoute.route.engine.score.Criterion;
+import com.saferoute.route.engine.search.RoadPath;
 
 /**
  * 두 경로의 차이를 문장으로 만든다 (FR-06, 요구사항 6.3).
@@ -18,6 +24,7 @@ import com.saferoute.route.engine.facility.FacilityGroup;
  * 낮·밤 모두 그 모드가 길을 고른 기준의 실제 차이로 말한다 (2026-11-06).
  * 노인 낮 "96m(2분) 더 돌지만 쉼 곳 +11곳", 어린이 낮 "…어린이보호구역 +1곳, 도움 지점 +2곳".
  * 최단 경로의 계단·비포장을 피했으면 "계단을 피하고 쉼 곳 +11곳"·"비포장을 피하는 길로 갑니다"처럼 앞에 말한다.
+ * 비 오는 날 지붕 있는 길로 돌았으면 "…더 돌지만 비가 와서 지붕 있는 길 +780m"처럼 시설 차이보다 앞에 말한다 (2026-11-09).
  * 말할 차이가 없으면 route.yml의 note(밤은 "더 밝고 사람 눈이 닿는 길로 갑니다")를 쓴다.
  */
 public final class ExplanationBuilder {
@@ -32,6 +39,9 @@ public final class ExplanationBuilder {
     static final String CAPPED = "더 안전한 길은 너무 많이 돌아서 가장 짧은 길을 안내합니다";
     static final String NIGHT_REASON = "더 밝고 사람 눈이 닿는 길로 갑니다";
     static final String SHORTEST = "가장 짧은 길로 갑니다";
+    /** 비 오는 날 기준(지붕)만 있을 때(어른·휠체어 낮) 최단 그대로면. "가장 안전한"이 아니라 비 이유로 말한다 (2026-11-09) */
+    static final String RAIN_SAME = "지붕 있는 길이 따로 없어 가장 짧은 길을 안내합니다";
+    static final String RAIN_CAPPED = "지붕 있는 길은 너무 많이 돌아서 가장 짧은 길을 안내합니다";
 
     /**
      * 최단 경로에 있던 것 중 안전 경로가 피한 것.
@@ -50,7 +60,7 @@ public final class ExplanationBuilder {
 
     /** 가장 짧은 길을 안내한다는 문장. 행사·돌발 둘레를 피해 다른 길로 가면 이 문장은 맞지 않다 */
     private static final Set<String> SHORTEST_TEXTS = Set.of(DAY, NIGHT_OFF, WHEELCHAIR, STAIRLESS, SAME,
-            CAPPED);
+            CAPPED, RAIN_SAME, RAIN_CAPPED);
 
     private ExplanationBuilder() {
     }
@@ -74,6 +84,16 @@ public final class ExplanationBuilder {
     public static String text(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
             boolean same, boolean capped, int extraM, int extraMin, Map<FacilityGroup, Integer> diff,
             Avoided avoided) {
+        return text(cond, profile, phase, same, capped, extraM, extraMin, diff, avoided, 0);
+    }
+
+    /**
+     * @param roofGainM 비 오는 날 안전 경로가 최단보다 더 걷는 지붕 있는 길(m). 0보다 크면 돌아간 이유라서 맨 앞에 말한다:
+     *                  "144m(2분) 더 돌지만 비가 와서 지붕 있는 길 +780m, 가로등 +12개" (2026-11-09)
+     */
+    public static String text(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
+            boolean same, boolean capped, int extraM, int extraMin, Map<FacilityGroup, Integer> diff,
+            Avoided avoided, int roofGainM) {
         boolean rules = phase.hasWeights() || profile.avoidStairs() || profile.avoidUnpaved();
         // 휠체어 낮: 기준(가중치)은 없고 제외·비포장 조건부 제외만 있다. 최단 그대로면 "지날 수 있는 길 중 가장 짧은 길"
         if (!profile.exclude().isEmpty() && !phase.hasWeights() && (same || !rules)) {
@@ -87,6 +107,10 @@ public final class ExplanationBuilder {
             return SAME;
         }
         if (same) {
+            // 지붕 기준만 있으면(어른·휠체어 낮 비) "가장 안전한 길"이 아니라 비 이유로 말한다
+            if (phase.weights().keySet().equals(Set.of(Criterion.ROOF))) {
+                return capped ? RAIN_CAPPED : RAIN_SAME;
+            }
             return capped ? CAPPED : SAME;
         }
         String detour = detour(extraM, extraMin);
@@ -100,6 +124,9 @@ public final class ExplanationBuilder {
                 .limit(MAX_ITEMS)
                 .map(e -> e.getKey().gain(e.getValue()))
                 .collect(Collectors.joining(", "));
+        if (roofGainM > 0 && phase.weight(Criterion.ROOF) > 0) {
+            gains = "비가 와서 지붕 있는 길 +" + roofGainM + "m" + (gains.isEmpty() ? "" : ", " + gains);
+        }
         // "계단을 피하고 쉼 곳 +11곳", 시설 차이가 없으면 "계단을 피하는 길로 갑니다"
         String what = avoided.stairs() && avoided.unpaved() ? "계단·비포장" : avoided.stairs() ? "계단"
                 : avoided.unpaved() ? "비포장" : null;
@@ -140,9 +167,34 @@ public final class ExplanationBuilder {
                 }
                 case REST -> out.add(FacilityGroup.REST);
                 case SCHOOL -> out.add(FacilityGroup.SCHOOL);
+                case ROOF -> { } // 시설이 아니라 길 성질. 지붕 있는 길 길이로 따로 말한다
             }
         }
         return out;
+    }
+
+    /**
+     * 지하로 지나면 알림 (2026-11-09): "지하로 지납니다: 문화전당역 3번 출구(엘리베이터) → 금남지하상가 → 금남로4가역 1번 출구(엘리베이터)".
+     * 이름은 A파트가 지하 길에 넣어 둔 road_edge.name. 출구 계단·엘리베이터는 이름 끝에서 떼고 괄호로 붙여 어디로 드나드는지 알린다
+     */
+    public static Optional<RouteResult.Note> undergroundNote(RoadPath path) {
+        List<String> names = new ArrayList<>();
+        for (RoadEdge e : path.edges()) {
+            if (e.penalty().get(Penalty.UNDERGROUND) < 1 || e.name() == null) {
+                continue;
+            }
+            String name = e.name().replaceFirst(" (계단|엘리베이터)$", "") + switch (java.util.Objects.requireNonNullElse(e.highway(), "")) {
+                case "steps" -> "(계단)";
+                case "elevator" -> "(엘리베이터)";
+                default -> "";
+            };
+            // 지하상가 조각처럼 같은 이름이 이어지면 한 번만
+            if (names.isEmpty() || !names.get(names.size() - 1).equals(name)) {
+                names.add(name);
+            }
+        }
+        return names.isEmpty() ? Optional.empty()
+                : Optional.of(RouteResult.Note.info("underground", "지하로 지납니다: " + String.join(" → ", names)));
     }
 
     /**

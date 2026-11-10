@@ -142,6 +142,16 @@ public final class RouteFinder {
         return e.penalty().get(Penalty.UNPAVED) >= 1;
     }
 
+    /** 재질을 모르는 산길 */
+    public static boolean isSurfaceUnknown(RoadEdge e) {
+        return e.penalty().get(Penalty.SURFACE_UNKNOWN) >= 1;
+    }
+
+    /** A파트가 그린 지하 길 (역 출구 계단·엘리베이터, 대합실, 지하상가 통로, 2026-11-09) */
+    public static boolean isUnderground(RoadEdge e) {
+        return e.penalty().get(Penalty.UNDERGROUND) >= 1;
+    }
+
     private static Graph<Long, RoadEdge> mask(RoadGraph graph, Predicate<RoadEdge> passable) {
         return new MaskSubgraph<>(graph.graph(), v -> false, e -> !passable.test(e));
     }

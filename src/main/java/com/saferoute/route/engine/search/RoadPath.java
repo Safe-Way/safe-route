@@ -77,4 +77,44 @@ public record RoadPath(List<RoadEdge> edges, List<double[]> line, double lengthM
         }
         return out;
     }
+
+    /**
+     * 지상 조각 선들: {@link #lineFrom}의 선을 지하 길에서 끊은 것 (2026-11-09). 지나는 시설을 셀 때 쓴다
+     * (지하를 걷는 사람은 바로 위 지상 시설을 지나지 않는다). 점 하나뿐인 조각은 버린다. 지하 길이 없으면 lineFrom 하나
+     */
+    public List<List<double[]>> surfaceLines(double[] start, double[] end) {
+        List<List<double[]>> out = new ArrayList<>();
+        List<double[]> cur = new ArrayList<>();
+        if (startOffset(start) == 1) {
+            cur.add(start);
+        }
+        cur.add(line.get(0));
+        boolean[] fwd = forward();
+        for (int i = 0; i < edges.size(); i++) {
+            List<double[]> g = edges.get(i).geometry();
+            if (RouteFinder.isUnderground(edges.get(i))) {
+                if (cur.size() > 1) {
+                    out.add(cur);
+                }
+                cur = new ArrayList<>();
+                cur.add(fwd[i] ? g.get(g.size() - 1) : g.get(0));
+                continue;
+            }
+            for (int k = 1; k < g.size(); k++) {
+                cur.add(fwd[i] ? g.get(k) : g.get(g.size() - 1 - k));
+            }
+        }
+        if (Geo.distance(end, line.get(line.size() - 1)) > 0) {
+            cur.add(end);
+        }
+        if (cur.size() > 1) {
+            out.add(cur);
+        }
+        return out;
+    }
+
+    /** 이 경로에서 조건에 맞는 구간 길이 합(m) */
+    public double lengthM(java.util.function.Predicate<RoadEdge> which) {
+        return edges.stream().filter(which).mapToDouble(RoadEdge::lengthM).sum();
+    }
 }

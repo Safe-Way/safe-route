@@ -16,6 +16,7 @@ import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadEdge.EdgePenalty;
 import com.saferoute.route.engine.graph.RoadGraph;
+import com.saferoute.route.engine.graph.UndergroundLinks;
 
 /**
  * DB의 road_edge·edge_stat 표(A파트)에서 광주 전체 도로망을 처음 한 번 읽어 두고, 요청마다 범위 안 길만 고른다
@@ -33,6 +34,10 @@ import com.saferoute.route.engine.graph.RoadGraph;
  *       산길은 등산 난이도(sac_scale)가 있으면 산행 길(휠체어 제외), 없으면 포장으로 보되 "확인 안 됨"</li>
  *   <li>인도 쪽 ({@link #sidewalk}): tags.sidewalk(both·left·right·no), 없으면 sidewalk:both·left·right.
  *       경로 응답의 안내용이고 비용에는 쓰지 않는다</li>
+ *   <li>지붕: road_edge.covered = 1이면 지붕 있는 길 (비 오는 날 기준, 2026-11-09)</li>
+ *   <li>지하 길 (2026-11-09): road_edge_excluded의 reason = underground 줄(A파트가 그린 역 출구 계단·엘리베이터, 대합실,
+ *       금남지하상가 통로). 같이 읽어 두되 비 올 때 운행 시간 안에만 요청 도로망에 넣고, 출구 점(road_node_excluded tags.attach_edge)을
+ *       그 지상 길 위에 잇는다 ({@link UndergroundLinks}). 그 표의 id는 road_edge.id와 겹칠 수 있어 -(10억 + id)로 바꿔 쓴다</li>
  * </ul>
  * route.yml의 route.road-source가 mysql일 때 쓴다 (기본값). none이면 {@link NoRoadGraphSource}.
  */
@@ -44,6 +49,8 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     static final Set<String> UNPAVED_SURFACES = Set.of("unpaved", "dirt", "earth", "ground", "mud", "grass", "sand",
             "gravel", "fine_gravel", "pebblestone", "rock", "woodchips", "cobblestone");
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MysqlRoadGraphSource.class);
+
     private final JdbcTemplate jdbc;
     /** 광주 전체 길. 처음 쓸 때 한 번 읽는다 (2026-11-09, 요청마다 DB에서 2만 개씩 읽던 것을 바꿈) */
     private volatile Network network;
@@ -51,10 +58,12 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     /**
      * 읽어 둔 도로망.
      *
+     * @param edges 지상 길과 지하 길
      * @param boxes 길마다 선을 감싼 사각형 {서, 남, 동, 북}. 범위로 고를 때 쓴다
      * @param area  모든 길을 감싼 사각형 (도로망을 넣은 지역)
+     * @param exits 지하 길의 역 출구 점과 붙일 지상 길
      */
-    private record Network(List<RoadEdge> edges, double[][] boxes, BBox area) {
+    private record Network(List<RoadEdge> edges, double[][] boxes, BBox area, List<UndergroundLinks.Exit> exits) {
     }
 
     public MysqlRoadGraphSource(JdbcTemplate jdbc) {
@@ -68,19 +77,35 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
         return a != null && a.contains(lon, lat);
     }
 
-    /** 범위에 걸치는 길. 길 양 끝 노드 좌표는 길 선의 첫 점·끝 점이다 (road_node와 81,332개 모두 같음, 2026-11-09 확인) */
+    /** 범위에 걸치는 지상 길 */
     @Override
     public RoadGraph load(BBox box) {
+        return load(box, false);
+    }
+
+    /**
+     * 범위에 걸치는 길. underground면 지하 길도 넣고 출구를 지상 길에 잇는다.
+     * 길 양 끝 노드 좌표는 길 선의 첫 점·끝 점이다 (road_node와 81,332개 모두 같음, 2026-11-09 확인)
+     */
+    @Override
+    public RoadGraph load(BBox box, boolean underground) {
         Network n = network();
         List<RoadEdge> edges = new ArrayList<>();
-        Map<Long, double[]> nodes = new HashMap<>();
         for (int i = 0; i < n.edges().size(); i++) {
             double[] b = n.boxes()[i];
             if (b[0] > box.maxLon() || b[2] < box.minLon() || b[1] > box.maxLat() || b[3] < box.minLat()) {
                 continue;
             }
             RoadEdge e = n.edges().get(i);
-            edges.add(e);
+            if (underground || e.penalty().get(Penalty.UNDERGROUND) < 1) {
+                edges.add(e);
+            }
+        }
+        if (underground) {
+            edges = UndergroundLinks.attach(edges, n.exits());
+        }
+        Map<Long, double[]> nodes = new HashMap<>();
+        for (RoadEdge e : edges) {
             nodes.putIfAbsent(e.from(), e.geometry().get(0));
             nodes.putIfAbsent(e.to(), e.geometry().get(e.geometry().size() - 1));
         }
@@ -108,21 +133,22 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     }
 
     private Network read() {
-        String sql = "SELECT e.id, e.from_node, e.to_node, e.length_m, e.highway, e.footway, e.steps, e.wheelchair_ramp, e.surface,"
-                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.tracktype')) AS tracktype,"
-                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.sac_scale')) AS sac_scale,"
-                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.ford')) AS ford,"
-                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.sidewalk')) AS sw,"
-                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.\"sidewalk:both\"')) AS sw_both,"
-                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.\"sidewalk:left\"')) AS sw_left,"
-                + " JSON_UNQUOTE(JSON_EXTRACT(e.tags, '$.\"sidewalk:right\"')) AS sw_right,"
-                + " ST_AsText(e.geom) AS wkt,"
-                + " s.curb, s.footbridge_ok"
-                + " FROM road_edge e LEFT JOIN edge_stat s ON s.edge_id = e.id";
+        // 지하 길 표에는 wheelchair_ramp(계단은 휠체어로 못 지남)·edge_stat(턱·육교 모름)이 없어 NULL로 읽는다
+        String sql = select("e", "e.id", "e.wheelchair_ramp", "0", "s.curb", "s.footbridge_ok")
+                + " FROM road_edge e LEFT JOIN edge_stat s ON s.edge_id = e.id"
+                + " UNION ALL "
+                + select("x", "-(1000000000 + x.id)", "NULL", "1", "NULL", "NULL")
+                + " FROM road_edge_excluded x WHERE x.reason = 'underground'";
         List<RoadEdge> edges = jdbc.query(sql, (rs, i) -> {
             Map<Penalty, Double> values = new EnumMap<>(Penalty.class);
             if (rs.getInt("steps") == 1) {
                 values.put(Penalty.STAIRS, 1.0);
+            }
+            if (rs.getInt("covered") == 1) {
+                values.put(Penalty.COVERED, 1.0);
+            }
+            if (rs.getInt("underground") == 1) {
+                values.put(Penalty.UNDERGROUND, 1.0);
             }
             if (rs.getObject("curb") != null && rs.getInt("curb") == 1) {
                 values.put(Penalty.CURB, 1.0);
@@ -148,8 +174,21 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
                     new EdgePenalty(values,
                             rs.getObject("wheelchair_ramp") == null ? null : rs.getInt("wheelchair_ramp") == 1),
                     sidewalk(rs.getString("sw"), rs.getString("sw_both"), rs.getString("sw_left"),
-                            rs.getString("sw_right")));
+                            rs.getString("sw_right")), rs.getString("name"));
         });
+        List<UndergroundLinks.Exit> exits = jdbc.query("SELECT id, lon, lat,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(tags, '$.attach_edge')) AS attach_edge FROM road_node_excluded"
+                + " WHERE reason = 'underground' AND JSON_EXTRACT(tags, '$.attach_edge') IS NOT NULL",
+                (rs, i) -> {
+                    // 지하 데이터 한 줄이 맑은 날 엔진을 멈추게 하면 안 된다 (D4): 읽지 못한 출구만 건너뛴다. 좌표는 로그에 쓰지 않는다
+                    Long attach = attachEdge(rs.getString("attach_edge"));
+                    if (attach == null) {
+                        log.warn("지하 출구 {}의 attach_edge를 읽지 못해 잇지 않음", rs.getLong("id"));
+                        return null;
+                    }
+                    return new UndergroundLinks.Exit(rs.getLong("id"), new double[] {rs.getDouble("lon"), rs.getDouble("lat")},
+                            attach);
+                }).stream().filter(java.util.Objects::nonNull).toList();
         double[][] boxes = new double[edges.size()][];
         double w = Double.MAX_VALUE, so = Double.MAX_VALUE, e = -Double.MAX_VALUE, no = -Double.MAX_VALUE;
         for (int i = 0; i < edges.size(); i++) {
@@ -166,7 +205,31 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             e = Math.max(e, b[2]);
             no = Math.max(no, b[3]);
         }
-        return new Network(edges, boxes, edges.isEmpty() ? null : new BBox(w, so, e, no));
+        return new Network(edges, boxes, edges.isEmpty() ? null : new BBox(w, so, e, no), exits);
+    }
+
+    /** 지상(road_edge)·지하(road_edge_excluded) 두 표에서 같은 칸을 같은 이름으로 읽는 SELECT 부분. t는 표 별칭 */
+    private static String select(String t, String id, String ramp, String underground, String curb, String footbridge) {
+        return "SELECT " + id + " AS id, " + t + ".from_node, " + t + ".to_node, " + t + ".length_m, " + t + ".highway, "
+                + t + ".footway, " + t + ".steps, " + ramp + " AS wheelchair_ramp, " + t + ".surface, " + t + ".covered, "
+                + t + ".name, " + underground + " AS underground,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.tracktype')) AS tracktype,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.sac_scale')) AS sac_scale,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.ford')) AS ford,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.sidewalk')) AS sw,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.\"sidewalk:both\"')) AS sw_both,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.\"sidewalk:left\"')) AS sw_left,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.\"sidewalk:right\"')) AS sw_right,"
+                + " ST_AsText(" + t + ".geom) AS wkt, " + curb + " AS curb, " + footbridge + " AS footbridge_ok";
+    }
+
+    /** 출구 점 tags.attach_edge → 붙일 지상 길 번호. 비었거나 숫자가 아니면 null */
+    static Long attachEdge(String v) {
+        try {
+            return v == null ? null : Long.valueOf(v.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /** 길 바닥 구분 */

@@ -193,17 +193,17 @@ public final class RoadGraph {
         nodes.put(node, at);
         graph.addVertex(node);
         graph.removeEdge(e);
-        // 저장된 길이를 선 길이 비율로 나눈다 (성질·인도 쪽은 그대로)
+        // 저장된 길이를 선 길이 비율로 나눈다 (성질·인도 쪽·이름은 그대로)
         double share = total == 0 ? 0.5 : headM / total;
         graph.addEdge(e.from(), node, new RoadEdge(nextVirtual--, e.from(), node, e.lengthM() * share, e.highway(),
-                head, e.penalty(), e.sidewalk()));
+                head, e.penalty(), e.sidewalk(), e.name()));
         graph.addEdge(node, e.to(), new RoadEdge(nextVirtual--, node, e.to(), e.lengthM() * (1 - share), e.highway(),
-                tail, e.penalty(), e.sidewalk()));
+                tail, e.penalty(), e.sidewalk(), e.name()));
         return node;
     }
 
     /** 선분 a-b에 점 p의 수직의 발이 있는 위치 (0~1, 선분 밖이면 가까운 끝) */
-    private static double foot(double[] p, double[] a, double[] b) {
+    static double foot(double[] p, double[] a, double[] b) {
         double k = Math.cos(Math.toRadians(p[1]));
         double ax = (a[0] - p[0]) * k;
         double ay = a[1] - p[1];
@@ -213,7 +213,7 @@ public final class RoadGraph {
         return len2 == 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2));
     }
 
-    private static double[] lerp(double[] a, double[] b, double t) {
+    static double[] lerp(double[] a, double[] b, double t) {
         return new double[] {a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t};
     }
 
