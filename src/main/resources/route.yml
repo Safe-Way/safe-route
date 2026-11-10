@@ -83,7 +83,8 @@ route:
       max-detour: 1.2      # 지날 수 있는 길 중 최단의 1.2배까지 (2026-11-04 결정. 이동이 힘들어 노인과 같은 값)
       walk-speed-m-per-min: 50
       night-lead-min: 0
-      exclude: [stairs, curb, footbridge, trail, ford]   # trail 등산 난이도가 붙은 산길, ford 징검다리 (2026-11-04)
+      exclude: [stairs, curb, footbridge, trail, ford, plaza]   # trail 등산 난이도가 붙은 산길, ford 징검다리 (2026-11-04)
+      # plaza 보행자 광장 가로지르기 길(A파트가 입구끼리 그은 곧은 선): 높낮이를 몰라 계단을 건너뛰는 선이 있어 휠체어는 안 씀 (2026-11-10)
       avoid-unpaved: true  # 비포장 조건부 제외: 비포장 없는 길이 1.2배 안이면 그 길로, 아니면 비포장 길 + 알림 (2026-11-04)
       avoid-events: [통제, 사고, 재난, 공사, 행사]
       day:                 # 낮: 가장 짧은 길. 비포장을 피해 다른 길을 고르면 그 이유를 note로 말한다

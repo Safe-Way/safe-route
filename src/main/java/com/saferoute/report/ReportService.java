@@ -142,6 +142,19 @@ public class ReportService {
         return new ReportsResponse(truncated ? List.copyOf(found.subList(0, LIST_LIMIT)) : found, truncated);
     }
 
+    /** 지도 범위 안 지금 유효한 신고 지점 (같은 곳 묶음, 기간 안) */
+    public ActiveSpotsResponse active(double west, double south, double east, double north) {
+        if (west >= east || south >= north) {
+            throw ReportException.bad("bbox 는 서쪽경도,남쪽위도,동쪽경도,북쪽위도 순서예요");
+        }
+        if (east - west > MAX_SPAN_DEG || north - south > MAX_SPAN_DEG) {
+            throw new ReportException(HttpStatus.BAD_REQUEST, "BBOX_TOO_LARGE", "지도를 조금 더 확대해 주세요");
+        }
+        List<ActiveSpot> found = repo.active(west, south, east, north, LIST_LIMIT + 1);
+        boolean truncated = found.size() > LIST_LIMIT;
+        return new ActiveSpotsResponse(truncated ? List.copyOf(found.subList(0, LIST_LIMIT)) : found, truncated);
+    }
+
     /** 사진 한 장, 없거나 숨긴 신고면 null */
     public NewReport.Photo photo(long id, int seq) {
         return repo.photo(id, seq);

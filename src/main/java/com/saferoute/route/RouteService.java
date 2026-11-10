@@ -335,7 +335,13 @@ public class RouteService {
         // 앱 사용자는 대개 지상(GPS)에 있고, 지하 점에 붙이면 내려가는 출구(계단·엘리베이터)가 경로에서 빠진다
         // (휠체어가 계단 출구로 내려가게 될 수 있음). 출구 점은 연결 길로 지상과 이어져 있어 출구에서 출발·도착하면 그대로 출구에 붙는다.
         // 한계: 지하상가 안에 있는 사람도 가까운 지상 점에서 출발하는 것으로 계산된다. 들를 곳도 같다
-        Set<Long> surface = underground ? graph.mainPart(e -> !RouteFinder.isUnderground(e)) : null;
+        // 광장 길을 안 쓰는 모드(휠체어)는 광장 길로만 이어진 곳(문화전당 지하 마당 계단 등)에 붙지 않게, 광장 길을 뺀 덩어리에서 찾는다.
+        // 안 그러면 거기 붙었다가 옆 길로 다시 붙으며 "이어진 길이 확인되지 않았습니다"가 붙는다(바로 옆 OSM 보도로 갈 수 있는데도) (2026-11-10)
+        boolean noPlaza = profile.exclude().contains(Penalty.PLAZA);
+        Set<Long> surface = underground || noPlaza
+                ? graph.mainPart(e -> !(underground && RouteFinder.isUnderground(e))
+                        && !(noPlaza && e.penalty().get(Penalty.PLAZA) >= 1))
+                : null;
         List<RoadGraph.Snap> snaps = new ArrayList<>();
         for (int k = 0; k < points.size(); k++) {
             try {
