@@ -59,4 +59,33 @@ class StopReaderTests {
         assertThat(StopReader.read("택배 보내는 곳 어디야")).isNull();
         assertThat(StopReader.read("")).isNull();
     }
+
+    @Test
+    void storesJoinedWithRangAreSplit() {
+        // 점검 40번 (11-10 재휘): 한 곳으로 읽어 "찾지 못했어요" → 네 곳으로 읽어 "세 곳까지" 되묻기
+        StopReader.Read r = StopReader.read("다이소랑 약국이랑 편의점이랑 서점 들렀다가 집 갈래");
+        assertThat(r.stops()).extracting(Conversation.Stop::query).containsExactly("다이소", "약국", "편의점", "서점");
+        assertThat(r.dest()).isEqualTo("집");
+        assertThat(r.tooMany()).isTrue();
+    }
+
+    @Test
+    void otherJoiningWordsAreSplit() {
+        assertThat(StopReader.read("약국하고 편의점 들렀다가 집 가자").stops()).extracting(Conversation.Stop::query)
+                .containsExactly("약국", "편의점");
+        assertThat(StopReader.read("다이소와 약국 들르고 집 갈래").stops()).extracting(Conversation.Stop::query)
+                .containsExactly("다이소", "약국");
+        assertThat(StopReader.read("약국과 편의점 들르고 집 갈래").stops()).extracting(Conversation.Stop::query)
+                .containsExactly("약국", "편의점");
+    }
+
+    @Test
+    void namesEndingInGwaStayWhole() {
+        // 치과·안과는 이어 주는 말이 아님
+        assertThat(StopReader.joined("치과 약국")).containsExactly("치과 약국");
+        assertThat(StopReader.joined("안과 들르고")).containsExactly("안과 들르고");
+        assertThat(StopReader.joined("사과 사러")).containsExactly("사과 사러");
+        assertThat(StopReader.read("치과 들렀다가 집 갈래").stops()).extracting(Conversation.Stop::query)
+                .containsExactly("치과");
+    }
 }
