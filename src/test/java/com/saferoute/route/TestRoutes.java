@@ -21,6 +21,7 @@ import org.springframework.core.io.ClassPathResource;
 import com.saferoute.route.data.InMemoryRoadGraphSource;
 import com.saferoute.route.data.PoiSource;
 import com.saferoute.route.engine.event.RoadEvent;
+import com.saferoute.route.engine.event.RoadReport;
 import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.score.RouteScorer;
@@ -132,6 +133,11 @@ final class TestRoutes {
 
     /** 고정 목록 poi와 진행 중인 행사·돌발상황 */
     static PoiSource pois(List<Poi> list, List<RoadEvent> events) {
+        return pois(list, events, List.of());
+    }
+
+    /** 고정 목록 poi, 진행 중인 행사·돌발상황, 지금 유효한 신고 (신고는 DB에 넣지 않고 이것으로 시험한다) */
+    static PoiSource pois(List<Poi> list, List<RoadEvent> events, List<RoadReport> reports) {
         PoiSource base = pois(list);
         return new PoiSource() {
             @Override
@@ -152,6 +158,11 @@ final class TestRoutes {
             @Override
             public List<RoadEvent> events(BBox box, java.time.LocalDateTime at) {
                 return events.stream().filter(e -> box.contains(e.lon(), e.lat())).toList();
+            }
+
+            @Override
+            public List<RoadReport> reports(BBox box) {
+                return reports.stream().filter(r -> box.contains(r.lon(), r.lat())).toList();
             }
         };
     }
