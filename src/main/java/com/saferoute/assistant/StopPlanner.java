@@ -228,10 +228,45 @@ public class StopPlanner {
     }
 
     /**
-     * 구간마다 원일님 엔진으로 걷는 길을 찾아 더한다 (구간마다 맞춤 길 safe, 없으면 첫 길).
-     * 엔진에 경유지(w10 via)가 들어오면 한 번 부르기로 바꾼다.
+     * 원일님 엔진에 들를 곳을 같이 넘겨 한 번에 찾는다 (w10, /api/route stops). 맞춤 길 safe, 없으면 첫 길.
+     * 구간별 거리는 엔진이 준 들를 곳 위치(atM)로 나눈다. 엔진 답에 들를 곳이 다 없으면 예전처럼 구간마다 찾는다.
      */
     private Walked walk(Ask a, List<Stop> stops, WalkSpeed speed) {
+        if (stops.isEmpty()) {
+            return walkLegs(a, stops, speed);
+        }
+        List<RouteRequest.Place> via = new ArrayList<>();
+        for (Stop s : stops) {
+            via.add(new RouteRequest.Place(s.lat(), s.lon(), s.name()));
+        }
+        RouteResult r = routes.route(new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), "지금 위치"),
+                new RouteRequest.Place(a.dest().lat(), a.dest().lon(), a.dest().name()), a.night(), a.mode(),
+                TripRecommender.blankToNull(a.guestId()), null, List.copyOf(via)));
+        RouteResult.Route pick = pick(r);
+        List<RouteResult.StopMark> marks = pick.stops() == null ? List.of() : pick.stops();
+        if (marks.size() != stops.size()) {
+            log.info("엔진 답에 들를 곳이 {}곳뿐이라 구간마다 찾음", marks.size());
+            return walkLegs(a, stops, speed);
+        }
+        int total = pick.distanceM();
+        int totalMin = minutes(pick.distanceM(), pick.durationMin(), speed);
+        List<Leg> legs = new ArrayList<>();
+        int prevM = 0;
+        int prevMin = 0;
+        for (int i = 0; i <= stops.size(); i++) {
+            boolean last = i == stops.size();
+            int atM = last ? total : Math.max(prevM, Math.min(total, marks.get(i).atM()));
+            // 앞에서부터 쌓은 시간으로 나눠 반올림해도 합이 전체 시간과 같게
+            int atMin = last || total <= 0 ? totalMin : (int) Math.round((double) totalMin * atM / total);
+            legs.add(new Leg(last ? a.dest().name() : stops.get(i).name(), atM - prevM, atMin - prevMin));
+            prevM = atM;
+            prevMin = atMin;
+        }
+        return new Walked(List.copyOf(legs), totalMin, total);
+    }
+
+    /** 들를 곳 없이 바로, 또는 엔진 답이 모자랄 때 구간마다 찾아 더한다 */
+    private Walked walkLegs(Ask a, List<Stop> stops, WalkSpeed speed) {
         List<Leg> legs = new ArrayList<>();
         int minutes = 0;
         int meters = 0;
@@ -249,10 +284,8 @@ public class StopPlanner {
             RouteResult r = routes.route(new RouteRequest(new RouteRequest.Place(fLat, fLon, fName),
                     new RouteRequest.Place(p[0], p[1], toName), a.night(), a.mode(),
                     TripRecommender.blankToNull(a.guestId())));
-            RouteResult.Route pick = r.routes().stream().filter(x -> "safe".equals(x.kind())).findFirst()
-                    .orElse(r.routes().get(0));
-            boolean personal = speed != null && speed.personal() && speed.speedMMin() > 0;
-            int m = personal ? (int) Math.ceil(pick.distanceM() / speed.speedMMin()) : pick.durationMin();
+            RouteResult.Route pick = pick(r);
+            int m = minutes(pick.distanceM(), pick.durationMin(), speed);
             legs.add(new Leg(toName, pick.distanceM(), m));
             minutes += m;
             meters += pick.distanceM();
@@ -261,6 +294,16 @@ public class StopPlanner {
             fName = toName;
         }
         return new Walked(List.copyOf(legs), minutes, meters);
+    }
+
+    private static RouteResult.Route pick(RouteResult r) {
+        return r.routes().stream().filter(x -> "safe".equals(x.kind())).findFirst().orElse(r.routes().get(0));
+    }
+
+    /** 걸음 속도를 잰 적이 있으면 내 속도로, 아니면 엔진 시간 */
+    private static int minutes(int distanceM, int engineMin, WalkSpeed speed) {
+        boolean personal = speed != null && speed.personal() && speed.speedMMin() > 0;
+        return personal ? (int) Math.ceil(distanceM / speed.speedMMin()) : engineMin;
     }
 
     private WalkSpeed speed(String guestId, String mode) {

@@ -56,14 +56,7 @@ class AssistantStopsTests {
                 new Place("3", "GS25 충장점", "광주 동구", 35.1479, 126.9200, 80)));
         when(kakao.search(eq("약국"), anyDouble(), anyDouble())).thenReturn(List.of(
                 new Place("5", "온누리약국", "광주 동구", 35.1482, 126.9180, 80)));
-        when(routes.route(any())).thenAnswer(inv -> {
-            RouteRequest r = inv.getArgument(0);
-            int m = AssistantTools.straightM(r.origin().lat(), r.origin().lon(), r.destination().lat(),
-                    r.destination().lon());
-            RouteResult.Route safe = new RouteResult.Route("safe", m, (int) Math.ceil(m / 50.0), List.of(), Map.of(),
-                    Map.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
-            return new RouteResult(null, List.of(safe), null, List.of(), null);
-        });
+        when(routes.route(any())).thenAnswer(inv -> StopPlannerTests.fakeEngine(inv.getArgument(0)));
     }
 
     AssistantReply ask(String text, String convo) {
@@ -75,7 +68,9 @@ class AssistantStopsTests {
         AssistantReply r = ask("퇴근길에 다이소 들르고 택배 찾고 집 갈래", null);
         assertThat(r.tools()).contains("plan_stops");
         assertThat(r.usage()).isEqualTo(AssistantReply.Usage.NONE); // 규칙만 썼으면 제미나이 토큰 0
-        assertThat(r.say()).contains("들렀다 집까지", "분 걸려요", "바로 가는 것보다", "더 걸려요", "GS25 충장점(택배)");
+        assertThat(r.say()).contains("들렀다 집까지", "분 걸려요", "GS25 충장점(택배)")
+                // 두 곳 다 가는 길 위라 엔진 한 번으로 세면 바로 가는 길과 거의 같음 (w10 전엔 구간마다 올림해서 더 걸렸음)
+                .contains("바로 가는 것과 시간이 거의 같아요");
         assertThat(r.stops()).extracting(AssistantReply.Stop::name).containsExactly("GS25 충장점", "다이소 충장로점");
         assertThat(r.say()).contains("순서를 바꾸면", "GS25 충장점부터");
         assertThat(r.pick().type()).isEqualTo("walk");
