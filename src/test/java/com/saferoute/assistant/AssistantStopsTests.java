@@ -95,4 +95,11 @@ class AssistantStopsTests {
         assertThat(r.say()).contains("세 곳까지");
         assertThat(r.tools()).doesNotContain("plan_stops");
     }
+
+    @Test
+    void fourStopsJoinedWithRangAskForThree() {
+        // 점검 40번: 네 곳을 '랑'으로 이어 말하면 찾지 못했다고 하지 않고 세 곳까지라고 되묻기 (결정 58)
+        AssistantReply r = ask("다이소랑 약국이랑 편의점이랑 서점 들렀다가 집 갈래", null);
+        assertThat(r.say() + " " + r.ask()).contains("세 곳까지").doesNotContain("찾지 못했어요");
+    }
 }
