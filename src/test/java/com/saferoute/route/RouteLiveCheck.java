@@ -7,6 +7,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -18,6 +19,14 @@ import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteRequest.Place;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.data.MysqlPoiSource;
+import com.saferoute.route.data.PoiSource;
+import com.saferoute.route.engine.event.RoadEvent;
+import com.saferoute.route.engine.event.RoadReport;
+import com.saferoute.route.engine.facility.Poi;
+import com.saferoute.route.engine.geo.BBox;
+import com.saferoute.route.engine.geo.Geo;
+import com.saferoute.route.engine.graph.RoadEdge;
+import com.saferoute.route.engine.graph.RoadGraph;
 import com.saferoute.route.data.MysqlRoadGraphSource;
 import com.saferoute.route.engine.explain.RouteResultAssembler;
 import com.saferoute.route.engine.facility.FacilityCounter;
@@ -28,6 +37,8 @@ import com.saferoute.situation.NightJudge;
  * 팀 DB(광주 전체 도로망 + poi)에서 고정 경로 3개를 모드·시각별로 실제로 계산해 본다. 임의 경로 검사는 RouteRandomCheck.
  * 비 오는 날(rain on) 시연 길도 계산한다 (2026-11-09). 외부 날씨는 부르지 않는다: 날씨 없는 엔진에 rain을 on·off로 준다.
  * 들를 곳(2026-11-10): 문화전당 → 다이소 광주충장로점 → 문화전당역, 들를 곳 0·1·3곳 응답 시간.
+ * 신고(2026-11-10, 진행표 w11): 민수님 시험 신고 자리(공사, edge 119218)와 옆 보도를 지나는 출발·도착을 도로망에서 골라 4모드 낮.
+ * 뷰에 그 신고가 없으면 같은 자리 시험 신고를 메모리로만 둔다 (DB에 넣지 않는다). 좌표는 출력하지 않는다
  * 다이소 좌표는 팀 DB에 없어(11-10 확인) 사용자가 알려 준 값을 기본으로 쓴다. -Ddaiso=위도,경도로 바꿀 수 있다. 카카오는 부르지 않는다
  * 실행: ./mvnw test -Dtest=RouteLiveCheck -Dlive
  */
@@ -102,6 +113,7 @@ class RouteLiveCheck {
         rainyDemo(o, roads, pois, scorer, assembler, props);
         stopsDemo(o, roads, pois, scorer, assembler, props);
         stopsTiming(o, roads, pois, scorer, assembler, props);
+        reportDemo(o, db, roads, pois, scorer, assembler, props);
         o.print();
     }
 
@@ -193,7 +205,147 @@ class RouteLiveCheck {
         }
     }
 
-    static RouteService service(MysqlRoadGraphSource roads, MysqlPoiSource pois, RouteScorer scorer,
+    /**
+     * 민수님 시험 신고(spot 3, 공사)가 붙은 길 (11-10 팀 DB). 건물 출입구(entrance=main)로 들어가는 13m 막다른 보도라,
+     * 그 길을 지나는 경로는 출입구에서 출발하거나 그리로 가는 길뿐이다. 그래서 바로 옆 이어진 보도(119219)에도 같은 신고를 두어 피하기를 본다
+     */
+    static final long[] REPORT_EDGES = {119218, 119219};
+
+    /**
+     * 신고된 곳: 그 길 가운데에 신고를 두고, 길 양 끝에서 도로망을 따라 80~250m 떨어진 양쪽 노드(막다른 끝이면 그 끝)를 짝지어
+     * 어른 최단이 신고된 길을 지나는 첫 짝을 출발·도착으로 쓴다. 공사(모든 모드 피하기)와 턱(노인·휠체어 피하기, 어른·어린이 비용만), 4모드 12시
+     */
+    static void reportDemo(Out o, JdbcTemplate db, MysqlRoadGraphSource roads, MysqlPoiSource pois, RouteScorer scorer,
+            RouteResultAssembler assembler, RouteProperties props) {
+        o.line("");
+        o.line("■ 신고된 곳 (12시)");
+        Integer active = db.queryForObject("SELECT COUNT(*) FROM road_report_active", Integer.class);
+        List<RoadReport> read = pois.reports(new BBox(-180, -90, 180, 90));
+        o.line("  팀 DB 유효 신고: 뷰 %d곳, 엔진이 읽은 것 %d곳. 뷰에 없으면 그 길 가운데에 시험 신고를 메모리로만 둔다 (DB에 넣지 않음)",
+                active, read.size());
+        for (long edge : REPORT_EDGES) {
+            Map<String, Object> e = db.queryForMap("SELECT a.id an, b.id bn, a.lon alon, a.lat alat, b.lon blon, b.lat blat"
+                    + " FROM road_edge x JOIN road_node a ON a.id = x.from_node JOIN road_node b ON b.id = x.to_node"
+                    + " WHERE x.id = ?", edge);
+            long an = ((Number) e.get("an")).longValue();
+            long bn = ((Number) e.get("bn")).longValue();
+            double[] spot = {(((Number) e.get("alon")).doubleValue() + ((Number) e.get("blon")).doubleValue()) / 2,
+                    (((Number) e.get("alat")).doubleValue() + ((Number) e.get("blat")).doubleValue()) / 2};
+            RoadReport real = read.stream().filter(r -> Geo.distance(new double[] {r.lon(), r.lat()}, spot) < 30)
+                    .findFirst().orElse(null);
+            RoadGraph g = roads.load(BBox.around(List.of(spot), 400));
+            var paths = new org.jgrapht.alg.shortestpath.DijkstraShortestPath<>(
+                    new org.jgrapht.graph.AsWeightedGraph<>(g.graph(), RoadEdge::lengthM, false, false));
+            var fromA = paths.getPaths(an);
+            var fromB = paths.getPaths(bn);
+            List<Long> sideA = new java.util.ArrayList<>();
+            List<Long> sideB = new java.util.ArrayList<>();
+            for (Long n : g.nodes().keySet()) {
+                double da = fromA.getWeight(n);
+                double dbm = fromB.getWeight(n);
+                if (da >= 80 && da <= 250 && dbm > da + 5) {
+                    sideA.add(n);
+                } else if (dbm >= 80 && dbm <= 250 && da > dbm + 5) {
+                    sideB.add(n);
+                }
+            }
+            // 막다른 끝이면 그 끝 노드. 두 점을 잇는 직선이 신고 자리에 가까운 짝부터 (양쪽 너머 점)
+            List<Long> as = sideA.isEmpty() ? List.of(an) : sideA;
+            List<Long> bs = sideB.isEmpty() ? List.of(bn) : sideB;
+            List<long[]> pairs = new java.util.ArrayList<>();
+            for (Long x : as) {
+                for (Long y : bs) {
+                    pairs.add(new long[] {x, y});
+                }
+            }
+            pairs.sort(java.util.Comparator.comparingDouble(xy -> Geo.distanceToSegment(spot, g.point(xy[0]), g.point(xy[1]))));
+            for (String type : new String[] {"construction", "curb"}) {
+                RoadReport r = real != null ? real : new RoadReport(3, type, spot[0], spot[1],
+                        java.time.LocalDate.of(2026, 11, 16),
+                        "construction".equals(type) ? List.of(MODES) : List.of("senior", "wheelchair"),
+                        "construction".equals(type) ? List.of() : List.of("adult", "child"));
+                RouteService service = service(roads, withReport(pois, r), scorer, assembler, props, 12);
+                long[] ends = null;
+                for (long[] xy : pairs.subList(0, Math.min(20, pairs.size()))) {
+                    RouteResult adult = reportRoute(service, g, xy[0], xy[1], "adult");
+                    if (adult != null && adult.routes().get(0).events().stream().anyMatch(v -> "신고".equals(v.kind()))) {
+                        ends = xy;
+                        break;
+                    }
+                }
+                if (ends == null) {
+                    o.line("  edge %d %s 신고: 최단이 신고를 지나는 출발·도착을 못 찾음", edge, r.event().title());
+                    continue;
+                }
+                o.line("  edge %d %s 신고%s: 출발 노드 %d(신고에서 직선 %dm) → 도착 노드 %d(%dm)", edge, r.event().title(),
+                        real != null ? "(뷰 spot " + real.spotId() + ")" : "(메모리)", ends[0],
+                        Math.round(Geo.distance(g.point(ends[0]), spot)), ends[1], Math.round(Geo.distance(g.point(ends[1]), spot)));
+                for (String mode : MODES) {
+                    RouteResult res = reportRoute(service, g, ends[0], ends[1], mode);
+                    if (res == null) {
+                        o.line("    %-10s 실패", mode);
+                        continue;
+                    }
+                    RouteResult.Route shortest = res.routes().get(0);
+                    RouteResult.Route safe = res.routes().get(res.routes().size() - 1);
+                    boolean passes = safe.events().stream().anyMatch(x -> "신고".equals(x.kind()));
+                    o.line("    %-10s 최단 %dm / 안전 %dm | %s | %s", mode, shortest.distanceM(), safe.distanceM(),
+                            passes ? "신고 지남" : "신고 피함", res.explanation().text());
+                    for (RouteResult.Route rt : res.routes()) {
+                        rt.events().stream().filter(x -> "신고".equals(x.kind())).forEach(x -> o.line(
+                                "      events(%s) kind %s title %s %d~%dm avoid %s near %s", rt.kind(), x.kind(), x.title(),
+                                x.fromM(), x.toM(), x.avoid(), x.near()));
+                    }
+                }
+                if (real != null) {
+                    break;
+                }
+            }
+        }
+    }
+
+    static RouteResult reportRoute(RouteService service, RoadGraph g, long from, long to, String mode) {
+        double[] f = g.point(from);
+        double[] t = g.point(to);
+        try {
+            return service.route(new RouteRequest(new Place(f[1], f[0], null), new Place(t[1], t[0], null), "auto", mode,
+                    null, "off"));
+        } catch (RouteException e) {
+            return null;
+        }
+    }
+
+    /** 팀 DB를 그대로 읽고 신고만 이것 하나로 (DB에 넣지 않는다) */
+    static PoiSource withReport(MysqlPoiSource pois, RoadReport report) {
+        return new PoiSource() {
+            @Override
+            public List<Poi> within(BBox box, Set<String> kinds) {
+                return pois.within(box, kinds);
+            }
+
+            @Override
+            public Set<java.time.LocalDate> holidays() {
+                return pois.holidays();
+            }
+
+            @Override
+            public java.time.LocalDate dataDate() {
+                return pois.dataDate();
+            }
+
+            @Override
+            public List<RoadEvent> events(BBox box, java.time.LocalDateTime at) {
+                return pois.events(box, at);
+            }
+
+            @Override
+            public List<RoadReport> reports(BBox box) {
+                return box.contains(report.lon(), report.lat()) ? List.of(report) : List.of();
+            }
+        };
+    }
+
+    static RouteService service(MysqlRoadGraphSource roads, PoiSource pois, RouteScorer scorer,
             RouteResultAssembler assembler, RouteProperties props, int hour) {
         ZonedDateTime now = ZonedDateTime.of(2026, 11, 4, hour, 0, 0, 0, ZoneId.of("Asia/Seoul"));
         return new RouteService(roads, pois, new NightJudge(), scorer, assembler, props,

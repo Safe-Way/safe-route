@@ -38,6 +38,25 @@ public final class RoadEvents {
     }
 
     /**
+     * 신고 지점의 길: 반경 안 길 중 가장 가까운 길 하나. 없으면 null (2026-11-10).
+     * 반경 안 길을 전부 막으면 길 건너 보도(자연스러운 우회)·교차로의 다른 길까지 막혀 오히려 못 피한다.
+     * 서버가 신고를 받을 때 edge_id를 정하는 규칙(가장 가까운 길)과 같아, 출발·도착을 붙이며 나눈 길(임시 번호)에서도
+     * 신고 자리 쪽 조각을 다시 찾는다
+     */
+    public static Long zoneNearest(RoadGraph graph, RoadEvent ev) {
+        Long best = null;
+        double bestM = ev.radiusM();
+        for (RoadEdge e : graph.graph().edgeSet()) {
+            double d = Geo.distanceToLine(ev.point(), e.geometry());
+            if (best == null ? d <= bestM : d < bestM) {
+                best = e.id();
+                bestM = d;
+            }
+        }
+        return best;
+    }
+
+    /**
      * 경로 선이 영향 반경 안을 지나는 구간 {처음 m, 끝 m}. 선의 처음부터 따라 잰다. 지나지 않으면 null.
      * 반경 안에 두 번 들어가면 처음 들어간 곳부터 마지막으로 나온 곳까지 한 구간으로 본다.
      */

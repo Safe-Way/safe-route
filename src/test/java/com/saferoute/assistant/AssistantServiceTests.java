@@ -200,6 +200,17 @@ class AssistantServiceTests {
     }
 
     @Test
+    void askingIfLocationIsSavedGetsFixedAnswer() {
+        // 사용성 점검: "이 앱은 내 위치 저장해"의 답이 정확하지 않음 → 정해 둔 문장 (제미나이 안 부름)
+        AssistantReply r = ask(A, "이 앱은 내 위치 저장해?", null);
+        assertThat(r.say()).contains("저장하지 않아요", "100m", "한 점");
+        assertThat(r.tools()).isEmpty();
+        assertThat(RuleBrain.asksLocationSaved("내위치기록남아")).isTrue();
+        assertThat(RuleBrain.asksLocationSaved("집위치저장해줘")).isFalse();
+        assertThat(RuleBrain.asksLocationSaved("문화전당가자")).isFalse();
+    }
+
+    @Test
     void call119IsUrgent() {
         // 민수님 63개 비교: "119 불러 줘" → 112·보호자 버튼부터 (전화는 앱이 휴대폰에서)
         AssistantReply r = ask(A, "119 불러 줘", null);
@@ -522,5 +533,23 @@ class AssistantServiceTests {
     /** 앱이 보는 질문: say와 ask가 같으면 say 하나만 온다 (c10) */
     static String question(AssistantReply r) {
         return r.ask() != null ? r.ask() : r.say();
+    }
+
+    @Test
+    void transitAnswerKeepsStepsAndLastTime() {
+        // 비서 점검 1번(11/10): 제미나이가 "문화전당까지 14분 걸려요. 오늘은 비가 와서 덜 걷는 길이에요."만 말함
+        List<com.saferoute.transit.TransitResult.Leg> legs = List.of(
+                SentencesTests.walk(600, 9, "출발", "남광주역"),
+                SentencesTests.subway("1호선", 2, 4, "남광주역", "문화전당역"),
+                SentencesTests.walk(100, 1, "문화전당역", "도착"));
+        String said = AssistantService.mustSayTransit("국립아시아문화전당까지 14분 걸려요. 오늘은 비가 와서 덜 걷는 길이에요.",
+                legs, List.of("비가 와요", "지난번 비 올 때도 대중교통을 타셨어요"));
+        assertThat(said).startsWith("국립아시아문화전당까지 14분 걸려요.")
+                .contains("남광주역까지 9분 가서").contains("지하철 1호선을 타고")
+                .endsWith("지난번 비 올 때도 대중교통을 타셨어요.");
+        // 이미 말했으면 두 번 붙이지 않음
+        String full = "남광주역까지 9분 가서, 지하철 1호선을 타고 가요. 지난번 비 올 때도 대중교통을 타셨어요.";
+        assertThat(AssistantService.mustSayTransit(full, legs, List.of("지난번 비 올 때도 대중교통을 타셨어요")))
+                .isEqualTo(full);
     }
 }
