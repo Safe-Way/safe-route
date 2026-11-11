@@ -173,13 +173,22 @@ public class AssistantService {
         others = others.stream().map(x -> new Other(x.type(), Sentences.polish(x.summary(), mode), x.minutes()))
                 .toList();
         Conversation next = t.convo.withTurn("user", t.text).withTurn("model", say);
-        List<String> called = new ArrayList<>();
-        for (String name : t.tools) {
-            called.add(name.replace(":confirm", ""));
-        }
+        List<String> called = called(t.tools);
         return new AssistantReply(say, pick, others, because, ask, o.choices(), t.spot,
                 codec.encode(next.withLastTools(called)), List.copyOf(called), o.ai(), situation, stops,
                 t.usage.snapshot(t.toolsSent, t.toolsRetried));
+    }
+
+    /** 응답 tools: 부른 도구 이름. 같은 도구를 바로 이어 두 번 부르면 한 번으로 (점검 11번: 제미나이가 search_place 를 두 번 부름) */
+    static List<String> called(List<String> tools) {
+        List<String> called = new ArrayList<>();
+        for (String name : tools) {
+            String n = name.replace(":confirm", "");
+            if (called.isEmpty() || !called.get(called.size() - 1).equals(n)) {
+                called.add(n);
+            }
+        }
+        return called;
     }
 
     static final String WHEELCHAIR_WHY = Sentences.WHEELCHAIR_WHY;
@@ -222,6 +231,9 @@ public class AssistantService {
                     sb.append(' ').append(b).append('.');
                 }
             }
+        }
+        if (because != null && because.contains(TripScorer.NIGHT_STOP_BRIGHT) && !say.contains("가로등")) {
+            sb.append(' ').append(TripScorer.NIGHT_STOP_SAY);
         }
         return sb.toString();
     }

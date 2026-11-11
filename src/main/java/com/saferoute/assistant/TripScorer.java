@@ -57,6 +57,12 @@ public class TripScorer {
      *
      * @param habit 날씨가 같을 때 지난번 고른 것 (transit, walk). 없으면 null
      */
+    /** 밤 대중교통에서 정류장까지 걷는 길도 밝을 때의 이유 (because) */
+    static final String NIGHT_STOP_BRIGHT = "정류장까지도 가로등 많은 밝은 길";
+
+    /** 그 이유를 말로 (점검 18번: 밤이라 무서운데 대중교통을 고르면 밝은 길 얘기가 빠졌음) */
+    static final String NIGHT_STOP_SAY = "밤이라 정류장까지 가는 길도 가로등이 많은 밝은 길로 골랐어요.";
+
     public record Context(String mode, boolean rain, boolean heat, boolean cold, boolean dustBad, boolean night,
                           boolean personalSpeed, Integer preferTransit, String habit, String bodyNote) {
 
@@ -329,7 +335,7 @@ public class TripScorer {
                 || looks.get(best).darkM() <= looks.get(other).darkM();
         if (!walk && ctx.night() && notDarker
                 && best.legs().stream().anyMatch(l -> Boolean.TRUE.equals(l.safeWalk()))) {
-            out.add("정류장까지도 가로등 많은 밝은 길");
+            out.add(NIGHT_STOP_BRIGHT);
         }
         if (!walk && "wheelchair".equals(ctx.mode())) {
             out.add("엘리베이터로 들어갈 수 있는 역만");

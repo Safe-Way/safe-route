@@ -165,6 +165,9 @@ final class Sentences {
         if (walk && plan.night()) {
             sb.append(" 밤이라 가로등이 많은 밝은 길로 골랐어요.");
         }
+        if (!walk && plan.scored().because().contains(TripScorer.NIGHT_STOP_BRIGHT)) {
+            sb.append(" ").append(TripScorer.NIGHT_STOP_SAY);
+        }
         if (w.rain()) {
             sb.append(roof(best));
         }
