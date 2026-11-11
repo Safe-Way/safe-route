@@ -82,6 +82,11 @@ class RuleBrain {
                 return Outcome.say("천만에요. 또 가실 곳이 있으면 언제든 말씀해 주세요.");
             }
         }
+        // "오늘 저녁에 걸어도 괜찮을까" — '저녁'이 밥 말로 읽히기 전에 (폰 시험 11/10)
+        // 목적지까지 말했으면("문화전당까지 걸어가도 될까") 길찾기로 간다
+        if (asksWalkOk(f) && destination(t.text) == null) {
+            return walkOk(t, f);
+        }
         Outcome food = food(t, f);
         if (food != null) {
             return food;
@@ -111,6 +116,25 @@ class RuleBrain {
                 || f.contains("보관") || f.contains("수집");
         boolean request = f.contains("해줘") || f.contains("해주") || f.contains("하고싶") || f.contains("저장할래");
         return location && saved && !request;
+    }
+
+    /** 걸어도 되는지 묻는 말: 걷기 낱말 + 괜찮은지 묻는 낱말 */
+    private static final List<String> WALK_WORDS = List.of("걸어도", "걸어가도", "걷기", "걸을", "걷는", "산책", "나가도",
+            "나갈까", "다녀도", "외출");
+    private static final List<String> OK_WORDS = List.of("괜찮", "될까", "되나", "돼", "좋을까", "좋아", "어때", "어떨까",
+            "위험", "안전", "무리");
+
+    /** "오늘 저녁에 걸어도 괜찮을까", "지금 산책해도 돼?" (띄어쓰기 뺀 말) */
+    static boolean asksWalkOk(String flat) {
+        return WALK_WORDS.stream().anyMatch(flat::contains) && OK_WORDS.stream().anyMatch(flat::contains);
+    }
+
+    /** 지금 날씨·미세먼지와 오늘 해 지는 시각으로 답한다. 목적지가 없으니 길은 찾지 않고 가실 곳을 묻는다 */
+    Outcome walkOk(Turn t, String flat) {
+        boolean later = flat.contains("저녁") || flat.contains("밤") || flat.contains("늦게") || flat.contains("퇴근")
+                || flat.contains("어두");
+        t.convo = t.convo.asked("destination");
+        return Outcome.ask(Sentences.walkOk(tools.weather(t), tools.sunset(t), later, t.now.toLocalTime()));
     }
 
     /** 먹을 곳을 찾을 때 고르는 종류 버튼 (value 는 장소 검색어) */
@@ -445,6 +469,9 @@ class RuleBrain {
         if (dest != null) {
             AssistantTools.Found f = tools.searchPlace(t, dest);
             switch (f.status()) {
+                case "no_home":
+                    t.convo = t.convo.asked("destination");
+                    return Outcome.ask(AssistantTools.HOME_UNKNOWN);
                 case "none":
                     return Outcome.ask("'" + dest + "'을(를) 찾지 못했어요. 다른 이름으로 말씀해 주시겠어요?");
                 case "error":
@@ -542,6 +569,9 @@ class RuleBrain {
     private Outcome stopDest(Turn t, String dest) {
         AssistantTools.Found f = tools.searchPlace(t, dest);
         switch (f.status()) {
+            case "no_home":
+                t.convo = t.convo.asked("destination");
+                return Outcome.ask(AssistantTools.HOME_UNKNOWN);
             case "none":
                 t.convo = t.convo.asked("destination");
                 return Outcome.ask("'" + dest + "'을(를) 찾지 못했어요. 들르신 뒤 어디로 가실지 다른 이름으로 말씀해 주시겠어요?");

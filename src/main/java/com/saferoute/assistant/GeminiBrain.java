@@ -345,7 +345,10 @@ class GeminiBrain {
                             : p.address() == null ? p.name() : p.name() + " (" + p.address() + ")");
                 }
                 r.put("places", names);
-                if ("outside".equals(f.status())) {
+                if ("no_home".equals(f.status())) {
+                    r.put("note", "집을 저장하지 않았어요. 다른 곳을 찾지 말고 이 문장 그대로 말하세요: "
+                            + AssistantTools.HOME_UNKNOWN);
+                } else if ("outside".equals(f.status())) {
                     r.put("note", "광주 밖이에요. 광주 안에서만 안내한다고 말하세요.");
                 } else if ("choose".equals(f.status())) {
                     r.put("note", "여러 곳이에요. 어디인지 물으세요. 사용자가 고르면 search_place(pick_index=0부터)를 부르세요.");

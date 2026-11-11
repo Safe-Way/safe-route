@@ -123,6 +123,10 @@ public class AssistantTools {
                 log.warn("비서 다녀온 곳 조회 실패: {}", e.getMostSpecificCause().getMessage());
             }
         }
+        // 집을 저장하지 않았으면 카카오로 찾지 않는다 ("하남돼지집", "해뜨는집" 같은 가게가 나옴, 진행표 c22)
+        if (!near && HOME.contains(q.replace(" ", ""))) {
+            return new Found("no_home", List.of());
+        }
         // 3. 카카오 장소 검색
         List<com.saferoute.place.Place> found;
         try {
@@ -145,10 +149,51 @@ public class AssistantTools {
         List<com.saferoute.place.Place> ordered = new ArrayList<>(found);
         if (near) {
             ordered.sort(AssistantTools::byDistance); // "가까운 카페", "근처 국밥집" → 가까운 순
+        } else {
+            // 카카오는 위치를 주면 가까운 순이라 "세븐일레븐 남광주시장점"이 시장보다 먼저 온다.
+            // 이름이 같은 곳 → 이름에 든 곳 → 주차장·○○점 → 이름에 없는 곳 (같은 칸 안은 가까운 순 그대로, 진행표 c22)
+            ordered.sort(java.util.Comparator.comparingInt(p -> rank(p.name(), q)));
         }
         List<Place> cand = ordered.stream().limit(MAX_CANDIDATES)
                 .map(p -> new Place(p.name(), p.address(), p.lat(), p.lon(), p.distanceM())).toList();
         return decide(t, cand, q);
+    }
+
+    /** "집에 가자"의 집. 휴대폰 자주 가는 곳·다녀온 곳에 없으면 no_home */
+    static final List<String> HOME = List.of("집", "우리집", "내집", "본가");
+
+    /** 집을 모를 때 (no_home) */
+    static final String HOME_UNKNOWN = "집을 아직 몰라요. 앱의 자주 가는 곳에 집을 저장해 주시면 바로 안내할게요."
+            + " 지금은 집 근처 건물이나 동네 이름을 말씀해 주셔도 돼요.";
+
+    /** 딸린 곳: 그 장소 자체가 아니라 옆에 붙은 시설 */
+    private static final List<String> ANNEX = List.of("주차장", "주차타워", "정류장", "화장실", "ATM", "매표소");
+
+    /**
+     * 장소 후보 순서 (작을수록 앞). 0 이름이 같음, 1 이름에 찾는 말이 들어 있음, 2 그중 주차장 같은 딸린 곳이나
+     * 체인 가게 지점("세븐일레븐 남광주시장점"), 3 이름에 찾는 말이 없음. 띄어쓰기는 보지 않는다.
+     */
+    static int rank(String name, String q) {
+        String n = name == null ? "" : name.replace(" ", "");
+        String w = q == null ? "" : q.replace(" ", "");
+        if (w.isEmpty()) {
+            return 3;
+        }
+        if (n.equals(w)) {
+            return 0;
+        }
+        if (!n.contains(w)) {
+            return 3;
+        }
+        for (String a : ANNEX) {
+            if (n.contains(a) && !w.contains(a)) {
+                return 2;
+            }
+        }
+        if (n.endsWith(w + "점") || (n.endsWith("점") && !w.endsWith("점") && name.strip().contains(" "))) {
+            return 2;
+        }
+        return 1;
     }
 
     /**
@@ -329,6 +374,14 @@ public class AssistantTools {
             return "auto";
         }
         return nightJudge.judge(t.lat, t.lon, t.now.atZone(KOREA), NightOption.AUTO).night() ? "on" : "off";
+    }
+
+    /** 오늘 해 지는 시각 (위치를 모르면 null) */
+    java.time.LocalTime sunset(Turn t) {
+        if (!t.located()) {
+            return null;
+        }
+        return nightJudge.judge(t.lat, t.lon, t.now.atZone(KOREA), NightOption.AUTO).sunset();
     }
 
     /** 날씨만 물을 때 (시험 날씨가 있으면 그 값) */
