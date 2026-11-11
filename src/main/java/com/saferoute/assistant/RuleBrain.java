@@ -63,6 +63,10 @@ class RuleBrain {
     Outcome noTool(Turn t) {
         String f = t.text.replace(" ", "");
         String mode = t.mode();
+        // "엘베 있는 데로 가자": 뜻이 둘이라 제미나이보다 먼저 규칙이 되묻는다 (점검 6번: 제미나이는 물음 없이 "이름을 말해 달라"고 함)
+        if (elevatorAmbiguous(f)) {
+            return askElevator(t);
+        }
         for (Map.Entry<String, String[]> e : NO_TOOL.entrySet()) {
             if (f.contains(e.getKey()) && !f.contains("112")) {
                 String[] v = e.getValue();
@@ -417,11 +421,8 @@ class RuleBrain {
             return Outcome.ask(t.convo.pending().question(), YES_NO);
         }
         // 엘리베이터 (뜻이 둘)
-        if ((flat.contains("엘베") || flat.contains("엘리베이터")) && (flat.contains("가자") || flat.contains("가줘")
-                || flat.contains("데로") || flat.contains("곳으로"))) {
-            t.convo = t.convo.asked("elevator");
-            return Outcome.ask("지하철역 엘리베이터 출구 말씀이세요, 아니면 엘리베이터 있는 육교 말씀이세요?",
-                    List.of(new Choice("subway", "지하철역 엘리베이터 출구"), new Choice("footbridge", "엘리베이터 육교")));
+        if (elevatorAmbiguous(flat)) {
+            return askElevator(t);
         }
         // 가까운 시설
         String near = nearbyKind(flat);
@@ -815,6 +816,19 @@ class RuleBrain {
     static Outcome choosePlace(Turn t, String query, List<Place> cand) {
         return Outcome.ask("'" + query + "'(으)로 " + cand.size() + "곳을 찾았어요. 어디로 갈까요?",
                 AssistantTools.placeChoices(t, cand));
+    }
+
+    /** "엘베 있는 데로 가자"처럼 어느 엘리베이터인지 모르는 말. 육교·역을 말했으면 아님 */
+    static boolean elevatorAmbiguous(String flat) {
+        return (flat.contains("엘베") || flat.contains("엘리베이터"))
+                && (flat.contains("가자") || flat.contains("가줘") || flat.contains("데로") || flat.contains("곳으로"))
+                && !flat.contains("육교") && !flat.contains("역") && !flat.contains("지하철");
+    }
+
+    private Outcome askElevator(Turn t) {
+        t.convo = t.convo.asked("elevator");
+        return Outcome.ask("지하철역 엘리베이터 출구 말씀이세요, 아니면 엘리베이터 있는 육교 말씀이세요?",
+                List.of(new Choice("subway", "지하철역 엘리베이터 출구"), new Choice("footbridge", "엘리베이터 육교")));
     }
 
     // ───────────────────────── 낱말 ─────────────────────────
