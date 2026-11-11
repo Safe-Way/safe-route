@@ -182,7 +182,11 @@ public class AssistantService {
                 t.usage.snapshot(t.toolsSent, t.toolsRetried));
     }
 
-    static final String WHEELCHAIR_WHY = "확인된 턱과 못 지나는 곳을 피한 길이에요.";
+    static final String WHEELCHAIR_WHY = Sentences.WHEELCHAIR_WHY;
+
+    /** 제미나이가 예전 문장처럼 "턱을 피한 길"이라고 지어 말한 문장 (DB에 확인된 턱이 없어 사실과 다름) */
+    private static final java.util.regex.Pattern CURB_CLAIM = java.util.regex.Pattern.compile(
+            "\\s*[^.!?]*턱[^.!?]*피(한|했|해)[^.!?]*[.!?]");
 
     /**
      * 제미나이가 말을 바꿔도 꼭 들어가야 하는 문장을 서버가 붙인다 (비서 점검 c10).
@@ -192,8 +196,9 @@ public class AssistantService {
         if (say == null) {
             return null;
         }
-        if ("wheelchair".equals(mode) && pick != null && "walk".equals(pick.type()) && !say.contains("피한 길")) {
-            return say.strip() + " " + WHEELCHAIR_WHY;
+        if ("wheelchair".equals(mode) && pick != null && "walk".equals(pick.type()) && !say.contains(WHEELCHAIR_WHY)) {
+            String rest = CURB_CLAIM.matcher(say).replaceAll("").strip();
+            return (rest.isEmpty() ? "" : rest + " ") + WHEELCHAIR_WHY;
         }
         return say;
     }
