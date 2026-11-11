@@ -331,6 +331,14 @@ public class AssistantTools {
         return nightJudge.judge(t.lat, t.lon, t.now.atZone(KOREA), NightOption.AUTO).night() ? "on" : "off";
     }
 
+    /** 오늘 해 지는 시각 (위치를 모르면 null) */
+    java.time.LocalTime sunset(Turn t) {
+        if (!t.located()) {
+            return null;
+        }
+        return nightJudge.judge(t.lat, t.lon, t.now.atZone(KOREA), NightOption.AUTO).sunset();
+    }
+
     /** 날씨만 물을 때 (시험 날씨가 있으면 그 값) */
     WeatherDust weather(Turn t) {
         if (t.testWeather != null) {
