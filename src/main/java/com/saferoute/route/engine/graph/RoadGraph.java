@@ -25,6 +25,13 @@ public final class RoadGraph {
     /** 수직의 발이 길 끝 노드에서 이보다 가까우면 길을 나누지 않고 그 노드에 붙인다 */
     static final double SPLIT_MIN_M = 1.0;
 
+    /** 점에서 이 거리 안의 길을 모두 붙일 후보로 본다 (2026-11-11, 진행표 w14 요청 값) */
+    static final double SNAP_CANDIDATE_M = 30;
+
+    /** 걸어서 아무 데서나 못 건너는 큰 길. 붙일 때 점과 길 사이에 있으면 건너편 길로 안 붙인다 */
+    private static final Set<String> BIG_ROADS = Set.of("primary", "primary_link", "secondary", "secondary_link",
+            "trunk", "trunk_link");
+
     /** 길을 나눌 때 새로 만드는 노드·길 번호. OSM 번호(양수)와 겹치지 않게 음수 */
     private long nextVirtual = -1;
 
@@ -69,7 +76,8 @@ public final class RoadGraph {
      * 가장 가까운 길 위 지점(수직의 발)에 붙인다. 가장 큰 연결 덩어리 안의 길에서만 고른다.
      * 도로망에는 다른 길과 이어지지 않은 조각(지하광장 계단 등)이 있어, 그 조각에 붙으면 경로를 못 찾는다.
      * 길 중간이면 그 길을 둘로 나눠 임시 노드를 넣는다 (예전엔 가장 가까운 노드에 붙여, 도착지를 지나쳐 길 끝까지 갔다
-     * 되돌아오는 경로가 됐다. 해오름관 정류장 442m → 392m, 2026-11-09)
+     * 되돌아오는 경로가 됐다. 해오름관 정류장 442m → 392m, 2026-11-09).
+     * 큰 길 건너편 길에는 붙이지 않는다 ({@link #nearest(double, double, Set, Predicate)})
      */
     public Snap nearest(double lon, double lat) {
         return nearest(lon, lat, e -> true);
@@ -121,13 +129,53 @@ public final class RoadGraph {
     }
 
     /**
-     * within 안에서 가장 가까운 노드를 찾고, 그 노드에 이어진 usable 길 위의 수직의 발이 더 가까우면 그 길 중간에 붙인다
-     * (휠체어는 지날 수 있는 길만). 없으면 null.
-     * 노드에 이어진 길만 보는 것은, 직선으로 더 가까운 다른 길(담장 안 단지 길·막다른 길)에 붙어 크게 도는 것을 막으려는 것이다.
-     * 길을 나눠 생긴 새 노드도 within에 넣는다
+     * 점에서 {@link #SNAP_CANDIDATE_M}(30m) 안의 usable 길(양 끝이 within)을 모두 후보로 보고, 각 길 위 수직의 발 중
+     * 가장 가까운 곳에 붙인다 (휠체어는 지날 수 있는 길만). 점에서 발까지 곧은 줄이 큰 길({@link #BIG_ROADS})을
+     * 가로지르는 후보는 뺀다. 예전엔 가장 가까운 노드의 길에만 붙여, 필문대로 서쪽 차로에서 11m인 도착점이 노드가 가까운
+     * 동쪽 차로에 24m로 붙고 횡단보도 없는 4차로를 곧게 건너는 경로가 됐다 (현장 시험 2026-11-11 ④, 진행표 w14).
+     * 30m 안에 남은 후보가 없으면 예전대로 within 안 가장 가까운 노드를 찾고, 그 노드에 이어진 usable 길 위의 발이
+     * 더 가까우면 그 길 중간에 붙인다. 노드에 이어진 길만 보는 것은, 직선으로 더 가까운 다른 길(담장 안 단지 길·막다른 길)에
+     * 붙어 크게 도는 것을 막으려던 것이다. 없으면 null. 길을 나눠 생긴 새 노드도 within에 넣는다
      */
     public Snap nearest(double lon, double lat, Set<Long> within, Predicate<RoadEdge> usable) {
         double[] p = {lon, lat};
+        RoadEdge best = null;
+        int bestSeg = 0;
+        double bestT = 0;
+        double bestM = SNAP_CANDIDATE_M;
+        for (RoadEdge e : graph.edgeSet()) {
+            if (!usable.test(e) || !within.contains(e.from()) || !within.contains(e.to())) {
+                continue;
+            }
+            // 이 길 위에서 가장 가까운 발
+            List<double[]> g = e.geometry();
+            int seg = 0;
+            double t = 0;
+            double m = Double.MAX_VALUE;
+            for (int i = 1; i < g.size(); i++) {
+                double ti = foot(p, g.get(i - 1), g.get(i));
+                double mi = Geo.distance(p, lerp(g.get(i - 1), g.get(i), ti));
+                if (mi < m) {
+                    seg = i;
+                    t = ti;
+                    m = mi;
+                }
+            }
+            if (m <= bestM && !crossesBigRoad(p, lerp(g.get(seg - 1), g.get(seg), t), e)) {
+                best = e;
+                bestSeg = seg;
+                bestT = t;
+                bestM = m;
+            }
+        }
+        if (best == null) {
+            return nearestByNode(p, within, usable);
+        }
+        return snapOn(p, best, bestSeg, bestT, bestM, within);
+    }
+
+    /** 30m 안 후보가 없을 때의 예전 방식: 가장 가까운 노드와 그 노드에 이어진 길 */
+    private Snap nearestByNode(double[] p, Set<Long> within, Predicate<RoadEdge> usable) {
         Long near = null;
         double nearM = Double.MAX_VALUE;
         for (Map.Entry<Long, double[]> n : nodes.entrySet()) {
@@ -163,10 +211,47 @@ public final class RoadGraph {
         if (best == null) {
             return new Snap(near, nearM);
         }
-        long node = split(best, bestSeg, bestT);
+        return snapOn(p, best, bestSeg, bestT, bestM, within);
+    }
+
+    /** 길 e의 seg번째 선분 t 위치에 붙인다. 발까지 거리 m */
+    private Snap snapOn(double[] p, RoadEdge e, int seg, double t, double m, Set<Long> within) {
+        long node = split(e, seg, t);
         within.add(node);
         // 길 끝 노드에 붙였으면(나누지 않음) 그 노드까지 거리
-        return new Snap(node, node < 0 ? bestM : Geo.distance(p, nodes.get(node)));
+        return new Snap(node, node < 0 ? m : Geo.distance(p, nodes.get(node)));
+    }
+
+    /** 점 p에서 at까지 곧은 줄이 큰 길(at이 놓인 길 skip은 빼고)을 가로지르는지 */
+    private boolean crossesBigRoad(double[] p, double[] at, RoadEdge skip) {
+        for (RoadEdge e : graph.edgeSet()) {
+            if (e.equals(skip) || e.highway() == null || !BIG_ROADS.contains(e.highway())) {
+                continue;
+            }
+            List<double[]> g = e.geometry();
+            for (int i = 1; i < g.size(); i++) {
+                if (crosses(p, at, g.get(i - 1), g.get(i))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 선분 a-b와 c-d가 엄밀히 엇갈리는지. 끝점이 다른 선분 위에 닿기만 하면 아니다 (발이 큰 길과 만나는 교차로 노드에
+     * 놓여도 건넘이 아니다). 경도에 cos(위도)를 곱한 평면에서 잰다
+     */
+    private static boolean crosses(double[] a, double[] b, double[] c, double[] d) {
+        double k = Math.cos(Math.toRadians(a[1]));
+        return side(a, b, c, k) * side(a, b, d, k) < 0 && side(c, d, a, k) * side(c, d, b, k) < 0;
+    }
+
+    /** o→q 줄에서 r이 왼쪽이면 양수, 오른쪽이면 음수, 줄 위면 0 */
+    private static double side(double[] o, double[] q, double[] r, double k) {
+        double s = (q[0] - o[0]) * k * (r[1] - o[1]) - (q[1] - o[1]) * (r[0] - o[0]) * k;
+        // 1e-15도²(11m 선분에서 1µm쯤) 안은 줄 위로 본다. 교차로 노드에 놓인 발의 반올림 오차
+        return Math.abs(s) < 1e-15 ? 0 : s;
     }
 
     /**
