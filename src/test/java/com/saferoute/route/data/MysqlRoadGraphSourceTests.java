@@ -52,6 +52,25 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    void lanesOnewayWidthFromTags() {
+        // 폭은 단위 표기가 섞여 앞의 숫자만
+        assertThat(MysqlRoadGraphSource.widthM("7")).isEqualTo(7.0);
+        assertThat(MysqlRoadGraphSource.widthM("7 m")).isEqualTo(7.0);
+        assertThat(MysqlRoadGraphSource.widthM("7.5")).isEqualTo(7.5);
+        assertThat(MysqlRoadGraphSource.widthM("abc")).isNull();
+        assertThat(MysqlRoadGraphSource.widthM(null)).isNull();
+        assertThat(MysqlRoadGraphSource.lanes("4")).isEqualTo(4);
+        assertThat(MysqlRoadGraphSource.lanes("abc")).isNull();
+        // yes·1·true 그린 방향, -1 반대, no 등 양방, 없으면 null
+        assertThat(MysqlRoadGraphSource.oneway("yes")).isEqualTo(1);
+        assertThat(MysqlRoadGraphSource.oneway("1")).isEqualTo(1);
+        assertThat(MysqlRoadGraphSource.oneway("true")).isEqualTo(1);
+        assertThat(MysqlRoadGraphSource.oneway("-1")).isEqualTo(-1);
+        assertThat(MysqlRoadGraphSource.oneway("no")).isZero();
+        assertThat(MysqlRoadGraphSource.oneway(null)).isNull();
+    }
+
+    @Test
     void sidewalkFromTags() {
         assertThat(MysqlRoadGraphSource.sidewalk("right", null, null, null)).isEqualTo("right");
         assertThat(MysqlRoadGraphSource.sidewalk("none", null, null, null)).isEqualTo("no");

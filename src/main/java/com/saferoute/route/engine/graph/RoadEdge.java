@@ -11,9 +11,18 @@ import java.util.Map;
  * @param geometry from에서 to 순서의 선. 점은 {경도, 위도}
  * @param sidewalk 차도 옆 인도가 어느 쪽에 있는지 (from에서 to로 볼 때): left, right, both, no. 모르면 null
  * @param name     road_edge.name. 지하 길 "문화전당역 3번 출구 계단"·"금남지하상가"를 설명에 쓴다. 모르면 null
+ * @param lanes    차로 수 (tags.lanes). 모르면 null
+ * @param oneway   차가 다니는 방향 (tags.oneway): 1 그린 방향, -1 반대 방향, 0 양방, 태그 없으면 null. 사람은 어느 쪽으로든 걷는다
+ * @param widthM   차도 폭(m, tags.width). 모르면 null
  */
 public record RoadEdge(long id, long from, long to, double lengthM, String highway,
-        List<double[]> geometry, EdgePenalty penalty, String sidewalk, String name) {
+        List<double[]> geometry, EdgePenalty penalty, String sidewalk, String name, Integer lanes, Integer oneway,
+        Double widthM) {
+
+    public RoadEdge(long id, long from, long to, double lengthM, String highway,
+            List<double[]> geometry, EdgePenalty penalty, String sidewalk, String name) {
+        this(id, from, to, lengthM, highway, geometry, penalty, sidewalk, name, null, null, null);
+    }
 
     public RoadEdge(long id, long from, long to, double lengthM, String highway,
             List<double[]> geometry, EdgePenalty penalty, String sidewalk) {

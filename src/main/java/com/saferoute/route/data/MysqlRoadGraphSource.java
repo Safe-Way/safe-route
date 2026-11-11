@@ -34,6 +34,8 @@ import com.saferoute.route.engine.graph.UndergroundLinks;
  *       산길은 등산 난이도(sac_scale)가 있으면 산행 길(휠체어 제외), 없으면 포장으로 보되 "확인 안 됨"</li>
  *   <li>인도 쪽 ({@link #sidewalk}): tags.sidewalk(both·left·right·no), 없으면 sidewalk:both·left·right.
  *       경로 응답의 안내용이고 비용에는 쓰지 않는다</li>
+ *   <li>차로 수·일방통행·폭 ({@link #lanes}, {@link #oneway}, {@link #widthM}, 2026-11-11): tags.lanes·oneway·width.
+ *       앱이 경로 선을 인도 쪽으로 옮겨 그리는 거리 계산용이고 비용에는 쓰지 않는다</li>
  *   <li>지붕: road_edge.covered = 1이면 지붕 있는 길 (비 오는 날 기준, 2026-11-09)</li>
  *   <li>지하 길 (2026-11-09): road_edge_excluded의 reason = underground 줄(A파트가 그린 역 출구 계단·엘리베이터, 대합실,
  *       금남지하상가 통로). 같이 읽어 두되 비 올 때 운행 시간 안에만 요청 도로망에 넣고, 출구 점(road_node_excluded tags.attach_edge)을
@@ -184,7 +186,8 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
                     new EdgePenalty(values,
                             rs.getObject("wheelchair_ramp") == null ? null : rs.getInt("wheelchair_ramp") == 1),
                     sidewalk(rs.getString("sw"), rs.getString("sw_both"), rs.getString("sw_left"),
-                            rs.getString("sw_right")), rs.getString("name"));
+                            rs.getString("sw_right")), rs.getString("name"), lanes(rs.getString("lanes")),
+                    oneway(rs.getString("oneway")), widthM(rs.getString("width")));
         });
         List<UndergroundLinks.Exit> exits = jdbc.query("SELECT id, lon, lat,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(tags, '$.attach_edge')) AS attach_edge FROM road_node_excluded"
@@ -231,6 +234,9 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
                 + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.\"sidewalk:both\"')) AS sw_both,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.\"sidewalk:left\"')) AS sw_left,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.\"sidewalk:right\"')) AS sw_right,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.lanes')) AS lanes,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.oneway')) AS oneway,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.width')) AS width,"
                 + " ST_AsText(" + t + ".geom) AS wkt, " + curb + " AS curb, " + footbridge + " AS footbridge_ok";
     }
 
@@ -308,6 +314,40 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             case "no" -> false;
             default -> null;
         };
+    }
+
+    /** 차로 수 (tags.lanes). 앞의 숫자만 읽는다. 없거나 1보다 작으면 null */
+    static Integer lanes(String v) {
+        Double n = leadingNumber(v);
+        return n == null || n < 1 ? null : n.intValue();
+    }
+
+    /** 차도 폭(m, tags.width). "7", "7 m", "7.5"처럼 단위 표기가 섞여 앞의 숫자만 읽는다. 없거나 0 이하면 null */
+    static Double widthM(String v) {
+        Double n = leadingNumber(v);
+        return n == null || n <= 0 ? null : n;
+    }
+
+    /** 일방통행 (tags.oneway): yes·1·true → 1(그린 방향), -1 → -1(반대 방향), 그 밖(no 등) → 0(양방), 없음 → null */
+    static Integer oneway(String v) {
+        if (v == null || v.isBlank()) {
+            return null;
+        }
+        return switch (v.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "yes", "1", "true" -> 1;
+            case "-1" -> -1;
+            default -> 0;
+        };
+    }
+
+    private static final java.util.regex.Pattern LEADING_NUMBER = java.util.regex.Pattern.compile("^\\s*(\\d+(?:\\.\\d+)?)");
+
+    private static Double leadingNumber(String v) {
+        if (v == null) {
+            return null;
+        }
+        java.util.regex.Matcher m = LEADING_NUMBER.matcher(v);
+        return m.find() ? Double.valueOf(m.group(1)) : null;
     }
 
     /** 확인된 비포장 재질인지. 값이 없으면 false */
