@@ -165,6 +165,9 @@ final class Sentences {
         if (walk && plan.night()) {
             sb.append(" 밤이라 가로등이 많은 밝은 길로 골랐어요.");
         }
+        if (w.rain()) {
+            sb.append(roof(best));
+        }
         if (t.convo.bodyNote() != null) {
             sb.append(" 몸이 불편하시다고 해서 덜 걷는 쪽을 먼저 봤어요. 힘드시면 '쉴 곳 어디 있어'라고 물어보세요.");
         } else if ("senior".equals(mode) && walk && best.rest() != null && best.rest() > 0) {
@@ -252,6 +255,38 @@ final class Sentences {
             }
         }
         return null;
+    }
+
+    /**
+     * 비 오는 날 이 길에서 지붕 아래(지하 포함)로 걷는 길이. 엔진 covered.roof 를 그대로 더한다 (원일님 2026-11-09).
+     * 걷기는 그 경로 하나, 대중교통은 걷는 구간들. 10m 단위로 말하고 0이면 말하지 않는다.
+     * "이 길은 600m가 지붕 있는 길(지하 포함)이에요." / "걷는 길 중 300m는 지붕 있는 길(지하 포함)이에요."
+     */
+    static String roof(Trip t) {
+        boolean walk = "walk".equals(t.type());
+        int m = 0;
+        if (walk) {
+            m = roofM(t.walkRoute());
+        } else {
+            for (TransitResult.Leg l : t.legs()) {
+                if ("walk".equals(l.type())) {
+                    m += roofM(l.walkRoute());
+                }
+            }
+        }
+        int said = Math.round(m / 10f) * 10;
+        if (said <= 0) {
+            return "";
+        }
+        return walk ? " 이 길은 " + said + "m가 지붕 있는 길(지하 포함)이에요."
+                : " 걷는 길 중 " + said + "m는 지붕 있는 길(지하 포함)이에요.";
+    }
+
+    private static int roofM(RouteResult.Route r) {
+        if (r == null || r.covered() == null) {
+            return 0;
+        }
+        return r.covered().getOrDefault("roof", 0);
     }
 
     static TripScorer.Context ctx(WeatherDust w) {
