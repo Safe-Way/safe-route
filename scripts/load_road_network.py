@@ -6,6 +6,8 @@
   출발·도착할 때 엔진이 고리를 한 바퀴 돌아야 줄기로 나갈 수 있다고 본다 (2026-11-10, 원일님 확인 182줄).
 - 걷는 방향은 양쪽 모두로 본다(일방통행은 차에만 해당).
 - 같은 OSM 길·점을 다시 넣으면 지우고 새로 넣으므로 여러 번 실행해도 된다.
+- 현장에서 막혀 있던 길(data/survey/blocked_edges.csv, OSM이 아직 못 고친 곳)은 road_edge_excluded(reason = field_blocked)로
+  뺀다 (2026-11-11, 현장 시험). 이미 들어간 DB에는 scripts/apply_field_blocked.py로 뺀다.
 - 표는 먼저 만든다: src/main/resources/db/migration/007_road_network.sql
 - 계단의 휠체어 경사로(wheelchair_ramp, 018)는 tags의 ramp:wheelchair·ramp로 DB가 계산하므로 여기서 따로 넣지 않는다.
 
@@ -142,6 +144,26 @@ def excluded_reason(tags):
     return None
 
 
+def field_blocked():
+    """현장에서 막혀 있던 길: {(OSM 길 번호, 작은 점 번호, 큰 점 번호)} (data/survey/blocked_edges.csv)"""
+    path = os.path.join(ROOT, "data", "survey", "blocked_edges.csv")
+    if not os.path.exists(path):
+        return set()
+    import csv
+    with open(path, encoding="utf-8") as f:
+        return {(int(r["way_id"]), *sorted((int(r["from_node"]), int(r["to_node"])))) for r in csv.DictReader(f)}
+
+
+BLOCKED = field_blocked()
+
+
+def edge_reason(e):
+    """구간을 도로망에서 뺄 이유 (현장에서 막힘 → 자동차전용도로 순), 없으면 None"""
+    if (e["way_id"], *sorted((e["from"], e["to"]))) in BLOCKED:
+        return "field_blocked"
+    return excluded_reason(e["tags"])
+
+
 def walkable(tags):
     """걸어서 지날 수 없는 길을 뺀다 (보행 금지, 사유지, 면으로 그린 광장 테두리)"""
     if tags.get("area") == "yes":
@@ -223,9 +245,9 @@ def build(data):
 
 
 def split_excluded(vertices, edges):
-    """자동차전용도로 구간을 따로 떼어 낸다. 남은 길에 쓰이는 점만 남기고, 뺀 길에만 쓰이던 점은 따로 돌려준다 (021)"""
-    kept = [e for e in edges if not excluded_reason(e["tags"])]
-    dropped = [e for e in edges if excluded_reason(e["tags"])]
+    """자동차전용도로·현장에서 막힌 구간을 따로 떼어 낸다. 남은 길에 쓰이는 점만 남기고, 뺀 길에만 쓰이던 점은 따로 돌려준다 (021)"""
+    kept = [e for e in edges if not edge_reason(e)]
+    dropped = [e for e in edges if edge_reason(e)]
     used = {x for e in kept for x in (e["from"], e["to"])}
     dropped_ids = {x for e in dropped for x in (e["from"], e["to"])} - used
     return ([v for v in vertices if v["id"] in used], kept, dropped,
@@ -277,7 +299,7 @@ def write_sql(path, vertices, edges, title, total_ways, dropped=(), dropped_node
         for i in range(0, len(dropped), BATCH):
             f.write("INSERT INTO road_edge_excluded (way_id, seq, from_node, to_node, length_m, highway, name, footway,"
                     " steps, covered, bridge, surface, tags, geom, reason) VALUES\n"
-                    + ",\n".join(edge_row(e)[:-1] + f",{q(excluded_reason(e['tags']))})" for e in dropped[i:i + BATCH])
+                    + ",\n".join(edge_row(e)[:-1] + f",{q(edge_reason(e))})" for e in dropped[i:i + BATCH])
                     + ";\n")
         # 뺀 길에만 쓰이던 점: 예전에 road_node에 들어간 것은 지우고 road_node_excluded에 보관 (021)
         for i in range(0, len(dropped_nodes), BATCH):
@@ -347,7 +369,8 @@ def main():
     vertices, edges, dropped, dropped_nodes = split_excluded(vertices, edges)
     if dropped:
         km = sum(e["length"] for e in dropped) / 1000
-        print(f"자동차전용도로 구간 {len(dropped)}개({km:.1f}km)는 road_edge_excluded로 뺌 (motorroad·expressway=yes), "
+        print(f"자동차전용도로·현장에서 막힌 구간 {len(dropped)}개({km:.1f}km)는 road_edge_excluded로 뺌 "
+              f"(motorroad·expressway=yes, 막힌 길 {sum(1 for x in dropped if edge_reason(x) == 'field_blocked')}개), "
               f"그 길에만 쓰이던 점 {len(dropped_nodes)}개는 road_node_excluded로 뺌")
     if changed_only:
         pick = lollipop_way_ids(data)
