@@ -45,8 +45,9 @@ def main():
     try:
         where = " OR ".join(match(w, a, b) for w, a, b, _ in rows)
         found = R.query(cmd, f"SELECT id, way_id, IFNULL(name, ''), highway, ROUND(length_m) FROM road_edge WHERE {where}")
-        done = {int(x[0]) for x in R.query(cmd, f"SELECT way_id FROM road_edge_excluded WHERE reason = '{REASON}' AND ({where})")}
-        print(f"목록 {len(rows)}곳 → 도로망에 남은 구간 {len(found)}개, 이미 뺀 구간 {len(done)}개")
+        gone = R.query(cmd, f"SELECT way_id FROM road_edge_excluded WHERE reason = '{REASON}' AND ({where})")
+        done = {int(x[0]) for x in gone}
+        print(f"목록 {len(rows)}곳 → 도로망에 남은 구간 {len(found)}개, 이미 뺀 구간 {len(gone)}개")
         for eid, way, name, hw, m in found:
             print(f"  road_edge {eid} (OSM 길 {way}, {hw} {name}, {m}m)")
         for w, a, b, memo in rows:
