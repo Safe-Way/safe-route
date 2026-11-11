@@ -191,4 +191,24 @@ class RetryAndRelaxTests {
         assertThatThrownBy(() -> s.route(toward(north(T, 70), "wheelchair")))
                 .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
     }
+
+    @Test
+    void wheelchairResnappedToTheMiddleOfARoadStillGetsDarkStretches() {
+        // 큰길 S–A–B–T 가운데(A–B) 북쪽 20m에 계단으로만 드나드는 보행로. 도착점이 그 보행로 위라, 휠체어는 A–B 길 중간에
+        // 다시 붙으며 그 길을 나눈다. 나눈 조각에도 커버율이 있어야 밤 어두운 구간 안내가 나온다 (specs/011 D9)
+        double[] a = {126.931, LAT};
+        double[] b = {126.933, LAT};
+        double[] d = north(new double[] {126.932, LAT}, 20);
+        double[] p1 = {126.9317, d[1]};
+        double[] p2 = {126.9323, d[1]};
+        RoadGraph g = new RoadGraph(Map.of(1L, S, 2L, a, 3L, b, 4L, T, 5L, p1, 6L, p2), List.of(
+                edge(1, 1, 2, S, a, EdgePenalty.NONE), edge(2, 2, 3, a, b, EdgePenalty.NONE),
+                edge(3, 3, 4, b, T, EdgePenalty.NONE), edge(4, 5, 6, p1, p2, EdgePenalty.NONE),
+                edge(5, 6, 4, p2, T, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0)))));
+
+        RouteResult r = TestRoutes.service(g, TestRoutes.pois(List.of()), 21).route(toward(d, "wheelchair"));
+
+        assertThat(r.explanation().text()).contains("도착점 근처 약 20m는 휠체어로 이어진 길이 확인되지 않았습니다");
+        assertThat(r.routes().get(0).dark()).isNotEmpty();
+    }
 }

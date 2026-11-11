@@ -104,10 +104,12 @@ class MysqlRoadGraphSourceTests {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         new MysqlRoadGraphSource(jdbc).covers(126.92, 35.14);
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-        verify(jdbc, times(2)).query(sql.capture(), any(RowMapper.class));
+        verify(jdbc, times(3)).query(sql.capture(), any(RowMapper.class));
         assertThat(sql.getAllValues().get(0))
                 .contains("x.reason IN ('underground', 'plaza')")
                 .contains("x.reason = 'underground' AS underground")
                 .contains("x.reason = 'plaza' AS plaza");
+        // 건널 수 있는 곳 점: 횡단보도 시설 ∪ OSM 신호등 점 (specs/011)
+        assertThat(sql.getAllValues().get(2)).contains("kind = 'crosswalk'").contains("highway = 'traffic_signals'");
     }
 }

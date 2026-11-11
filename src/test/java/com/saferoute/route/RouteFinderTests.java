@@ -122,4 +122,35 @@ class RouteFinderTests {
         assertThatThrownBy(() -> RouteFinder.find(g, S, M, null, 0, e -> e.penalty().get(Penalty.CURB) < 1, false))
                 .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
     }
+
+    @Test
+    void pathOnTheSplitGraphHasTheOriginalEdges() {
+        // 큰길 W–X–E (X에서 나뉨), X 북쪽 골목 NX, NX에서 북쪽으로 돌아 E로 가는 길 (specs/011)
+        double[] w = {126.9300, LAT};
+        double[] x = {126.9311, LAT};
+        double[] e = {126.9322, LAT};
+        double[] nx = {126.9311, LAT + 0.00045};
+        double[] q = {126.93165, LAT + 0.0012};
+        RoadEdge big = new RoadEdge(21, 2, 3, 100, "primary", List.of(x, e), EdgePenalty.NONE);
+        RoadGraph g = new RoadGraph(Map.of(1L, w, 2L, x, 3L, e, 5L, nx, 6L, q), List.of(
+                new RoadEdge(20, 1, 2, 100, "primary", List.of(w, x), EdgePenalty.NONE), big,
+                edge(22, 2, 5, x, nx, EdgePenalty.NONE), edge(23, 5, 6, nx, q, EdgePenalty.NONE),
+                edge(24, 6, 3, q, e, EdgePenalty.NONE)));
+        com.saferoute.route.engine.graph.Crossings c = new com.saferoute.route.engine.graph.Crossings(g, List.of());
+        assertThat(c.graph()).isNotSameAs(g);
+
+        // 행사·신고 피하기는 원래 길 번호로 정한 조건을 그대로 쓴다
+        RouteFinder.Found f = RouteFinder.find(c.graph(), 5, 3, e2 -> e2.id() == 21 ? 1 : 0, 0, e2 -> true, null,
+                List.of(e2 -> e2.id() == 21));
+
+        // 복사 길을 지난 최단도 원래 길 객체로 돌아온다
+        assertThat(f.shortest().edges()).extracting(RoadEdge::id).containsExactly(22L, 21L);
+        assertThat(f.shortest().edges().get(1)).isSameAs(big);
+        assertThat(f.shortest().line().get(0)).isEqualTo(nx);
+        assertThat(f.safe().edges()).extracting(RoadEdge::id).containsExactly(23L, 24L);
+        // 비용 람다도 원래 길 번호로 본다 (피하기 조건 없이 비용만으로 21번을 피함)
+        RouteFinder.Found cost = RouteFinder.find(c.graph(), 5, 3, e2 -> e2.id() == 21 ? 1000 : 0, 0, e2 -> true, null,
+                List.of());
+        assertThat(cost.safe().edges()).extracting(RoadEdge::id).containsExactly(23L, 24L);
+    }
 }

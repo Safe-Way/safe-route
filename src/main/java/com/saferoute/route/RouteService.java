@@ -33,6 +33,7 @@ import com.saferoute.route.engine.explain.RouteResultAssembler;
 import com.saferoute.route.engine.facility.Nearby;
 import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.geo.Geo;
+import com.saferoute.route.engine.graph.Crossings;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadGraph;
@@ -63,7 +64,8 @@ import com.saferoute.situation.WeatherDustService;
  *       지금 유효한 신고 지점(진행표 w11)도 kind "신고"인 행사처럼 넣는다: 뷰의 avoid_modes면 그 길을 조건부로 피하고,
  *       cost_modes면 그 길에 그 모드 걸음 1분만큼 비용만 더한다</li>
  *   <li>모드·낮밤 기준으로 길마다 더할 비용: {@link RouteScorer} (시설 커버율을 요청 때 계산)</li>
- *   <li>최단·안전 경로: {@link RouteFinder}. 못 찾으면 범위를 넓혀 한 번 더 찾는다.
+ *   <li>최단·안전 경로: {@link RouteFinder}. 큰길은 횡단보도·신호에서만 건너도록 찾기만 {@link Crossings}가 나눈 도로망에서 한다.
+ *       못 찾으면 범위를 넓혀 한 번 더 찾는다.
  *       휠체어가 비포장을 지나면 피할 때 얼마나 더 걸리는지 설명에 알린다</li>
  *   <li>시설 세기, 설명, 응답 만들기: {@link RouteResultAssembler}</li>
  * </ol>
@@ -351,17 +353,22 @@ public class RouteService {
             }
         }
         Nearby nearby = nearby(graph, phase, now);
-        // 커버율은 한 번만 계산해 경로 고르기와 어두운 구간 안내(FR-31)에 같이 쓴다
+        // 커버율은 한 번만 계산해 경로 고르기와 어두운 구간 안내(FR-31)에 같이 쓴다 (휠체어 다시 붙이기만 아래에서 다시)
         Coverage cov = scorer.coverage(graph, phase, cond.night(), nearby);
         ToDoubleFunction<RoadEdge> score = scorer.extraCost(cov, phase);
         List<RoadEvent> av = reachable(graph, avoided, snaps);
         // 붙인 뒤에 찾는다: 출발·도착을 붙이며 나눈 길이면 신고 자리 쪽 조각
         java.util.Map<RoadEvent, Long> edges = reportEdges(graph, reports);
         ToDoubleFunction<RoadEdge> extra = withReports(score, reachable(graph, costed, snaps), edges, profile);
+        // 큰길은 횡단보도·신호에서만 건넌다 (specs/011): 찾기만 큰길 노드를 양쪽으로 나눈 도로망에서 한다. 붙이기 뒤에 만든다
+        // shortcut: 나눈 도로망에서 경로가 없으면 그대로 NO_ROUTE (측정 0쌍). 생기면 나누지 않은 도로망으로 한 번 더 찾고 알리기
+        List<double[]> crossable = roads.crossingPoints(
+                BBox.around(new ArrayList<>(graph.nodes().values()), Crossings.NODE_M));
+        Crossings cross = new Crossings(graph, crossable);
         RouteException failed;
         try {
-            return joined(legs(graph, snaps, extra, score, profile, wideDetour, asides(graph, av, edges), cov, stops), snaps,
-                    nearby, List.of(), cov, av, edges, profile.avoid());
+            return joined(legs(cross.graph(), sides(cross, snaps, points), extra, score, profile, wideDetour,
+                    asides(graph, av, edges), cov, stops), snaps, nearby, List.of(), cov, av, edges, profile.avoid());
         } catch (RouteException e) {
             if (profile.exclude().isEmpty()) {
                 throw e;
@@ -385,6 +392,11 @@ public class RouteService {
             throw failed;
         }
         List<RoadGraph.Snap> moved = placed.stream().map(Placed::snap).toList();
+        // 다시 붙이며 나눈 길 조각도 커버율이 있도록 붙인 뒤 다시 계산한다. 앞의 것을 쓰면 그 조각이 covered 0·표본 없음이라
+        // 어두운 구간 안내가 통째로 빠졌다 (specs/011 D9)
+        cov = scorer.coverage(graph, phase, cond.night(), nearby);
+        score = scorer.extraCost(cov, phase);
+        cross = new Crossings(graph, crossable);
         List<RoadEvent> movedAv = reachable(graph, avoided, moved);
         // 다시 붙이며 길을 나눴으면 그 길은 지워지고 임시 조각 둘이 된다. 신고된 길이었으면 예전 번호로는 피하기·비용·지났는지에서
         // 그 신고가 조용히 빠지므로 다시 찾는다
@@ -394,9 +406,19 @@ public class RouteService {
             String which = k == 0 ? "출발점" : k == placed.size() - 1 ? "도착점" : stopName(stops, k - 1);
             placeNote(which, placed.get(k), profile).ifPresent(notes::add);
         }
-        return joined(legs(graph, moved, withReports(score, reachable(graph, costed, moved), movedEdges, profile), score,
+        return joined(legs(cross.graph(), sides(cross, moved, points),
+                withReports(score, reachable(graph, costed, moved), movedEdges, profile), score,
                 profile, wideDetour, asides(graph, movedAv, movedEdges), cov, stops), moved,
                 nearby, notes, cov, movedAv, movedEdges, profile.avoid());
+    }
+
+    /** 붙인 노드가 큰길 위라 나뉘었으면 요청 점이 있는 쪽 노드로 (탐색용 도로망 번호). 붙인 거리는 그대로 */
+    private static List<RoadGraph.Snap> sides(Crossings cross, List<RoadGraph.Snap> at, List<double[]> points) {
+        List<RoadGraph.Snap> out = new ArrayList<>();
+        for (int k = 0; k < at.size(); k++) {
+            out.add(new RoadGraph.Snap(cross.place(at.get(k).node(), points.get(k)), at.get(k).distanceM()));
+        }
+        return out;
     }
 
     /** 구간 결과를 이어 하나의 시도로. 붙인 거리는 출발·도착만 더한다 (들를 곳 가게에서 길까지는 머무는 일에 가깝다) */

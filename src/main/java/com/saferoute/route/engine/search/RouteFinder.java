@@ -158,13 +158,14 @@ public final class RouteFinder {
     }
 
     private static Graph<Long, RoadEdge> mask(RoadGraph graph, Predicate<RoadEdge> passable) {
-        return new MaskSubgraph<>(graph.graph(), v -> false, e -> !passable.test(e));
+        // 탐색용으로 나눈 도로망({@link com.saferoute.route.engine.graph.Crossings})의 복사 길도 원래 길로 판단한다
+        return new MaskSubgraph<>(graph.graph(), v -> false, e -> !passable.test(graph.original(e)));
     }
 
     private static RoadPath search(RoadGraph graph, Graph<Long, RoadEdge> usable, long from, long to,
             ToDoubleFunction<RoadEdge> cost) {
         // 요청마다 비용을 덧씌운 보기만 만들고, 여러 요청이 함께 쓰는 그래프는 그대로 둔다
-        var weighted = new AsWeightedGraph<>(usable, cost::applyAsDouble, false, false);
+        var weighted = new AsWeightedGraph<>(usable, e -> cost.applyAsDouble(graph.original(e)), false, false);
         // 비용은 길이보다 작아지지 않으므로 직선거리를 A* 추정값으로 쓸 수 있다.
         // 도로망 길이를 다른 지구 반지름으로 쟀을 수 있어 1% 낮춰 잡는다 (넘게 잡으면 최단을 놓친다)
         AStarAdmissibleHeuristic<Long> straight =

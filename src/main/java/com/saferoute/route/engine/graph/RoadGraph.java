@@ -28,8 +28,8 @@ public final class RoadGraph {
     /** 점에서 이 거리 안의 길을 모두 붙일 후보로 본다 (2026-11-11, 진행표 w14 요청 값) */
     static final double SNAP_CANDIDATE_M = 30;
 
-    /** 걸어서 아무 데서나 못 건너는 큰 길. 붙일 때 점과 길 사이에 있으면 건너편 길로 안 붙인다 */
-    private static final Set<String> BIG_ROADS = Set.of("primary", "primary_link", "secondary", "secondary_link",
+    /** 걸어서 아무 데서나 못 건너는 큰 길. 붙일 때 점과 길 사이에 있으면 건너편 길로 안 붙이고, 탐색은 횡단보도에서만 건넌다 ({@link Crossings}) */
+    static final Set<String> BIG_ROADS = Set.of("primary", "primary_link", "secondary", "secondary_link",
             "trunk", "trunk_link");
 
     /** 길을 나눌 때 새로 만드는 노드·길 번호. OSM 번호(양수)와 겹치지 않게 음수 */
@@ -38,8 +38,16 @@ public final class RoadGraph {
     private final Graph<Long, RoadEdge> graph = new WeightedPseudograph<>(RoadEdge.class);
     private final Map<Long, double[]> nodes = new HashMap<>();
 
+    /** 탐색용으로 나눈 도로망({@link Crossings})의 복사 길 번호 → 원래 길. 나누지 않은 도로망은 비어 있다 */
+    private final Map<Long, RoadEdge> originals;
+
     /** @param nodes 노드 번호 → {경도, 위도} */
     public RoadGraph(Map<Long, double[]> nodes, List<RoadEdge> edges) {
+        this(nodes, edges, Map.of());
+    }
+
+    RoadGraph(Map<Long, double[]> nodes, List<RoadEdge> edges, Map<Long, RoadEdge> originals) {
+        this.originals = originals;
         nodes.forEach((id, p) -> {
             this.nodes.put(id, p);
             graph.addVertex(id);
@@ -54,6 +62,11 @@ public final class RoadGraph {
 
     public Graph<Long, RoadEdge> graph() {
         return graph;
+    }
+
+    /** 복사 길이면 원래 길, 아니면 그대로. 행사·신고 피하기, 커버율, 지붕·계단 판단이 원래 길 번호·객체를 쓴다 */
+    public RoadEdge original(RoadEdge e) {
+        return originals.getOrDefault(e.id(), e);
     }
 
     /** {경도, 위도} */

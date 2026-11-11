@@ -17,7 +17,7 @@ import com.saferoute.route.engine.graph.RoadGraph;
  */
 public record RoadPath(List<RoadEdge> edges, List<double[]> line, double lengthM) {
 
-    /** JGraphT 경로를 걸어가는 방향으로 이어 붙인 선으로 바꾼다 */
+    /** JGraphT 경로를 걸어가는 방향으로 이어 붙인 선으로 바꾼다. 길은 원래 길로 ({@link RoadGraph#original}) */
     static RoadPath of(GraphPath<Long, RoadEdge> path, RoadGraph graph) {
         List<double[]> line = new ArrayList<>();
         long at = path.getStartVertex();
@@ -32,7 +32,7 @@ public record RoadPath(List<RoadEdge> edges, List<double[]> line, double lengthM
             at = forward ? e.to() : e.from();
             length += e.lengthM();
         }
-        return new RoadPath(List.copyOf(path.getEdgeList()), line, length);
+        return new RoadPath(path.getEdgeList().stream().map(graph::original).toList(), line, length);
     }
 
     /**

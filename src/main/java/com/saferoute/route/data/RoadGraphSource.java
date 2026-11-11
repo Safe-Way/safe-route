@@ -1,5 +1,7 @@
 package com.saferoute.route.data;
 
+import java.util.List;
+
 import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.graph.RoadGraph;
 
@@ -17,5 +19,13 @@ public interface RoadGraphSource {
     /** underground: 지하 길(역 출구·대합실·지하상가)도 넣고 출구를 지상 길에 잇는지. 비 올 때 운행 시간 안에만 true (2026-11-09) */
     default RoadGraph load(BBox box, boolean underground) {
         return load(box);
+    }
+
+    /**
+     * 범위 안 건널 수 있는 곳 점 {경도, 위도} (횡단보도·신호등). 큰길은 이 점 가까이에서만 건넌다 ({@link com.saferoute.route.engine.graph.Crossings}).
+     * 기본값(빈 목록)이면 큰길 선 위 노드에서는 건너지 못하고 교차로·횡단보도 길로만 건넌다
+     */
+    default List<double[]> crossingPoints(BBox box) {
+        return List.of();
     }
 }
