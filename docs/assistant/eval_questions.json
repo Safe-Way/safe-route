@@ -581,9 +581,7 @@
       "weather": "clear",
       "time": "화 18:10",
       "text": "다이소 들르고 집 갈래",
-      "expect_tools": [
-        "search_place"
-      ],
+      "expect_tools": ["plan_stops"],
       "expect": [
         "다이소",
         "집"
@@ -596,9 +594,7 @@
       "weather": "clear",
       "time": "화 18:10",
       "text": "다이소 들렀다가 편의점에서 택배 찾고 집에 갈래",
-      "expect_tools": [
-        "search_place"
-      ],
+      "expect_tools": ["plan_stops"],
       "expect": [
         "다이소",
         "택배"
@@ -611,9 +607,7 @@
       "weather": "clear",
       "time": "화 18:10",
       "text": "먼저 약국 갔다가 다이소 들르고 집에 갈래",
-      "expect_tools": [
-        "search_place"
-      ],
+      "expect_tools": ["plan_stops"],
       "expect": [
         "약국",
         "다이소"
