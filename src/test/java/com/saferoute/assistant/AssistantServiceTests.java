@@ -412,11 +412,17 @@ class AssistantServiceTests {
     @Test
     void serverAddsWheelchairReasonWhenGeminiDropsIt() {
         AssistantReply.Pick walk = new AssistantReply.Pick("walk", null, "22분, 1.4km", 22, null);
+        String why = AssistantService.WHEELCHAIR_WHY;
         assertThat(AssistantService.mustSay("문화전당까지 22분 걸려요.", "wheelchair", walk))
-                .isEqualTo("문화전당까지 22분 걸려요. 확인된 턱과 못 지나는 곳을 피한 길이에요.");
+                .isEqualTo("문화전당까지 22분 걸려요. " + why);
         // 이미 있으면 두 번 붙이지 않음, 다른 모드·대중교통은 그대로
+        assertThat(AssistantService.mustSay("22분 걸려요. " + why, "wheelchair", walk)).isEqualTo("22분 걸려요. " + why);
+        // 제미나이가 "턱을 피한 길"이라고 지어 말하면 그 문장을 빼고 사실대로 (확인된 턱 0개, 11/11 현장 시험)
         assertThat(AssistantService.mustSay("22분 걸려요. 확인된 턱과 못 지나는 곳을 피한 길이에요.", "wheelchair", walk))
-                .isEqualTo("22분 걸려요. 확인된 턱과 못 지나는 곳을 피한 길이에요.");
+                .isEqualTo("22분 걸려요. " + why);
+        assertThat(AssistantService.mustSay("턱을 피해서 골랐어요. 22분 걸려요.", "wheelchair", walk))
+                .isEqualTo("22분 걸려요. " + why);
+        assertThat(why).contains("턱").doesNotContain("계단", "피한 길", "휠체어로");
         assertThat(AssistantService.mustSay("22분 걸려요.", "senior", walk)).isEqualTo("22분 걸려요.");
         AssistantReply.Pick bus = new AssistantReply.Pick("transit", null, "버스 59번", 18, null);
         assertThat(AssistantService.mustSay("18분 걸려요.", "wheelchair", bus)).isEqualTo("18분 걸려요.");

@@ -37,6 +37,15 @@ final class Sentences {
     }
 
     /**
+     * 휠체어로 걷는 길을 추천했을 때 왜 이 길인지 (사실대로, 2026-11-11 현장 시험 뒤).
+     * 엔진은 휠체어가 못 지나는 것으로 확인된 길(경사로 없는 계단·확인된 턱·못 지나는 육교)을 뺀다. 그런데 학교 DB에
+     * 확인된 턱(edge_stat.curb = 1)이 아직 0개라 "턱을 피한 길"이라고 하면 사실과 다르다. 그래서 턱은 신고를 부탁한다.
+     * 점검 2번이 "턱"은 넣고 "계단"은 빼라고 해서 계단은 말하지 않는다.
+     */
+    static final String WHEELCHAIR_WHY = "휠체어가 못 지나는 것으로 확인된 길은 빼고 골랐어요."
+            + " 다만 턱 정보는 아직 적어서, 가다가 높은 턱이 있으면 '여기 턱 있어'라고 말해 주세요.";
+
+    /**
      * 들를 곳 묶기 결과를 말로.
      * 예: "다이소 충장로점, GS25 충장점(택배) 들렀다 집까지 25분 걸려요. 바로 가는 것보다 6분 더 걸려요."
      */
@@ -57,7 +66,7 @@ final class Sentences {
                     .append(p.stops().get(0).name()).append("부터 들르게 했어요.");
         }
         if ("wheelchair".equals(t.mode())) {
-            sb.append(" 확인된 턱과 못 지나는 곳을 피한 길이에요.");
+            sb.append(" ").append(WHEELCHAIR_WHY);
         }
         return sb.toString();
     }
@@ -99,7 +108,7 @@ final class Sentences {
             // "문화전당까지 22분 걸려요." 시간은 모드 기본 속도(잰 적이 있으면 내 속도)로 센 값
             sb.append(dest).append("까지 ").append(best.minutes()).append("분 걸려요.");
             if ("wheelchair".equals(mode)) {
-                sb.append(" 확인된 턱과 못 지나는 곳을 피한 길이에요.");
+                sb.append(" ").append(WHEELCHAIR_WHY);
             }
             if (bad && heavy && plan.scored().others().stream().noneMatch(o -> "transit".equals(o.type()))) {
                 sb.append(" 지금은 버스 길을 찾지 못해서 이 길을 알려 드려요.");
