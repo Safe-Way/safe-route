@@ -265,6 +265,41 @@ final class Sentences {
     }
 
     /** 날씨만 물었을 때 */
+    /**
+     * "오늘 저녁에 걸어도 괜찮을까"의 답. 날씨는 예보가 아니라 지금 값이라 "지금"이라고 말한다.
+     * 해 지는 시각은 저녁·밤을 물었거나 이미 해가 졌을 때만 말한다.
+     */
+    static String walkOk(WeatherDust w, java.time.LocalTime sunset, boolean later, java.time.LocalTime now) {
+        StringBuilder sb = new StringBuilder();
+        if (!w.weatherAvailable() && !w.dustAvailable()) {
+            sb.append("지금은 날씨 정보를 받아 오지 못했어요.");
+        } else {
+            if (!w.weatherAvailable()) {
+                sb.append("지금 날씨는 받아 오지 못했어요.");
+            } else if (w.rain()) {
+                sb.append("지금 비가 와요. 걸으시면 지붕 있는 길을 먼저 찾아 드려요.");
+            } else if (w.heat()) {
+                sb.append("지금 많이 더워요. 물을 챙기시고 쉬어 가며 걸으세요.");
+            } else if (w.cold()) {
+                sb.append("지금 많이 추워요. 따뜻하게 입고 나가세요.");
+            } else {
+                sb.append("지금 날씨는 걷기 괜찮아요.");
+            }
+            if (w.weatherAvailable() && w.tempC() != null) {
+                sb.append(" 기온은 ").append(Math.round(w.tempC())).append("도예요.");
+            }
+            if (w.dustAvailable()) {
+                sb.append(w.dustBad() ? " 미세먼지가 나빠서 마스크를 챙기시면 좋아요." : " 미세먼지는 괜찮아요.");
+            }
+        }
+        if (sunset != null && (later || !now.isBefore(sunset))) {
+            sb.append(" 오늘 해는 ").append(sunset.getHour()).append("시 ").append(sunset.getMinute())
+                    .append("분에 져요. 어두울 때는 가로등과 CCTV가 많은 길로 안내해요.");
+        }
+        sb.append(" 가실 곳을 말씀해 주시면 그 길로 찾아 드릴게요.");
+        return sb.toString();
+    }
+
     static String weather(WeatherDust w) {
         if (!w.weatherAvailable() && !w.dustAvailable()) {
             return "지금은 날씨 정보를 받아 오지 못했어요.";
