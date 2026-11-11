@@ -7,6 +7,7 @@ import static com.saferoute.route.TestRoutes.T_P;
 import static com.saferoute.route.TestRoutes.edge;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -315,7 +316,8 @@ class RouteStopsTests {
             assertThat(t.direction()).isEqualTo("right");
             assertThat(t.atM()).isBetween(364, 366);
         });
-        assertThat(safe.sidewalks()).containsExactly(new RouteResult.Sidewalk(1, 2, "right"));
+        assertThat(safe.sidewalks()).extracting(RouteResult.Sidewalk::from, RouteResult.Sidewalk::to, RouteResult.Sidewalk::side)
+                .containsExactly(tuple(1, 2, "right"));
         assertThat(r.explanation().notes()).extracting(RouteResult.Note::text)
                 .contains("편의점 근처 약 20m는 휠체어로 이어진 길이 확인되지 않았습니다");
     }
@@ -337,8 +339,8 @@ class RouteStopsTests {
         assertThat(r.stops().get(0).atM()).isBetween(299, 301);
         assertThat(r.distanceM()).isBetween(599, 601);
         // 같은 길을 갔다가 되돌아온다: 갈 때 왼쪽, 올 때 오른쪽
-        assertThat(r.sidewalks()).containsExactly(new RouteResult.Sidewalk(1, 2, "left"),
-                new RouteResult.Sidewalk(2, 3, "right"));
+        assertThat(r.sidewalks()).extracting(RouteResult.Sidewalk::from, RouteResult.Sidewalk::to, RouteResult.Sidewalk::side)
+                .containsExactly(tuple(1, 2, "left"), tuple(2, 3, "right"));
     }
 
     @Test

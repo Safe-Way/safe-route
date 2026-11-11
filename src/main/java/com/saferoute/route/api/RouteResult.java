@@ -115,12 +115,22 @@ public record RouteResult(
     }
 
     /**
-     * 차도 구간 하나의 인도 쪽 (OSM sidewalk 태그).
+     * 차도 구간 하나의 인도 쪽과 앱이 경로 선을 인도 쪽으로 옮겨 그릴 거리 (2026-11-11).
+     * 아래 값이 하나라도 바뀌면 구간을 나눈다.
      *
      * @param from, to geometry 점 번호. from번 점부터 to번 점까지의 선
-     * @param side     걷는 방향 기준 left, right, both(양쪽), no(인도 없음), unknown(태그 없음)
+     * @param side     걷는 방향 기준 left, right, both(양쪽), no(인도 없음), unknown(태그 없음).
+     *                 sidewalk 태그가 없고 oneway가 true면 차가 가는 방향 오른쪽, 양방향(또는 모름) primary·secondary·tertiary면
+     *                 both로 본다(대개 양쪽에 인도가 있음, w15). both면 앱이 내 위치 쪽으로 옮긴다
+     * @param highway  길 종류 (OSM highway: primary, secondary, residential 등)
+     * @param lanes    차로 수. 태그가 없으면 null
+     * @param oneway   일방통행 길이면 true(oneway yes·1·true·-1), 아니라고 적혀 있으면 false, 태그가 없으면 null
+     * @param widthM   차도 폭(m). 태그가 없으면 null
+     * @param offsetM  선(차도 가운데)에서 인도 가운데까지(m, 소수 1자리). 차도 반폭 + 1.5.
+     *                 반폭은 widthM/2, 없으면 차로 수 × 3.25/2, 차로 수도 없으면 길 종류·일방 기본 차로 수(oneway가 null이면 양방 값)로 계산해 늘 값이 있다
      */
-    public record Sidewalk(int from, int to, String side) {
+    public record Sidewalk(int from, int to, String side, String highway, Integer lanes, Boolean oneway, Double widthM,
+            double offsetM) {
     }
 
     /**
