@@ -469,6 +469,9 @@ class RuleBrain {
         if (dest != null) {
             AssistantTools.Found f = tools.searchPlace(t, dest);
             switch (f.status()) {
+                case "no_home":
+                    t.convo = t.convo.asked("destination");
+                    return Outcome.ask(AssistantTools.HOME_UNKNOWN);
                 case "none":
                     return Outcome.ask("'" + dest + "'을(를) 찾지 못했어요. 다른 이름으로 말씀해 주시겠어요?");
                 case "error":
@@ -566,6 +569,9 @@ class RuleBrain {
     private Outcome stopDest(Turn t, String dest) {
         AssistantTools.Found f = tools.searchPlace(t, dest);
         switch (f.status()) {
+            case "no_home":
+                t.convo = t.convo.asked("destination");
+                return Outcome.ask(AssistantTools.HOME_UNKNOWN);
             case "none":
                 t.convo = t.convo.asked("destination");
                 return Outcome.ask("'" + dest + "'을(를) 찾지 못했어요. 들르신 뒤 어디로 가실지 다른 이름으로 말씀해 주시겠어요?");

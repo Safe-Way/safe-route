@@ -20,6 +20,8 @@ import tools.jackson.databind.json.JsonMapper;
  * <li>"(오늘 제안)" 질문은 제미나이가 아니라 오늘 제안(TodayService)이 답하므로 뺀다.
  * <li>이어지는 말("context": "7번 바로 뒤")은 앞 질문 뒤 상태를 만든다. last_tools 칸이 있으면 그것을 바로 전 도구로 쓰고,
  * 없으면 앞 질문이 확인을 기다리게 한 저장 도구(PENDING)를 쓴다.
+ * <li>expect_tools 중 제미나이에 보내는 도구(ToolPicker.ALL)만 본다. plan_stops 처럼 규칙이 제미나이 없이 직접 쓰는 도구는
+ * 묶음에 없으므로 뺀다 (37~39번, 2026-11-11 재휘님 #193).
  * </ul>
  */
 class ToolPickerEvalTests {
@@ -37,8 +39,7 @@ class ToolPickerEvalTests {
             if (text.startsWith("(")) {
                 continue;
             }
-            List<String> expect = new ArrayList<>();
-            q.path("expect_tools").forEach(n -> expect.add(n.asString()));
+            List<String> expect = geminiTools(q);
             Conversation c = Conversation.start();
             List<String> last = new ArrayList<>();
             q.path("last_tools").forEach(n -> last.add(n.asString()));
@@ -68,7 +69,7 @@ class ToolPickerEvalTests {
         int narrowed = 0;
         for (JsonNode q : root.path("questions")) {
             String text = q.path("text").asString("");
-            if (text.startsWith("(") || q.path("expect_tools").isEmpty() || q.has("context")) {
+            if (text.startsWith("(") || geminiTools(q).isEmpty() || q.has("context")) {
                 continue;
             }
             needTools++;
@@ -79,5 +80,27 @@ class ToolPickerEvalTests {
             }
         }
         assertThat(narrowed).isEqualTo(needTools);
+    }
+
+    /** 이 질문의 expect_tools 중 제미나이에 보내는 도구만 (규칙 도구 plan_stops 등은 뺌) */
+    static List<String> geminiTools(JsonNode q) {
+        List<String> out = new ArrayList<>();
+        q.path("expect_tools").forEach(n -> out.add(n.asString()));
+        out.retainAll(ToolPicker.ALL);
+        return out;
+    }
+
+    @Test
+    void ruleOnlyToolsAreNotExpectedFromThePicker() {
+        // 37~39번은 expect_tools 가 ["plan_stops"] 뿐: 들를 곳은 규칙(StopReader·StopPlanner)이 먼저 처리한다
+        JsonNode root = JsonMapper.builder().build().readTree(new File("docs/assistant/eval_questions.json"));
+        for (JsonNode q : root.path("questions")) {
+            List<String> all = new ArrayList<>();
+            q.path("expect_tools").forEach(n -> all.add(n.asString()));
+            if (all.contains("plan_stops")) {
+                assertThat(geminiTools(q)).doesNotContain("plan_stops");
+            }
+        }
+        assertThat(ToolPicker.ALL).doesNotContain("plan_stops");
     }
 }
