@@ -210,9 +210,7 @@
       "weather": "clear",
       "time": "금 09:55",
       "text": "오늘 무릎이 아파",
-      "expect_tools": [
-        "recommend_trip"
-      ],
+      "expect_tools": [],
       "expect": [
         "쉴 곳"
       ],
