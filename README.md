@@ -10,6 +10,7 @@
 - 앱: [safe-route-android](https://github.com/Safe-Way/safe-route-android) (안드로이드, Kotlin)
 - 요구사항: [safe-route-docs](https://github.com/Safe-Way/safe-route-docs)의 [requirements.md](https://github.com/Safe-Way/safe-route-docs/blob/main/requirements.md) (결정 59건, 변경 이력 [CHANGELOG.md](https://github.com/Safe-Way/safe-route-docs/blob/main/CHANGELOG.md))
 - 비서 설계 문서: [docs/assistant/](docs/assistant/) (동의 문구, 도구 고르기, 시험 질문, 사용성 점검표)
+- 현장 비교 시험: [docs/field-test/](docs/field-test/2026-11-11.md) (11-11 우리 앱 vs 네이버·카카오 도보, 찾은 문제와 고칠 사람)
 
 ## 주요 기능
 
