@@ -10,7 +10,6 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
@@ -36,13 +35,14 @@ class SideChangesTests {
 
             assertThat(SideChanges.along(path(in, out), 5, graph(in, out), List.of(cw)))
                     .singleElement().satisfies(c -> {
-                        assertThat(c.fromM()).isEqualTo(105);
-                        assertThat(c.toM()).isEqualTo(105);
+                        // 경로 선 첫 점이 응답 geometry 5번: 가운데 노드는 6번
+                        assertThat(c.at()).isEqualTo(6);
                         assertThat(c.lat()).isEqualTo(cw[1]);
                         assertThat(c.lon()).isEqualTo(cw[0]);
                         assertThat(c.kind()).isEqualTo("crossing");
-                        assertThat(c.fromSide()).isEqualTo("left");
-                        assertThat(c.toSide()).isEqualTo("right");
+                        // 횡단보도 점은 양 끝을 모른다
+                        assertThat(c.from()).isNull();
+                        assertThat(c.to()).isNull();
                     });
         }
     }
@@ -57,10 +57,8 @@ class SideChangesTests {
         double[] cw = at(8, 0);
 
         assertThat(SideChanges.along(p, 0, graph(in, out), List.of(cw))).singleElement().satisfies(c -> {
-            assertThat(c.fromM()).isEqualTo(100);
+            assertThat(c.at()).isEqualTo(1);
             assertThat(c.lon()).isEqualTo(cw[0]);
-            assertThat(c.fromSide()).isEqualTo("left");
-            assertThat(c.toSide()).isEqualTo("right");
         });
     }
 
@@ -95,8 +93,7 @@ class SideChangesTests {
 
         assertThat(SideChanges.along(path(w, e), 0, junction, cw)).isEmpty();
         assertThat(SideChanges.along(path(w, n), 0, junction, cw)).singleElement().satisfies(c -> {
-            assertThat(c.fromSide()).isEqualTo("both");
-            assertThat(c.toSide()).isEqualTo("both");
+            assertThat(c.at()).isEqualTo(1);
             assertThat(c.lat()).isEqualTo(at(0, 8)[1]);
         });
         // 큰 길 2개뿐인 모퉁이는 꺾어도 건너지 않는다
@@ -114,23 +111,23 @@ class SideChangesTests {
                     assertThat(c.kind()).isEqualTo("footway");
                     assertThat(c.lon()).isCloseTo(at(10, 0)[0], within(1e-9));
                     assertThat(c.lat()).isCloseTo(at(10, 0)[1], within(1e-9));
+                    // 양 끝은 횡단보도 길의 첫 점·끝 점 [위도, 경도]
+                    assertThat(c.from()).containsExactly(at(10, -8)[1], at(10, -8)[0]);
+                    assertThat(c.to()).containsExactly(at(10, 8)[1], at(10, 8)[0]);
                 });
     }
 
     @Test
-    void walkedCrosswayIsNotSentTwice() {
-        // 0.3m 큰 길 조각 뒤에 그 횡단보도 길을 걷는다: 건너는 곳(100m)이 횡단보도 길 구간 [100, 116] 안
-        Map<Long, double[]> nodes = new HashMap<>(NODES);
-        nodes.put(5L, at(0.3, 0));
-        nodes.put(6L, at(0.3, -16));
-        RoadEdge in = road(1, 1, 0, "primary", "left", nodes);
-        RoadEdge stub = road(2, 0, 5, "primary", "right", nodes);
-        RoadEdge zebra = crosswalk(10, 5, 6, nodes.get(5L), nodes.get(6L));
-        RoadPath p = path(in, stub, zebra);
+    void atCountsEveryGeometryPointOfEarlierEdges() {
+        // 들어오는 큰 길이 꺾임점 하나를 더 가진 선: 서쪽 끝(0번) – 꺾임점(1번) – 가운데 노드(2번)
+        double[] bend = at(-50, 2);
+        List<double[]> line = List.of(at(-100, 0), bend, at(0, 0));
+        RoadEdge in = new RoadEdge(1, 1, 0, Geo.length(line), "primary", line, EdgePenalty.NONE, "left");
+        RoadEdge out = road(2, 0, 2, "primary", "right");
+        RoadPath p = path(in, out);
 
-        assertThat(SideChanges.along(p, 0, graph(in, stub, zebra), List.of())).hasSize(1);
-        assertThat(RouteResultAssembler.crossings(p, p.line().get(0), graph(in, stub, zebra), List.of()))
-                .containsExactly(new RouteResult.Crossing(100, 116, null, null, null, null, null));
+        assertThat(SideChanges.along(p, 0, graph(in, out), List.of(at(8, 0)))).singleElement()
+                .satisfies(c -> assertThat(p.line().get(c.at())).isEqualTo(at(0, 0)));
     }
 
     /** (126.93, LAT)에서 동쪽·북쪽으로 m만큼 떨어진 점 */

@@ -118,7 +118,7 @@ class MysqlRoadGraphSourceTests {
 
     @Test
     void crosswalkPointsAreCrosswalkPoiOnly() {
-        // 응답 crossings의 큰 길 건너는 자리 (specs/014): 신호등 점(교차로 가운데)은 읽지 않는다
+        // 응답 crossAt의 큰 길 건너는 자리 (specs/014): 신호등 점(교차로 가운데)은 읽지 않는다
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         assertThat(new MysqlRoadGraphSource(jdbc).crosswalkPoints(new BBox(126.9, 35.1, 127.0, 35.2))).isEmpty();
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);

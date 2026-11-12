@@ -46,7 +46,7 @@ import com.saferoute.route.engine.graph.UndergroundLinks;
  *       ({@link Penalty#PLAZA}, route.yml wheelchair exclude): 높낮이를 모르는 선이라 높낮이가 다른 광장에서는 계단 양 끝을
  *       곧게 잇는 선이 있어 휠체어가 그 계단을 건너뛰게 된다 (11-10 확인, 광주 44줄, 문화전당 광장 포함. A파트 원래 메모대로).
  *       번호는 지하 길과 같은 -(10억 + id)</li>
- *   <li>횡단보도 점 (2026-11-12, specs/014): poi kind = crosswalk. 응답 crossings의 큰 길 건너는 자리에만 쓴다.
+ *   <li>횡단보도 점 (2026-11-12, specs/014): poi kind = crosswalk. 응답 crossAt의 큰 길 건너는 자리에만 쓴다.
  *       신호등 점은 교차로 가운데라 쓰지 않는다</li>
  * </ul>
  * route.yml의 route.road-source가 mysql일 때 쓴다 (기본값). none이면 {@link NoRoadGraphSource}.
