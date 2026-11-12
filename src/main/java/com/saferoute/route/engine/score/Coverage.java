@@ -11,6 +11,7 @@ import java.util.PriorityQueue;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadGraph;
+import com.saferoute.route.engine.search.RouteFinder;
 
 /**
  * 길마다 기준별 커버율(0~1): 길 길이 중 시설 범위 안에 드는 비율. 요청 때 서버가 계산한다 (DB에는 원값만 있다).
@@ -116,6 +117,7 @@ public final class Coverage {
         for (RoadEdge e : g.graph().edgeSet()) {
             double[] v = out.get(e.id());
             v[Criterion.ROOF.ordinal()] = e.penalty().get(Penalty.COVERED) >= 1 ? 1 : 0;
+            v[Criterion.ALLEY.ordinal()] = RouteFinder.isAlley(e) ? 0 : 1; // 골목길(2026-11-12)도 길 성질
             if (e.penalty().get(Penalty.UNDERGROUND) >= 1) {
                 Arrays.fill(v, 1);
                 if (light != null) { // 표본을 모두 "밝음"으로 (DarkStretches가 이 표본으로 어두운 구간을 만든다)

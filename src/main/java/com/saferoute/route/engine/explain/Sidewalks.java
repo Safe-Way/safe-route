@@ -68,6 +68,34 @@ public final class Sidewalks {
         return stretches(path, offset).stream().map(Stretch::sidewalk).toList();
     }
 
+    /**
+     * 골목길 구간 ({@link RouteFinder#isAlley}, 2026-11-12). 이어진 골목길은 한 구간으로 묶는다. from·to는 {@link #along}과 같은 기준
+     *
+     * @param offset path.line()의 첫 점이 응답 geometry에서 몇 번째인지 ({@link RoadPath#startOffset})
+     */
+    public static List<RouteResult.Alley> alleys(RoadPath path, int offset) {
+        List<RouteResult.Alley> out = new ArrayList<>();
+        int at = offset;
+        int from = -1;
+        double m = 0;
+        for (RoadEdge e : path.edges()) {
+            int to = at + e.geometry().size() - 1;
+            if (RouteFinder.isAlley(e)) {
+                from = from < 0 ? at : from;
+                m += e.lengthM();
+            } else if (from >= 0) {
+                out.add(new RouteResult.Alley(from, at, (int) Math.round(m)));
+                from = -1;
+                m = 0;
+            }
+            at = to;
+        }
+        if (from >= 0) {
+            out.add(new RouteResult.Alley(from, at, (int) Math.round(m)));
+        }
+        return out;
+    }
+
     static List<Stretch> stretches(RoadPath path, int offset) {
         List<Stretch> out = new ArrayList<>();
         boolean[] forward = path.forward();

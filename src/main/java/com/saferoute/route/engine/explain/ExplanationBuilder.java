@@ -27,6 +27,7 @@ import com.saferoute.route.engine.search.RoadPath;
  * 최단 경로의 계단·비포장을 피했으면 "계단을 피하고 쉼 곳 +11곳"·"비포장을 피하는 길로 갑니다"처럼 앞에 말한다.
  * 계단을 일부만 피했으면 "계단 3곳 중 2곳을 피하고 …"처럼 개수로 말한다 (남은 계단은 주의로 따로 알린다).
  * 비 오는 날 지붕 있는 길로 돌았으면 "…더 돌지만 비가 와서 지붕 있는 길 +780m"처럼 시설 차이보다 앞에 말한다 (2026-11-09).
+ * 휠체어가 골목길을 줄였으면 "…더 돌지만 큰 길로 가서 골목길을 64m 줄여요"처럼 말한다 (2026-11-12).
  * 말할 차이가 없으면 route.yml의 note(밤은 "더 밝고 사람 눈이 닿는 길로 갑니다")를 쓴다.
  */
 public final class ExplanationBuilder {
@@ -97,9 +98,23 @@ public final class ExplanationBuilder {
     public static String text(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
             boolean same, boolean capped, int extraM, int extraMin, Map<FacilityGroup, Integer> diff,
             Avoided avoided, int roofGainM) {
+        return text(cond, profile, phase, same, capped, extraM, extraMin, diff, avoided, roofGainM, 0);
+    }
+
+    /**
+     * @param alleyCutM 안전 경로가 최단보다 덜 걷는 골목길(m). 골목길 기준을 쓰는 때(휠체어)에 0보다 크면 돌아간 이유로 말한다:
+     *                  "96m(2분) 더 돌지만 큰 길로 가서 골목길을 64m 줄여요", 시설 차이가 있으면 "…가로등 +12개, 골목길 -64m" (2026-11-12)
+     */
+    public static String text(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
+            boolean same, boolean capped, int extraM, int extraMin, Map<FacilityGroup, Integer> diff,
+            Avoided avoided, int roofGainM, int alleyCutM) {
         boolean rules = phase.hasWeights() || profile.avoidStairs() || profile.avoidUnpaved();
+        // 골목길 기준(휠체어 낮, 2026-11-12)은 길 고르는 기준이지만, 그것만 있으면 문장은 예전 휠체어 낮(기준 없음)과 같게
+        Set<Criterion> rated = EnumSet.noneOf(Criterion.class);
+        rated.addAll(phase.weights().keySet());
+        rated.remove(Criterion.ALLEY);
         // 휠체어 낮: 기준(가중치)은 없고 제외·비포장 조건부 제외만 있다. 최단 그대로면 "지날 수 있는 길 중 가장 짧은 길"
-        if (!profile.exclude().isEmpty() && !phase.hasWeights() && (same || !rules)) {
+        if (!profile.exclude().isEmpty() && rated.isEmpty() && (same || !rules)) {
             return profile.onlyStairsExcluded() ? STAIRLESS : WHEELCHAIR;
         }
         if (!rules) {
@@ -111,7 +126,7 @@ public final class ExplanationBuilder {
         }
         if (same) {
             // 지붕 기준만 있으면(어른·휠체어 낮 비) "가장 안전한 길"이 아니라 비 이유로 말한다
-            if (phase.weights().keySet().equals(Set.of(Criterion.ROOF))) {
+            if (rated.equals(Set.of(Criterion.ROOF))) {
                 return capped ? RAIN_CAPPED : RAIN_SAME;
             }
             return capped ? CAPPED : SAME;
@@ -129,6 +144,10 @@ public final class ExplanationBuilder {
                 .collect(Collectors.joining(", "));
         if (roofGainM > 0 && phase.weight(Criterion.ROOF) > 0) {
             gains = "비가 와서 지붕 있는 길 +" + roofGainM + "m" + (gains.isEmpty() ? "" : ", " + gains);
+        }
+        if (alleyCutM > 0 && phase.weight(Criterion.ALLEY) > 0) {
+            gains = gains.isEmpty() ? "큰 길로 가서 골목길을 %dm 줄여요".formatted(alleyCutM)
+                    : gains + ", 골목길 -" + alleyCutM + "m";
         }
         // "계단을 피하고 쉼 곳 +11곳", 시설 차이가 없으면 "계단을 피하는 길로 갑니다". 일부만 피했으면 "계단 3곳 중 2곳"
         int cut = avoided.shortStairs() - avoided.stairs();
@@ -173,7 +192,7 @@ public final class ExplanationBuilder {
                 }
                 case REST -> out.add(FacilityGroup.REST);
                 case SCHOOL -> out.add(FacilityGroup.SCHOOL);
-                case ROOF -> { } // 시설이 아니라 길 성질. 지붕 있는 길 길이로 따로 말한다
+                case ROOF, ALLEY -> { } // 시설이 아니라 길 성질. 지붕 있는 길·줄인 골목길 길이로 따로 말한다
             }
         }
         return out;

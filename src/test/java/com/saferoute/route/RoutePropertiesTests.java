@@ -46,8 +46,11 @@ class RoutePropertiesTests {
                 Penalty.PLAZA);
         assertThat(wheel.avoidUnpaved()).isTrue();
         assertThat(p.profile("senior").avoidUnpaved()).isFalse();
-        assertThat(wheel.day().hasWeights()).isFalse();
-        assertThat(wheel.night().weights()).containsOnlyKeys(Criterion.LIGHT, Criterion.HELP, Criterion.CCTV);
+        // 골목길 기준 (2026-11-12): 낮은 큰 길만, 밤은 밝기 > 도움 시설 > CCTV > 골목길
+        assertThat(wheel.day().weights()).containsOnlyKeys(Criterion.ALLEY).containsEntry(Criterion.ALLEY, 0.5);
+        assertThat(wheel.night().weights()).containsOnlyKeys(Criterion.LIGHT, Criterion.HELP, Criterion.CCTV, Criterion.ALLEY)
+                .containsEntry(Criterion.ALLEY, 0.5);
+        assertThat(adult.night().weights()).doesNotContainKey(Criterion.ALLEY);
         assertThat(wheel.night().helpM()).isEqualTo(120);
 
         assertThat(p.coverage().lightM()).isEqualTo(30);

@@ -1,7 +1,7 @@
 package com.saferoute.route.engine.score;
 
 /**
- * 경로를 고를 때 보는 기준. 모두 "길 길이 중 시설 범위 안에 드는 비율"(커버율)로 잰다.
+ * 경로를 고를 때 보는 기준. 모두 "길 길이 중 시설 범위 안에 드는 비율"(커버율)로 잰다 (지붕·골목은 길 성질이라 0 또는 1).
  * route.yml의 day·night weights 이름(light, cctv, ...)과 같다.
  */
 public enum Criterion {
@@ -16,5 +16,10 @@ public enum Criterion {
     /** 지금 이용 가능한 쉼터·공중화장실에서 반경 rest-m 안 */
     REST,
     /** 지붕 있는 길 (road_edge.covered). 시설이 아니라 길 성질이라 커버율은 0 또는 1. 비 올 때만 비중을 둔다 (2026-11-09) */
-    ROOF
+    ROOF,
+    /**
+     * 골목길이 아닌 길 ({@link com.saferoute.route.engine.search.RouteFinder#isAlley}). 지붕처럼 길 성질이라 커버율은 0(골목) 또는 1.
+     * 인도 없는 골목은 차와 사람이 같이 써서 아무 데서나 차도를 건너게 된다 (2026-11-12 카카오맵 현장 비교, 휠체어만)
+     */
+    ALLEY
 }

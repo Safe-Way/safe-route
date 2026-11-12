@@ -16,7 +16,9 @@ import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteRequest.Place;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.facility.Poi;
+import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.Penalty;
+import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadEdge.EdgePenalty;
 import com.saferoute.route.engine.graph.RoadGraph;
 
@@ -157,5 +159,61 @@ class ModeRulesTests {
         RoadGraph ramp = RouteFinderTests.diamond(0.0004, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), true));
         assertThat(north(route(ramp, List.of(), at(12), "wheelchair", "auto"))).isFalse();
         assertThat(north(route(ramp, List.of(), at(12), "senior", "auto"))).isTrue();
+    }
+
+    /** 지름길 S–M–T는 인도 없는 골목(residential), 북쪽 S–N–T는 큰 길(tertiary) */
+    static RoadGraph alleyDiamond(double north) {
+        double[] nP = {126.93110, LAT + north};
+        return new RoadGraph(Map.of(TestRoutes.S, TestRoutes.S_P, TestRoutes.M, TestRoutes.M_P, TestRoutes.T,
+                TestRoutes.T_P, TestRoutes.N, nP), List.of(
+                road(10, TestRoutes.S, TestRoutes.M, TestRoutes.S_P, TestRoutes.M_P, "residential"),
+                road(11, TestRoutes.M, TestRoutes.T, TestRoutes.M_P, TestRoutes.T_P, "residential"),
+                road(12, TestRoutes.S, TestRoutes.N, TestRoutes.S_P, nP, "tertiary"),
+                road(13, TestRoutes.T, TestRoutes.N, TestRoutes.T_P, nP, "tertiary")));
+    }
+
+    static RoadEdge road(long id, long from, long to, double[] a, double[] b, String highway) {
+        List<double[]> line = List.of(a, b);
+        return new RoadEdge(id, from, to, Geo.length(line), highway, line, EdgePenalty.NONE);
+    }
+
+    @Test
+    void wheelchairDayPrefersBigRoadOverAlleyWithinDetourLimit() {
+        // 큰 길(북쪽) 약 1.09배 ≤ 1.2 → 휠체어 낮은 큰 길, 어른 낮은 골목 지름길 (2026-11-12 카카오맵 현장 비교)
+        RouteResult r = route(alleyDiamond(0.0004), List.of(), at(12), "wheelchair", "auto");
+        assertThat(north(r)).isTrue();
+        RouteResult.Route shortest = r.routes().get(0);
+        RouteResult.Route safe = r.routes().get(1);
+        assertThat(shortest.alleyM()).isEqualTo(200);
+        assertThat(shortest.alleys()).hasSize(1);
+        assertThat(safe.alleyM()).isZero();
+        assertThat(safe.alleys()).isEmpty();
+        assertThat(r.explanation().summary()).endsWith("더 돌지만 큰 길로 가서 골목길을 200m 줄여요");
+        assertThat(r.explanation().notes()).noneMatch(n -> n.kind().equals("alley"));
+        assertThat(safe.covered()).isEmpty();
+
+        RouteResult adult = route(alleyDiamond(0.0004), List.of(), at(12), "adult", "auto");
+        assertThat(north(adult)).isFalse();
+        assertThat(adult.routes().get(0).alleyM()).isEqualTo(200);
+        assertThat(adult.explanation().notes()).isEmpty();
+
+        // 들를 곳이 있으면 경로를 다시 만드는데(withStops) 골목길 칸도 그대로 온다
+        RouteService svc = TestRoutes.service(alleyDiamond(0.0004), TestRoutes.pois(List.of()), at(12), props());
+        RouteResult withStop = svc.route(new RouteRequest(new Place(LAT, 126.93000, "출발"), new Place(LAT, 126.93220, "도착"),
+                "auto", "adult", null, null, List.of(new Place(LAT, TestRoutes.M_P[0], "가게")), null));
+        assertThat(withStop.routes().get(0).stops()).hasSize(1);
+        assertThat(withStop.routes().get(0).alleyM()).isEqualTo(200);
+        assertThat(withStop.routes().get(0).alleys()).hasSize(1);
+    }
+
+    @Test
+    void wheelchairDayKeepsAlleyWhenBigRoadIsTooFar() {
+        // 큰 길 약 1.34배 > 1.2 → 골목 지름길로 가고 남은 골목길을 알린다
+        RouteResult r = route(alleyDiamond(0.0008), List.of(), at(12), "wheelchair", "auto");
+        assertThat(north(r)).isFalse();
+        assertThat(r.routes()).hasSize(1);
+        assertThat(r.routes().get(0).alleyM()).isEqualTo(200);
+        assertThat(r.explanation().text())
+                .isEqualTo("휠체어로 지날 수 있는 길 중 가장 짧은 길입니다 (알림: 골목길 약 200m를 지납니다)");
     }
 }

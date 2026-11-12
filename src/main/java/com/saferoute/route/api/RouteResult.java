@@ -55,11 +55,22 @@ public record RouteResult(
      * @param surfaceUnknownM 지나는 재질 모르는 산길 길이(m)
      * @param stops    요청한 들를 곳을 거치는 순서대로 (2026-11-10). 들를 곳이 없으면 빈 목록
      * @param crossAt  큰 길을 건너는 곳과 그 횡단보도 자리 (2026-11-12, specs/014). 경로 순서. 없으면 빈 목록
+     * @param alleys   골목길(인도 없는 골목급 차도) 구간. 경로 순서. 없으면 빈 목록 (2026-11-12, 카카오맵 현장 비교)
+     * @param alleyM   골목길 길이 합(m) = alleys lengthM의 합
      */
     public record Route(String kind, int distanceM, int durationMin, List<double[]> geometry,
             Map<String, Integer> counts, Map<String, Integer> covered, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
             List<Stretch> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM,
-            List<StopMark> stops, List<CrossAt> crossAt) {
+            List<StopMark> stops, List<CrossAt> crossAt, List<Alley> alleys, int alleyM) {
+
+        /** 골목길 없이 */
+        public Route(String kind, int distanceM, int durationMin, List<double[]> geometry, Map<String, Integer> counts,
+                Map<String, Integer> covered, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
+                List<Stretch> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM,
+                List<StopMark> stops, List<CrossAt> crossAt) {
+            this(kind, distanceM, durationMin, geometry, counts, covered, sidewalks, dark, turns, crossings, stairs,
+                    events, unpavedM, surfaceUnknownM, stops, crossAt, List.of(), 0);
+        }
 
         /** 큰 길 건너는 곳 없이 */
         public Route(String kind, int distanceM, int durationMin, List<double[]> geometry, Map<String, Integer> counts,
@@ -106,6 +117,16 @@ public record RouteResult(
      * @param from, to 횡단보도 양 끝 [위도, 경도]. footway면 그 횡단보도 길의 첫 점과 끝 점, crossing(점 하나)이면 모름이라 null
      */
     public record CrossAt(int at, double lat, double lon, String kind, double[] from, double[] to) {
+    }
+
+    /**
+     * 골목길 구간 하나 (2026-11-12). 인도 태그가 없는 골목급 차도(service·residential·unclassified·living_street)라
+     * 차와 사람이 같이 쓴다. 이어진 골목길은 한 구간이다. 앱이 "골목길로 64m 이동해요"를 만든다.
+     *
+     * @param from, to geometry 점 번호. sidewalks의 from·to와 같은 기준
+     * @param lengthM  구간 길이(m)
+     */
+    public record Alley(int from, int to, int lengthM) {
     }
 
     /**
@@ -201,7 +222,8 @@ public record RouteResult(
      * @param level warn(주의), info(알림), unknown(확인 안 됨)
      * @param kind  stairs(노인이 계단을 지남), event(행사·돌발), unpaved(휠체어 비포장), surface(재질 모르는 산길),
      *              snap(휠체어 출발·도착을 옆 길에 붙임), underground(비 오는 날 지하로 지남, 2026-11-09),
-     *              crossing(안전 경로가 횡단보도 없는 곳에서 큰 길을 건넘, 2026-11-12 진행표 w20)
+     *              crossing(안전 경로가 횡단보도 없는 곳에서 큰 길을 건넘, 2026-11-12 진행표 w20),
+     *              alley(휠체어가 골목길을 30m 이상 지남, 2026-11-12)
      * @param text  괄호·머리말 없는 문장
      */
     public record Note(String level, String kind, String text) {

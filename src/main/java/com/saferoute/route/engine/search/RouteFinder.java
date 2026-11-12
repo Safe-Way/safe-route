@@ -157,6 +157,19 @@ public final class RouteFinder {
         return e.penalty().get(Penalty.SURFACE_UNKNOWN) >= 1;
     }
 
+    /** 골목길이 될 수 있는 길 종류 (OSM highway) */
+    static final java.util.Set<String> ALLEY_ROADS = java.util.Set.of("service", "residential", "unclassified",
+            "living_street");
+
+    /**
+     * 골목길: 골목급 차도(service·residential·unclassified·living_street)인데 인도 태그가 없거나 no.
+     * 인도가 없어 차와 사람이 같이 쓰는 길이라 걷다 보면 아무 데서나 차도를 건너게 된다 (2026-11-12 카카오맵 현장 비교).
+     * 보도·보행로·횡단보도 길(footway 등)과 인도 태그(left·right·both)가 있는 길은 아니다
+     */
+    public static boolean isAlley(RoadEdge e) {
+        return e.highway() != null && ALLEY_ROADS.contains(e.highway()) && (e.sidewalk() == null || "no".equals(e.sidewalk()));
+    }
+
     /** A파트가 그린 지하 길 (역 출구 계단·엘리베이터, 대합실, 지하상가 통로, 2026-11-09) */
     public static boolean isUnderground(RoadEdge e) {
         return e.penalty().get(Penalty.UNDERGROUND) >= 1;
