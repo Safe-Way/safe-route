@@ -19,7 +19,8 @@ final class Turn {
             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
 
     final AssistantRequest req;
-    final String text;
+    /** 사용자 말. 앞에 "○○에서" 출발지를 말했으면 그 부분을 뗀 나머지 (OriginReader) */
+    String text;
     final String guestId;
     final Double lat;
     final Double lon;

@@ -35,7 +35,11 @@ class RoutePropertiesTests {
         RouteProperties.Profile senior = p.profile("senior");
         assertThat(senior.avoidStairs()).isTrue();
         assertThat(senior.maxDetour()).isEqualTo(1.2);
-        assertThat(senior.day().weights()).containsOnlyKeys(Criterion.REST);
+        // 골목길 기준 (2026-11-12): 노인 낮 쉼 곳 4 > 골목 2, 어린이 낮 골목 1, 밤은 둘 다 CCTV 다음 0.5
+        assertThat(senior.day().weights()).containsOnlyKeys(Criterion.REST, Criterion.ALLEY).containsEntry(Criterion.ALLEY, 2.0);
+        assertThat(senior.night().weights()).containsEntry(Criterion.ALLEY, 0.5);
+        assertThat(child.day().weights()).containsEntry(Criterion.ALLEY, 1.0);
+        assertThat(child.night().weights()).containsEntry(Criterion.ALLEY, 0.5);
         assertThat(senior.day().restM()).isEqualTo(120);
         assertThat(senior.night().helpM()).isEqualTo(120);
         assertThat(senior.night().weights()).doesNotContainKey(Criterion.REST);

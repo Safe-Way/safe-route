@@ -102,14 +102,14 @@ public final class ExplanationBuilder {
     }
 
     /**
-     * @param alleyCutM 안전 경로가 최단보다 덜 걷는 골목길(m). 골목길 기준을 쓰는 때(휠체어)에 0보다 크면 돌아간 이유로 말한다:
+     * @param alleyCutM 안전 경로가 최단보다 덜 걷는 골목길(m). 골목길 기준을 쓰는 때(휠체어·노인·어린이)에 0보다 크면 돌아간 이유로 말한다:
      *                  "96m(2분) 더 돌지만 큰 길로 가서 골목길을 64m 줄여요", 시설 차이가 있으면 "…가로등 +12개, 골목길 -64m" (2026-11-12)
      */
     public static String text(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
             boolean same, boolean capped, int extraM, int extraMin, Map<FacilityGroup, Integer> diff,
             Avoided avoided, int roofGainM, int alleyCutM) {
         boolean rules = phase.hasWeights() || profile.avoidStairs() || profile.avoidUnpaved();
-        // 골목길 기준(휠체어 낮, 2026-11-12)은 길 고르는 기준이지만, 그것만 있으면 문장은 예전 휠체어 낮(기준 없음)과 같게
+        // 골목길 기준(2026-11-12)은 길 고르는 기준이지만, 그것만 있으면(휠체어 낮) 문장은 예전 휠체어 낮(기준 없음)과 같게
         Set<Criterion> rated = EnumSet.noneOf(Criterion.class);
         rated.addAll(phase.weights().keySet());
         rated.remove(Criterion.ALLEY);

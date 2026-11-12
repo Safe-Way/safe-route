@@ -71,7 +71,17 @@ public class TripRecommender {
      * @param bodyNote 오늘 몸 상태 ("무릎이 아파"). 없으면 null
      */
     public record Ask(String guestId, double lat, double lon, Conversation.Place dest, String mode, String night,
-                      WeatherDust weather, Profile profile, String bodyNote) {
+                      WeatherDust weather, Profile profile, String bodyNote, String fromName) {
+
+        public Ask(String guestId, double lat, double lon, Conversation.Place dest, String mode, String night,
+                   WeatherDust weather, Profile profile, String bodyNote) {
+            this(guestId, lat, lon, dest, mode, night, weather, profile, bodyNote, null);
+        }
+
+        /** 출발 이름 ("광주역에서"라고 말했으면 그 이름, 아니면 지금 위치) */
+        String from() {
+            return fromName == null || fromName.isBlank() ? "지금 위치" : fromName;
+        }
     }
 
     /**
@@ -89,7 +99,7 @@ public class TripRecommender {
         CompletableFuture<WeatherDust> wdFuture = a.weather() == null ? weatherDust.start(a.lat(), a.lon()) : null;
         // 비서가 받은 날씨(시험 날씨 포함)를 엔진에도 넘긴다. 날씨를 아직 모르면 null = auto (엔진·대중교통이 한 번 물음)
         String rain = a.weather() == null ? null : a.weather().rain() ? "on" : "off";
-        RouteRequest req = new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), "지금 위치"),
+        RouteRequest req = new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), a.from()),
                 new RouteRequest.Place(a.dest().lat(), a.dest().lon(), a.dest().name()), a.night(), a.mode(),
                 blankToNull(a.guestId()), rain);
 

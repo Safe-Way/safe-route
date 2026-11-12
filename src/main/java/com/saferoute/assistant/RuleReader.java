@@ -22,10 +22,12 @@ final class RuleReader {
 
     /** "○○에 가고 싶어", "○○로 갈래" 처럼 가고 싶다는 말. 이 말 앞이 장소 이름 */
     private static final List<String> GO_WORDS = List.of("가고", "가는", "갈래", "갈게", "가려", "가자", "가야",
-            "데려다", "데려가", "가요", "갈까", "가", "갈");
+            "데려다", "데려가", "가요", "갈까", "갈거", "갈꺼", "갈께", "가려구", "가", "갈");
 
     /** 도착 이름에서 뺄 말 (같이 가는 사람, 높임말 등) */
     private static final Pattern WITH = Pattern.compile("^.*(랑|이랑|하고|와|과|께서|가|이|는|은)$");
+
+    private static final Pattern NUMBER_PARTICLE = Pattern.compile("^(.*\\d)(?:번지)?(?:으로|로|까지|에)$");
 
     private RuleReader() {
     }
@@ -97,6 +99,11 @@ final class RuleReader {
      * "로"는 받침 없는 글자나 ㄹ 받침 뒤에만 붙으므로 그때만 뗀다 ("학교로" → 학교, "충장로"·"금남로"는 그대로).
      */
     static String stripParticle(String w) {
+        // 번지 뒤 조사 ("서석동 3으로", "충장로 45-1로"): 숫자 뒤는 받침과 상관없이 뗀다 (11-12 주소로 말하기)
+        java.util.regex.Matcher num = NUMBER_PARTICLE.matcher(w);
+        if (num.matches()) {
+            return num.group(1);
+        }
         for (String p : List.of("까지", "으로", "에")) {
             if (w.endsWith(p) && w.length() > p.length() + 1) {
                 return w.substring(0, w.length() - p.length());

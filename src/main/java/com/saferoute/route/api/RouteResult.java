@@ -223,7 +223,7 @@ public record RouteResult(
      * @param kind  stairs(노인이 계단을 지남), event(행사·돌발), unpaved(휠체어 비포장), surface(재질 모르는 산길),
      *              snap(휠체어 출발·도착을 옆 길에 붙임), underground(비 오는 날 지하로 지남, 2026-11-09),
      *              crossing(안전 경로가 횡단보도 없는 곳에서 큰 길을 건넘, 2026-11-12 진행표 w20),
-     *              alley(휠체어가 골목길을 30m 이상 지남, 2026-11-12)
+     *              alley(휠체어·노인·어린이가 골목길을 30m 이상 지남, 2026-11-12)
      * @param text  괄호·머리말 없는 문장
      */
     public record Note(String level, String kind, String text) {

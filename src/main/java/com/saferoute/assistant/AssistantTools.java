@@ -127,7 +127,14 @@ public class AssistantTools {
         if (!near && HOME.contains(q.replace(" ", ""))) {
             return new Found("no_home", List.of());
         }
-        // 3. 카카오 장소 검색
+        // 3. "서석동 3", "광주 동구 서석동 3"처럼 주소로 말했으면 카카오 주소 검색 먼저 (11-12)
+        if (!near && (looksLikeAddress(q) || looksLikeDong(q))) {
+            Found byAddress = byAddress(t, q);
+            if (byAddress != null) {
+                return byAddress;
+            }
+        }
+        // 4. 카카오 장소 검색
         List<com.saferoute.place.Place> found;
         try {
             found = kakao.search(q, t.lat, t.lon);
@@ -336,6 +343,111 @@ public class AssistantTools {
         return new Found("choose", inside);
     }
 
+    /**
+     * 출발지 찾기 결과.
+     *
+     * @param place 찾은 출발지. 못 찾았으면 null
+     * @param say   못 찾았을 때 할 말
+     */
+    record OriginFound(Place place, String say) {
+    }
+
+    /** "광주역에서"의 광주역을 찾는다. 장소 찾기와 같은 순서(자주 가는 곳 → 다녀온 곳 → 카카오)로, 여러 곳이면 맨 앞 */
+    OriginFound findOrigin(Turn t, String name) {
+        Conversation keep = t.convo;
+        List<String> before = List.copyOf(t.tools);
+        Found f = searchPlace(t, name);
+        t.convo = keep; // 출발지 찾기는 도착·후보·되물음을 바꾸지 않는다
+        t.tools.clear();
+        t.tools.addAll(before);
+        return switch (f.status()) {
+            case "found", "choose" -> new OriginFound(exactOrigin(name, f.places().get(0)), null);
+            case "no_home" -> new OriginFound(null, AssistantTools.HOME_UNKNOWN);
+            case "outside" -> new OriginFound(null, Josa.eun("'" + f.places().get(0).name() + "'")
+                    + " 광주 밖이에요. 지금은 광주 안에서만 길을 안내해요.");
+            case "error" -> new OriginFound(null, "지금은 장소 검색이 잘 안 돼요. 잠시 뒤에 다시 말씀해 주세요.");
+            default -> new OriginFound(null, "출발하실 곳 '" + name + "'을(를) 찾지 못했어요. 다른 이름으로 말씀해 주시겠어요?");
+        };
+    }
+
+    /**
+     * 카카오는 지금 위치에서 가까운 순이라 "광주역"을 찾으면 가까운 "남광주역"이 먼저 온다 (11-12 시험).
+     * 찾은 곳 이름이 말한 이름과 다르면 가까운 순 없이 다시 찾아, 이름이 똑같은 광주 안 장소가 있으면 그곳으로.
+     */
+    Place exactOrigin(String name, Place first) {
+        String want = name.replace(" ", "");
+        if (first.name().replace(" ", "").equals(want)) {
+            return first;
+        }
+        try {
+            List<Place> all = kakao.search(name, null, null).stream()
+                    .map(p -> new Place(p.name(), p.address(), p.lat(), p.lon()))
+                    .filter(AssistantTools::inGwangju).toList();
+            // 이름이 똑같은 곳 → "광주역 광주선"처럼 그 이름으로 시작하는 곳 (카카오 정확도 순)
+            for (Place c : all) {
+                if (c.name().replace(" ", "").equals(want)) {
+                    return c;
+                }
+            }
+            for (Place c : all) {
+                if (c.name().startsWith(name.strip() + " ")) {
+                    return c;
+                }
+            }
+        } catch (PlaceSearchException e) {
+            log.info("출발지 다시 찾기 실패: {}", e.getMessage());
+        }
+        return first;
+    }
+
+    /** 동·로·길·가 뒤에 번지 숫자 ("서석동 3", "충장로 45-1", "제봉로 100번길 7") */
+    private static final java.util.regex.Pattern ADDRESS = java.util.regex.Pattern.compile(
+            ".*\\S(동|로|길|가|리)\\s*\\d+(-\\d+)?(번지)?$");
+
+    static boolean looksLikeAddress(String q) {
+        return q != null && ADDRESS.matcher(q.strip()).matches();
+    }
+
+    /** "서석동", "동구 서석동", "충장로1가"처럼 동 이름만 (카카오 주소 검색이 동 한가운데를 줌, 11-12) */
+    private static final java.util.regex.Pattern DONG = java.util.regex.Pattern.compile(
+            "^(?:광주\\s*)?(?:[가-힣]{1,3}구\\s*)?[가-힣]{1,6}(?:\\d?동|\\d가)$");
+
+    static boolean looksLikeDong(String q) {
+        return q != null && DONG.matcher(q.strip()).matches();
+    }
+
+    /** 주소로 찾는다. 광주 안 결과가 없으면 앞에 "광주"를 붙여 한 번 더. 그래도 없으면 null (장소 검색으로 넘어감) */
+    private Found byAddress(Turn t, String q) {
+        try {
+            List<Place> in = addressInGwangju(q);
+            if (in.isEmpty() && !q.startsWith("광주")) {
+                in = addressInGwangju("광주 " + q);
+            }
+            if (in.isEmpty()) {
+                return null;
+            }
+            return decide(t, in.stream().limit(MAX_CANDIDATES).toList(), in.get(0).name());
+        } catch (PlaceSearchException e) {
+            log.warn("비서 주소 검색 실패: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private List<Place> addressInGwangju(String q) {
+        List<com.saferoute.place.Place> found = kakao.searchAddress(q);
+        if (found == null) {
+            return List.of();
+        }
+        return found.stream().map(p -> new Place(shortAddress(p.name()), p.address(), p.lat(), p.lon()))
+                .filter(AssistantTools::inGwangju).toList();
+    }
+
+    /** "전남광주통합특별시 동구 서석동 3" → "동구 서석동 3" (말로 읽기 쉽게, 전체 주소는 address 칸에) */
+    static String shortAddress(String a) {
+        String[] w = a.strip().split("\\s+", 2);
+        return w.length == 2 && w[0].contains("광주") ? w[1] : a.strip();
+    }
+
     static boolean inGwangju(Place p) {
         return p.lon() >= GWANGJU[0] && p.lat() >= GWANGJU[1] && p.lon() <= GWANGJU[2] && p.lat() <= GWANGJU[3];
     }
@@ -346,8 +458,10 @@ public class AssistantTools {
     TripRecommender.Plan recommendTrip(Turn t, Place dest) {
         t.tools.add("recommend_trip");
         String mode = t.mode() == null ? "adult" : t.mode();
-        TripRecommender.Plan plan = trips.recommend(new TripRecommender.Ask(t.guestId, t.lat, t.lon, dest, mode,
-                night(t), t.testWeather, t.profile, t.convo.bodyNote()));
+        Place o = t.convo.origin();
+        TripRecommender.Plan plan = trips.recommend(new TripRecommender.Ask(t.guestId, o == null ? t.lat : o.lat(),
+                o == null ? t.lon : o.lon(), dest, mode, night(t), t.testWeather, t.profile, t.convo.bodyNote(),
+                o == null ? null : o.name()));
         t.plan = plan;
         t.planDest = dest;
         t.weather = plan.weather();
@@ -361,8 +475,9 @@ public class AssistantTools {
         t.tools.add("plan_stops");
         String mode = t.mode() == null ? "adult" : t.mode();
         StopPlanner.Plan p = stops == null ? StopPlanner.Plan.fail("지금은 들를 곳을 같이 찾을 수 없어요.")
-                : stops.plan(new StopPlanner.Ask(t.guestId, t.lat, t.lon, dest, errand.stops(), errand.ordered(),
-                        mode, night(t)));
+                : stops.plan(new StopPlanner.Ask(t.guestId, t.convo.origin() == null ? t.lat : t.convo.origin().lat(),
+                        t.convo.origin() == null ? t.lon : t.convo.origin().lon(), dest, errand.stops(), errand.ordered(),
+                        mode, night(t), t.convo.origin() == null ? null : t.convo.origin().name()));
         t.stopPlan = p;
         t.planDest = dest;
         return p;
