@@ -185,4 +185,20 @@ class ExplanationTests {
         assertThat(ExplanationBuilder.text(day, wheel, wheel.day(), true, false, 0, 0, Map.of(), none, 0, 0))
                 .isEqualTo("휠체어로 지날 수 있는 길 중 가장 짧은 길입니다");
     }
+
+    @Test
+    void seniorSaysRestFirstThenAlley() {
+        // 노인 낮 (2026-11-12, 진행표 w22): 쉼 곳(비중 4)을 먼저, 줄인 골목길을 뒤에. 쉼 곳 차이가 없으면 휠체어와 같은 문장
+        RouteProperties.Profile senior = TestRoutes.props().profile("senior");
+        Conditions day = new Conditions(false, "auto", null);
+        ExplanationBuilder.Avoided none = ExplanationBuilder.Avoided.NONE;
+
+        assertThat(ExplanationBuilder.text(day, senior, senior.day(), false, false, 17, 1, Map.of(FacilityGroup.REST, 2), none, 0, 232))
+                .isEqualTo("17m(1분) 더 돌지만 쉼 곳 +2곳, 골목길 -232m");
+        assertThat(ExplanationBuilder.text(day, senior, senior.day(), false, false, 17, 1, Map.of(), none, 0, 232))
+                .isEqualTo("17m(1분) 더 돌지만 큰 길로 가서 골목길을 232m 줄여요");
+        assertThat(ExplanationBuilder.text(day, senior, senior.day(), false, false, 17, 1, Map.of(),
+                new ExplanationBuilder.Avoided(1, 0, false, false), 0, 232))
+                .isEqualTo("17m(1분) 더 돌지만 계단을 피하고 큰 길로 가서 골목길을 232m 줄여요");
+    }
 }

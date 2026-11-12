@@ -148,7 +148,7 @@ public class RouteResultAssembler {
         if (safeCross.withoutCrosswalk()) {
             notes.add(RouteResult.Note.warn("crossing", "횡단보도 없이 길을 건너요"));
         }
-        // 골목길 기준을 쓰는 때(휠체어)에 골목길이 남으면 알린다 (2026-11-12)
+        // 골목길 기준을 쓰는 때(휠체어·노인·어린이)에 골목길이 남으면 알린다 (2026-11-12)
         if (phase.weight(Criterion.ALLEY) > 0 && alleyM(safeAlleys) >= ALLEY_NOTE_MIN_M) {
             notes.add(RouteResult.Note.info("alley", "골목길 약 %dm를 지납니다".formatted(alleyM(safeAlleys))));
         }
