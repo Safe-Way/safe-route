@@ -78,4 +78,21 @@ class EvalFix1111Tests {
         assertThat(RuleBrain.bodyOnly("다리를다쳐서휠체어타고다녀")).isFalse();
         assertThat(RuleBrain.bodyOnly("오늘좀피곤해")).isTrue();
     }
+
+    @Test
+    void eval18NightTransitThatIsNotBrighterSaysTheDarkLengthAndHowToGetHelp() {
+        String dark = TripScorer.nightStopDark(734);
+        assertThat(dark).isEqualTo("밤이라 정류장까지 가는 길에 어두운 곳이 약 730m 있어요");
+        List<TransitResult.Leg> legs = List.of();
+        assertThat(AssistantService.mustSayTransit("집까지 25분 걸려요.", legs, List.of(dark, "걷기보다 18분 빨라요")))
+                .isEqualTo("집까지 25분 걸려요. " + dark + ".");
+        // 이미 말했으면 또 붙이지 않는다
+        assertThat(AssistantService.mustSayTransit("어두운 곳이 좀 있어요.", legs, List.of(dark)))
+                .isEqualTo("어두운 곳이 좀 있어요.");
+        assertThat(Sentences.scared("집에 갈 건데 밤이라 무서워")).isTrue();
+        assertThat(Sentences.scared("집에 갈래")).isFalse();
+        assertThat(Sentences.SCARED_TIP).contains("도와줘");
+        // '도와줘'는 급한 말 규칙이 받는다
+        assertThat(RuleBrain.urgent("도와줘")).isTrue();
+    }
 }

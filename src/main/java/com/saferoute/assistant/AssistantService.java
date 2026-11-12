@@ -161,6 +161,10 @@ public class AssistantService {
                     && t.plan.scored() != null) {
                 say = Sentences.polish(mustSayTransit(say, t.plan.scored().best().legs(), because), mode);
             }
+            if (pick != null && t.plan != null && t.plan.night() && Sentences.scared(t.text)
+                    && say != null && !say.contains("도와줘")) {
+                say = say.strip() + " " + Sentences.SCARED_TIP;
+            }
         }
         if (ask != null && say != null && ask.strip().equals(say.strip())) {
             // 같은 문장을 두 번 보내지 않는다 (비서 점검 c10). 버튼(choices)은 그대로 간다
@@ -234,6 +238,10 @@ public class AssistantService {
         }
         if (because != null && because.contains(TripScorer.NIGHT_STOP_BRIGHT) && !say.contains("가로등")) {
             sb.append(' ').append(TripScorer.NIGHT_STOP_SAY);
+        }
+        if (because != null && !say.contains("어두운")) {
+            because.stream().filter(b -> b.startsWith(TripScorer.NIGHT_STOP_DARK)).findFirst()
+                    .ifPresent(b -> sb.append(' ').append(b).append('.'));
         }
         return sb.toString();
     }
