@@ -160,4 +160,29 @@ class ExplanationTests {
         assertThat(FacilityGroup.BELL.gain(3)).isEqualTo("비상벨 +3개");
         assertThat(FacilityGroup.HELP.gain(3)).isEqualTo("도움 지점 +3곳");
     }
+
+    @Test
+    void wheelchairSaysHowMuchAlleyItCut() {
+        // 골목길 기준 (2026-11-12): 돌아간 이유가 골목길이면 줄인 길이로 말한다
+        RouteProperties.Profile wheel = TestRoutes.props().profile("wheelchair");
+        Conditions day = new Conditions(false, "auto", null);
+        ExplanationBuilder.Avoided none = ExplanationBuilder.Avoided.NONE;
+
+        assertThat(ExplanationBuilder.text(day, wheel, wheel.day(), false, false, 96, 2, Map.of(), none, 0, 64))
+                .isEqualTo("96m(2분) 더 돌지만 큰 길로 가서 골목길을 64m 줄여요");
+        assertThat(ExplanationBuilder.text(day, wheel, wheel.day(), false, false, 96, 2, Map.of(),
+                new ExplanationBuilder.Avoided(0, 0, true, false), 0, 64))
+                .isEqualTo("96m(2분) 더 돌지만 비포장을 피하고 큰 길로 가서 골목길을 64m 줄여요");
+        // 밤: 시설 차이 뒤에 붙인다
+        assertThat(ExplanationBuilder.text(NIGHT, wheel, wheel.night(), false, false, 96, 2,
+                Map.of(FacilityGroup.LIGHT, 12), none, 0, 64))
+                .isEqualTo("96m(2분) 더 돌지만 가로등 +12개, 골목길 -64m");
+        // 골목길 기준을 쓰지 않는 모드는 말하지 않는다
+        assertThat(ExplanationBuilder.text(NIGHT, ADULT, ADULT.night(), false, false, 96, 2,
+                Map.of(FacilityGroup.LIGHT, 12), none, 0, 64))
+                .isEqualTo("96m(2분) 더 돌지만 가로등 +12개");
+        // 최단 그대로면 예전 휠체어 낮 문장
+        assertThat(ExplanationBuilder.text(day, wheel, wheel.day(), true, false, 0, 0, Map.of(), none, 0, 0))
+                .isEqualTo("휠체어로 지날 수 있는 길 중 가장 짧은 길입니다");
+    }
 }

@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import com.saferoute.route.api.RouteResult.Alley;
 import com.saferoute.route.api.RouteResult.Sidewalk;
 import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.Penalty;
@@ -153,6 +154,33 @@ class SidewalksTests {
             assertThat(Sidewalks.along(path(List.of(road, alley, walk), List.of(w, o, n1, n2)), 0).get(0).side())
                     .isEqualTo(north < 25 ? "left" : "both");
         }
+    }
+
+    @Test
+    void alleysJoinAndUseGeometryIndices() {
+        // A→B 큰 길, B→(가운데 점)→C 태그 없는 service, C→D 인도 없음(no) living_street: 이어서 한 골목 구간.
+        // D→E 인도 양쪽(both) residential은 골목이 아니다
+        double[] mid = {126.9315, 35.1401};
+        RoadPath path = path(List.of(
+                edge(1, 1, 2, "secondary", List.of(A, B), null),
+                edge(2, 2, 3, "service", List.of(B, mid, C), null),
+                edge(3, 3, 4, "living_street", List.of(C, D), "no"),
+                edge(4, 4, 5, "residential", List.of(D, E), "both")),
+                List.of(A, B, mid, C, D, E));
+
+        assertThat(Sidewalks.alleys(path, 0)).containsExactly(new Alley(1, 4, 200));
+        // 출발 점을 앞에 붙인 응답 geometry(lineFrom)에서도 from..to가 그 골목(B..D)을 가리킨다
+        double[] start = {126.9299, 35.140};
+        List<double[]> geometry = path.lineFrom(start, E);
+        List<Alley> shifted = Sidewalks.alleys(path, path.startOffset(start));
+        assertThat(shifted).containsExactly(new Alley(2, 5, 200));
+        assertThat(geometry.get(shifted.get(0).from())).isEqualTo(B);
+        assertThat(geometry.get(shifted.get(0).to())).isEqualTo(D);
+        // 골목 뒤에 다른 길이 끼면 구간을 나눈다
+        RoadPath split = path(List.of(edge(2, 2, 3, "service", List.of(B, C), null),
+                edge(5, 3, 4, "footway", List.of(C, D), null),
+                edge(6, 4, 5, "unclassified", List.of(D, E), null)), List.of(B, C, D, E));
+        assertThat(Sidewalks.alleys(split, 0)).containsExactly(new Alley(0, 1, 100), new Alley(2, 3, 100));
     }
 
     /** (126.93, 35.14)에서 동쪽·북쪽으로 m만큼 떨어진 점 */

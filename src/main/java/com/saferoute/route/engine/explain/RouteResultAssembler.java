@@ -26,6 +26,7 @@ import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadGraph;
 import com.saferoute.route.engine.score.Coverage;
+import com.saferoute.route.engine.score.Criterion;
 import com.saferoute.route.engine.score.RouteScorer;
 import com.saferoute.route.engine.search.RoadPath;
 import com.saferoute.route.engine.search.RouteFinder;
@@ -39,6 +40,8 @@ import com.saferoute.route.engine.search.RouteFinder;
 public class RouteResultAssembler {
 
     private static final DateTimeFormatter ENDS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    /** 남은 골목길이 이보다 짧으면 알리지 않는다. 출발·도착을 붙일 때 들어가는 몇 m 골목 입구까지 알리면 거의 모든 경로에 붙는다 */
+    static final int ALLEY_NOTE_MIN_M = 30;
 
     private final FacilityCounter counter;
     private final RouteProperties props;
@@ -98,6 +101,10 @@ public class RouteResultAssembler {
         Map<String, Integer> shortCovered = same ? Map.of() : covered(found.shortest(), phase, cov);
         Map<String, Integer> safeCovered = covered(found.safe(), phase, cov);
 
+        // 골목길 구간 (2026-11-12). 응답 alleys와 설명의 줄인 길이·남은 길이가 같은 값을 쓴다
+        List<RouteResult.Alley> shortAlleys = Sidewalks.alleys(found.shortest(), found.shortest().startOffset(start));
+        List<RouteResult.Alley> safeAlleys = Sidewalks.alleys(found.safe(), found.safe().startOffset(start));
+
         List<RouteResult.Route> routes = new ArrayList<>();
         if (!same) {
             routes.add(route("shortest", shortM, profile.minutes(shortM), shortLine, shortCounts,
@@ -106,7 +113,7 @@ public class RouteResultAssembler {
                     dark(cond, found.shortest(), start, cov), turns(found.shortest(), start),
                     crossings(found.shortest(), start),
                     SideChanges.along(found.shortest(), found.shortest().startOffset(start), graph, crosswalks),
-                    stairs(found.shortest(), start), shortEvents, found.shortest()));
+                    stairs(found.shortest(), start), shortEvents, found.shortest(), shortAlleys));
         }
         SideChanges.Found safeCross = SideChanges.find(found.safe(), found.safe().startOffset(start), graph, crosswalks);
         routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts,
@@ -115,7 +122,7 @@ public class RouteResultAssembler {
                 dark(cond, found.safe(), start, cov), turns(found.safe(), start),
                 crossings(found.safe(), start),
                 safeCross.crossAt(),
-                stairs(found.safe(), start), safeEvents, found.safe()));
+                stairs(found.safe(), start), safeEvents, found.safe(), safeAlleys));
 
         int extraM = same ? 0 : safeM - shortM;
         // 반올림을 따로 하면 "22분 / 24분"인데 "(1분) 더"가 나올 수 있어, 두 경로 시간의 차로 구한다
@@ -127,8 +134,9 @@ public class RouteResultAssembler {
                 profile.avoidUnpaved() && avoids(found, RouteFinder::isUnpaved),
                 !ExplanationBuilder.avoided(shortEvents, safeEvents).isEmpty());
         int roofGainM = same ? 0 : safeCovered.getOrDefault("roof", 0) - shortCovered.getOrDefault("roof", 0);
+        int alleyCutM = same ? 0 : alleyM(shortAlleys) - alleyM(safeAlleys);
         String summary = ExplanationBuilder.text(cond, profile, phase, same, found.detourCapped(), extraM, extraMin,
-                diff, avoided, roofGainM);
+                diff, avoided, roofGainM, alleyCutM);
         summary = ExplanationBuilder.withEvents(summary, extraM, extraMin, same ? List.of() : shortEvents, safeEvents);
         List<RouteResult.Note> notes = new ArrayList<>();
         if (profile.avoidStairs()) {
@@ -139,6 +147,10 @@ public class RouteResultAssembler {
         // 따로 그린 인도가 큰 길 양쪽으로 갈리는데 그 구간에 횡단보도가 없다 (진행표 w20). 여러 곳이어도 한 번
         if (safeCross.withoutCrosswalk()) {
             notes.add(RouteResult.Note.warn("crossing", "횡단보도 없이 길을 건너요"));
+        }
+        // 골목길 기준을 쓰는 때(휠체어)에 골목길이 남으면 알린다 (2026-11-12)
+        if (phase.weight(Criterion.ALLEY) > 0 && alleyM(safeAlleys) >= ALLEY_NOTE_MIN_M) {
+            notes.add(RouteResult.Note.info("alley", "골목길 약 %dm를 지납니다".formatted(alleyM(safeAlleys))));
         }
         summary = ExplanationBuilder.withWarnings(summary, notes);
 
@@ -153,17 +165,27 @@ public class RouteResultAssembler {
     private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts,
             Map<String, Integer> covered, List<RouteResult.Sidewalk> sidewalks, List<RouteResult.Stretch> dark, List<RouteResult.Turn> turns,
             List<RouteResult.Stretch> crossings, List<RouteResult.CrossAt> crossAt, List<RouteResult.Stair> stairs,
-            List<RouteResult.Event> events, RoadPath path) {
+            List<RouteResult.Event> events, RoadPath path, List<RouteResult.Alley> alleys) {
         return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()), covered,
                 sidewalks,
                 dark, turns, crossings, stairs, events, (int) Math.round(path.lengthM(RouteFinder::isUnpaved)),
-                (int) Math.round(path.lengthM(RouteFinder::isSurfaceUnknown)), List.of(), crossAt);
+                (int) Math.round(path.lengthM(RouteFinder::isSurfaceUnknown)), List.of(), crossAt, alleys, alleyM(alleys));
     }
 
-    /** 이 요청 기준마다 경로가 그 범위 안을 걷는 길이(m). 키는 기준 이름 소문자 (school, help, rest, light, cctv, 비 오는 날 roof) */
+    private static int alleyM(List<RouteResult.Alley> alleys) {
+        return alleys.stream().mapToInt(RouteResult.Alley::lengthM).sum();
+    }
+
+    /**
+     * 이 요청 기준마다 경로가 그 범위 안을 걷는 길이(m). 키는 기준 이름 소문자 (school, help, rest, light, cctv, 비 오는 날 roof).
+     * 골목길은 alleyM으로 따로 주므로 넣지 않는다 (휠체어 낮은 그대로 빈 맵)
+     */
     static Map<String, Integer> covered(RoadPath path, RouteProperties.Phase phase, Coverage cov) {
         Map<String, Integer> out = new LinkedHashMap<>();
-        for (com.saferoute.route.engine.score.Criterion c : phase.weights().keySet()) {
+        for (Criterion c : phase.weights().keySet()) {
+            if (c == Criterion.ALLEY) {
+                continue;
+            }
             double m = 0;
             for (RoadEdge e : path.edges()) {
                 m += e.lengthM() * cov.covered(e, c);

@@ -117,6 +117,23 @@ class RouteFinderTests {
     }
 
     @Test
+    void alleyIsSmallRoadWithoutSidewalkTag() {
+        // 골목길 (2026-11-12): 골목급 차도 + 인도 태그 없음·no. 인도 태그가 있거나 걷는 길·큰 길이면 아니다
+        assertThat(RouteFinder.isAlley(road("service", null))).isTrue();
+        assertThat(RouteFinder.isAlley(road("living_street", null))).isTrue();
+        assertThat(RouteFinder.isAlley(road("unclassified", "no"))).isTrue();
+        assertThat(RouteFinder.isAlley(road("residential", "both"))).isFalse();
+        assertThat(RouteFinder.isAlley(road("residential", "left"))).isFalse();
+        assertThat(RouteFinder.isAlley(road("footway", null))).isFalse();
+        assertThat(RouteFinder.isAlley(road("tertiary", null))).isFalse();
+        assertThat(RouteFinder.isAlley(road(null, null))).isFalse();
+    }
+
+    private static RoadEdge road(String highway, String sidewalk) {
+        return new RoadEdge(1, S, M, 100, highway, List.of(S_P, M_P), EdgePenalty.NONE, sidewalk);
+    }
+
+    @Test
     void noPassableRouteIsNoRoute() {
         RoadGraph g = new RoadGraph(Map.of(S, S_P, M, M_P), List.of(edge(10, S, M, S_P, M_P, CURB)));
         assertThatThrownBy(() -> RouteFinder.find(g, S, M, null, 0, e -> e.penalty().get(Penalty.CURB) < 1, false))

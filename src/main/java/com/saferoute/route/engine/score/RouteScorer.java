@@ -29,6 +29,7 @@ import com.saferoute.route.engine.graph.RoadGraph;
  *   <li>쉼 곳: 쉼터·공중화장실 중 지금 이용 가능한 곳</li>
  *   <li>조명·CCTV·보호구역: 시간과 상관없이 모두</li>
  *   <li>지붕(비 오는 날, 2026-11-09): 시설이 아니라 길 성질(road_edge.covered)이라 시설 층을 만들지 않는다</li>
+ *   <li>골목길(휠체어, 2026-11-12): 길 성질(길 종류·인도 태그)이라 시설 층을 만들지 않는다. 골목이면 범위 밖 비율 1</li>
  * </ul>
  */
 @Component
@@ -79,7 +80,7 @@ public class RouteScorer {
                 case SCHOOL -> p -> p.kind().equals("school_zone");
                 case HELP -> p -> HELP_KINDS.contains(p.kind()) && usableNow(p, night, nearby);
                 case REST -> p -> REST_KINDS.contains(p.kind()) && usableNow(p, night, nearby);
-                case ROOF -> null; // 시설이 아니라 길 성질(지붕). Coverage.compute가 길마다 정한다
+                case ROOF, ALLEY -> null; // 시설이 아니라 길 성질(지붕·골목). Coverage.compute가 길마다 정한다
             };
             if (keep == null) {
                 continue;
@@ -118,7 +119,7 @@ public class RouteScorer {
             case HELP -> phase.helpM();
             case REST -> phase.restM();
             case SCHOOL -> phase.schoolM();
-            case ROOF -> 0;
+            case ROOF, ALLEY -> 0;
         };
     }
 }
