@@ -22,10 +22,26 @@ import java.util.Map;
  */
 public record AssistantReply(String say, Pick pick, List<Other> others, List<String> because, String ask,
                              List<Choice> choices, Spot place, String conversationId, List<String> tools,
-                             boolean ai, Situation situation, List<Stop> stops, Usage usage) {
+                             boolean ai, Situation situation, List<Stop> stops, Usage usage, Heard heard) {
 
     public AssistantReply {
         stops = stops == null ? List.of() : List.copyOf(stops);
+    }
+
+    /**
+     * 비서가 알아들은 말 (11-12 음성 인식 ①). 앱이 "이렇게 알아들었어요"로 보여 주고, 틀리면 다시 말하게 할 수 있다.
+     *
+     * @param text        알아들은 말 (뜸 들이는 말을 빼고 받아쓰기 실수를 고친 뒤)
+     * @param alternative 앱이 보낸 첫 받아쓰기(text)가 아니라 다른 후보(alternatives)를 썼으면 true
+     * @param origin      출발지 이름. 말하지 않았으면 null (지금 위치)
+     * @param stops       들를 곳 이름 (찾은 가게 이름). 없으면 빈 목록
+     * @param destination 도착지 이름. 길을 찾지 않았으면 null
+     */
+    public record Heard(String text, boolean alternative, String origin, List<String> stops, String destination) {
+
+        public Heard {
+            stops = stops == null ? List.of() : List.copyOf(stops);
+        }
     }
 
     /**

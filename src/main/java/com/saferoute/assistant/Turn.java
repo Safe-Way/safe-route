@@ -37,6 +37,12 @@ final class Turn {
     boolean profileLoaded;
 
     final List<String> tools = new ArrayList<>();
+    /** 말한 장소(도착·들를 곳·출발)를 찾지 못했거나 광주 밖이면 true. 받아쓰기 다른 후보로 다시 볼지 정할 때 씀 */
+    boolean placeMissed;
+    /** 알아들은 말 (뜸 들이는 말을 빼고 받아쓰기 실수를 고친 뒤, 출발지를 떼기 전) */
+    String heard;
+    /** 받아쓰기 다른 후보(alternatives)를 썼으면 true */
+    boolean alternative;
     TripRecommender.Plan plan;
     /** 이번 질문에 제미나이가 쓴 토큰 (R1). AI를 안 불렀으면 비어 있음 */
     final TokenUsage usage = new TokenUsage();

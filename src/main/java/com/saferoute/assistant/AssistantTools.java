@@ -97,6 +97,14 @@ public class AssistantTools {
      * 하나면 도착지로 정하고(대화에 기억), 여럿이면 고르게 한다.
      */
     Found searchPlace(Turn t, String query) {
+        Found f = findPlace(t, query);
+        if ("none".equals(f.status()) || "outside".equals(f.status())) {
+            t.placeMissed = true;
+        }
+        return f;
+    }
+
+    private Found findPlace(Turn t, String query) {
         t.tools.add("search_place");
         String q = query == null ? "" : query.strip();
         if (q.isEmpty()) {
@@ -584,6 +592,9 @@ public class AssistantTools {
                         mode, night(t), t.convo.origin() == null ? null : t.convo.origin().name()));
         t.stopPlan = p;
         t.planDest = dest;
+        if (p.failText() != null && p.failText().startsWith(StopPlanner.NOT_FOUND)) {
+            t.placeMissed = true;
+        }
         return p;
     }
 
