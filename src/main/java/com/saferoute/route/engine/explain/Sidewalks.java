@@ -6,6 +6,7 @@ import java.util.Set;
 
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.graph.RoadEdge;
+import com.saferoute.route.engine.graph.RoadGraph;
 import com.saferoute.route.engine.search.RoadPath;
 import com.saferoute.route.engine.search.RouteFinder;
 
@@ -14,8 +15,8 @@ import com.saferoute.route.engine.search.RouteFinder;
  * 경로 선을 인도 쪽으로 옮겨 그리는 데 쓴다.
  * <p>
  * OSM sidewalk 태그의 left·right는 길을 그린 방향 기준이라, 거꾸로 걸으면 바꿔 준다. 태그가 없는 일방통행 길은
- * 차가 가는 방향 오른쪽 바깥에 인도가 있다고 본다 (방향별로 두 줄 그린 큰길, 2026-11-11). 태그가 없는 양방향
- * primary·secondary·tertiary는 양쪽(both)으로 본다 (w15).
+ * 차가 가는 방향 오른쪽 바깥에 인도가 있다고 보고(방향별로 두 줄 그린 큰길, 2026-11-11), 태그가 없는 양방향 큰 길은
+ * 양쪽(both)으로 본다. 둘 다 trunk·primary·secondary·tertiary와 그 연결로만이고 골목급은 모름 (w15).
  * 인도·보행로·계단처럼 사람이 걷는 길 자체는 넣지 않는다. 인도 쪽·길 종류·차로·일방·폭이 모두 같은 길만 한 구간으로 묶는다.
  */
 public final class Sidewalks {
@@ -25,10 +26,11 @@ public final class Sidewalks {
             "corridor", "bridleway");
 
     /**
-     * 인도 태그가 없으면 양쪽에 인도가 있다고 보는 양방향 큰 길. 도심 큰 길은 대개 양쪽에 인도가 있고, 양방향 길의 인도 태그는
-     * primary 5%·secondary 20%·tertiary 22%뿐이라 모름으로 두면 앱이 선을 옮기지 못한다 (2026-11-11, 진행표 w15)
+     * 인도 태그가 없을 때 쪽을 정하는 큰 길과 그 연결로: 일방은 차가 가는 방향 오른쪽, 양방(또는 모름)은 양쪽.
+     * 도심 큰 길은 대개 인도가 있고, 양방향 길의 인도 태그는 primary 5%·secondary 20%·tertiary 22%뿐이라 모름으로 두면 앱이 선을 옮기지 못한다.
+     * 골목급(residential·service 등)은 인도가 없는 길이 많아 정하지 않는다 (2026-11-11, 진행표 w15)
      */
-    static final Set<String> BOTH_WHEN_UNTAGGED = Set.of("primary", "secondary", "tertiary");
+    static final Set<String> SIDE_BY_RULE = RoadGraph.BIG_ROADS;
 
     /** 차로 하나 폭(m). 앱이 요청한 식의 값 (2026-11-11) */
     static final double LANE_M = 3.25;
@@ -67,17 +69,20 @@ public final class Sidewalks {
     }
 
     /**
-     * 길을 그린 방향 기준 인도 쪽. 태그가 먼저이고, 없으면 일방통행 길은 차가 가는 방향 오른쪽,
-     * 양방향(또는 일방인지 모르는) 큰 길은 양쪽. 그 밖은 모름(null)
+     * 길을 그린 방향 기준 인도 쪽. 태그가 먼저이고, 없으면 큰 길({@link #SIDE_BY_RULE})만 일방은 차가 가는 방향 오른쪽,
+     * 양방(또는 일방인지 모르는)은 양쪽. 골목급은 모름(null)
      */
     static String drawnSide(RoadEdge e) {
         if (e.sidewalk() != null) {
             return e.sidewalk();
         }
+        if (e.highway() == null || !SIDE_BY_RULE.contains(e.highway())) {
+            return null;
+        }
         if (e.oneway() != null && e.oneway() != 0) {
             return e.oneway() > 0 ? "right" : "left";
         }
-        return BOTH_WHEN_UNTAGGED.contains(e.highway()) ? "both" : null;
+        return "both";
     }
 
     /** 길을 그린 방향 기준 값을 걷는 방향 기준으로. 모르면 unknown */

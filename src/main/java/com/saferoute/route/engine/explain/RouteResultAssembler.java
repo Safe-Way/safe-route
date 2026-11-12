@@ -24,6 +24,7 @@ import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
+import com.saferoute.route.engine.graph.RoadGraph;
 import com.saferoute.route.engine.score.Coverage;
 import com.saferoute.route.engine.score.RouteScorer;
 import com.saferoute.route.engine.search.RoadPath;
@@ -62,16 +63,19 @@ public class RouteResultAssembler {
     public RouteResult assemble(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
             RouteFinder.Found found, double[] start, double[] end, double snapM, Nearby nearby, Coverage cov,
             List<RoadEvent> events, java.util.function.Predicate<RoadEvent> avoids) {
-        return assemble(cond, profile, phase, found, start, end, snapM, nearby, cov, events, avoids, (e, path) -> true);
+        return assemble(cond, profile, phase, found, start, end, snapM, nearby, cov, events, avoids, (e, path) -> true,
+                new RoadGraph(Map.of(), List.of()), List.of());
     }
 
     /**
-     * @param passes 경로가 그 행사·신고를 지나는지 (반경 안을 지난 것 중에서 더 거른다). 신고는 신고된 길을 지날 때만 (2026-11-10)
+     * @param passes     경로가 그 행사·신고를 지나는지 (반경 안을 지난 것 중에서 더 거른다). 신고는 신고된 길을 지날 때만 (2026-11-10)
+     * @param graph      경로를 찾은 도로망. 큰 길을 건너는 곳의 교차로·횡단보도 길을 본다 ({@link SideChanges})
+     * @param crosswalks 횡단보도 점 {경도, 위도}
      */
     public RouteResult assemble(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
             RouteFinder.Found found, double[] start, double[] end, double snapM, Nearby nearby, Coverage cov,
             List<RoadEvent> events, java.util.function.Predicate<RoadEvent> avoids,
-            java.util.function.BiPredicate<RoadEvent, RoadPath> passes) {
+            java.util.function.BiPredicate<RoadEvent, RoadPath> passes, RoadGraph graph, List<double[]> crosswalks) {
         boolean same = found.safe().sameAs(found.shortest());
         List<double[]> shortLine = found.shortest().lineFrom(start, end);
         List<double[]> safeLine = found.safe().lineFrom(start, end);
@@ -100,14 +104,15 @@ public class RouteResultAssembler {
                     shortCovered,
                     Sidewalks.along(found.shortest(), found.shortest().startOffset(start)),
                     dark(cond, found.shortest(), start, cov), turns(found.shortest(), start),
-                    crossings(found.shortest(), start), stairs(found.shortest(), start), shortEvents,
+                    crossings(found.shortest(), start, graph, crosswalks), stairs(found.shortest(), start), shortEvents,
                     found.shortest()));
         }
         routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts,
                 safeCovered,
                 Sidewalks.along(found.safe(), found.safe().startOffset(start)),
                 dark(cond, found.safe(), start, cov), turns(found.safe(), start),
-                crossings(found.safe(), start), stairs(found.safe(), start), safeEvents, found.safe()));
+                crossings(found.safe(), start, graph, crosswalks), stairs(found.safe(), start), safeEvents,
+                found.safe()));
 
         int extraM = same ? 0 : safeM - shortM;
         // 반올림을 따로 하면 "22분 / 24분"인데 "(1분) 더"가 나올 수 있어, 두 경로 시간의 차로 구한다
@@ -140,7 +145,7 @@ public class RouteResultAssembler {
 
     private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts,
             Map<String, Integer> covered, List<RouteResult.Sidewalk> sidewalks, List<RouteResult.Stretch> dark, List<RouteResult.Turn> turns,
-            List<RouteResult.Stretch> crossings, List<RouteResult.Stair> stairs, List<RouteResult.Event> events,
+            List<RouteResult.Crossing> crossings, List<RouteResult.Stair> stairs, List<RouteResult.Event> events,
             RoadPath path) {
         return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()), covered,
                 sidewalks,
@@ -217,11 +222,20 @@ public class RouteResultAssembler {
         return start && end ? "both" : start ? "start" : end ? "end" : null;
     }
 
-    private static List<RouteResult.Stretch> crossings(RoadPath path, double[] start) {
+    /** 횡단보도 길 구간(새 칸 null)과 큰 길을 건너는 곳을 합쳐 거리순으로. 횡단보도 길 구간 안에서 건넌 곳은 같은 건너기라 뺀다 */
+    static List<RouteResult.Crossing> crossings(RoadPath path, double[] start, RoadGraph graph,
+            List<double[]> crosswalks) {
         double startM = Geo.distance(start, path.line().get(0));
-        return Turns.crossings(path, startM).stream()
-                .map(c -> new RouteResult.Stretch((int) Math.round(c[0]), (int) Math.round(c[1])))
+        List<RouteResult.Crossing> ways = Turns.crossings(path, startM).stream()
+                .map(c -> new RouteResult.Crossing((int) Math.round(c[0]), (int) Math.round(c[1]), null, null, null,
+                        null, null))
                 .toList();
+        List<RouteResult.Crossing> out = new ArrayList<>(ways);
+        SideChanges.along(path, startM, graph, crosswalks).stream()
+                .filter(c -> ways.stream().noneMatch(w -> w.fromM() <= c.fromM() && c.fromM() <= w.toM()))
+                .forEach(out::add);
+        out.sort(Comparator.comparingInt(RouteResult.Crossing::fromM));
+        return out;
     }
 
     private List<RouteResult.Turn> turns(RoadPath path, double[] start) {

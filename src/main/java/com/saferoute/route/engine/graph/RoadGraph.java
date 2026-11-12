@@ -28,9 +28,12 @@ public final class RoadGraph {
     /** 점에서 이 거리 안의 길을 모두 붙일 후보로 본다 (2026-11-11, 진행표 w14 요청 값) */
     static final double SNAP_CANDIDATE_M = 30;
 
-    /** 걸어서 아무 데서나 못 건너는 큰 길. 붙일 때 점과 길 사이에 있으면 건너편 길로 안 붙인다 */
-    private static final Set<String> BIG_ROADS = Set.of("primary", "primary_link", "secondary", "secondary_link",
-            "trunk", "trunk_link");
+    /**
+     * 걸어서 아무 데서나 못 건너는 큰 길과 그 연결로. 붙일 때 점과 길 사이에 있으면 건너편 길로 안 붙인다.
+     * 인도 쪽 규칙({@code Sidewalks})과 건너는 곳 알리기({@code SideChanges})도 같은 목록을 쓴다 (tertiary 포함, 2026-11-12)
+     */
+    public static final Set<String> BIG_ROADS = Set.of("trunk", "trunk_link", "primary", "primary_link", "secondary",
+            "secondary_link", "tertiary", "tertiary_link");
 
     /** 길을 나눌 때 새로 만드는 노드·길 번호. OSM 번호(양수)와 겹치지 않게 음수 */
     private long nextVirtual = -1;
@@ -140,38 +143,21 @@ public final class RoadGraph {
     public Snap nearest(double lon, double lat, Set<Long> within, Predicate<RoadEdge> usable) {
         double[] p = {lon, lat};
         RoadEdge best = null;
-        int bestSeg = 0;
-        double bestT = 0;
-        double bestM = SNAP_CANDIDATE_M;
+        Foot bestFoot = null;
         for (RoadEdge e : graph.edgeSet()) {
             if (!usable.test(e) || !within.contains(e.from()) || !within.contains(e.to())) {
                 continue;
             }
-            // 이 길 위에서 가장 가까운 발
-            List<double[]> g = e.geometry();
-            int seg = 0;
-            double t = 0;
-            double m = Double.MAX_VALUE;
-            for (int i = 1; i < g.size(); i++) {
-                double ti = foot(p, g.get(i - 1), g.get(i));
-                double mi = Geo.distance(p, lerp(g.get(i - 1), g.get(i), ti));
-                if (mi < m) {
-                    seg = i;
-                    t = ti;
-                    m = mi;
-                }
-            }
-            if (m <= bestM && !crossesBigRoad(p, lerp(g.get(seg - 1), g.get(seg), t), e)) {
+            Foot f = closest(p, e);
+            if (f.m() <= (bestFoot == null ? SNAP_CANDIDATE_M : bestFoot.m()) && !crossesBigRoad(p, f.at(e), e)) {
                 best = e;
-                bestSeg = seg;
-                bestT = t;
-                bestM = m;
+                bestFoot = f;
             }
         }
         if (best == null) {
             return nearestByNode(p, within, usable);
         }
-        return snapOn(p, best, bestSeg, bestT, bestM, within);
+        return snapOn(p, best, bestFoot, within);
     }
 
     /** 30m 안 후보가 없을 때의 예전 방식: 가장 가까운 노드와 그 노드에 이어진 길 */
@@ -189,37 +175,50 @@ public final class RoadGraph {
             return null;
         }
         RoadEdge best = null;
-        int bestSeg = 0;
-        double bestT = 0;
-        double bestM = nearM;
+        Foot bestFoot = null;
         for (RoadEdge e : graph.edgesOf(near)) {
             if (!usable.test(e) || !within.contains(e.from()) || !within.contains(e.to())) {
                 continue;
             }
-            List<double[]> g = e.geometry();
-            for (int i = 1; i < g.size(); i++) {
-                double t = foot(p, g.get(i - 1), g.get(i));
-                double m = Geo.distance(p, lerp(g.get(i - 1), g.get(i), t));
-                if (m < bestM) {
-                    best = e;
-                    bestSeg = i;
-                    bestT = t;
-                    bestM = m;
-                }
+            Foot f = closest(p, e);
+            if (f.m() < (bestFoot == null ? nearM : bestFoot.m())) {
+                best = e;
+                bestFoot = f;
             }
         }
         if (best == null) {
             return new Snap(near, nearM);
         }
-        return snapOn(p, best, bestSeg, bestT, bestM, within);
+        return snapOn(p, best, bestFoot, within);
     }
 
-    /** 길 e의 seg번째 선분 t 위치에 붙인다. 발까지 거리 m */
-    private Snap snapOn(double[] p, RoadEdge e, int seg, double t, double m, Set<Long> within) {
-        long node = split(e, seg, t);
+    /** 길 위에서 점에 가장 가까운 발: geometry의 seg번째 선분(seg-1 → seg) 안 t 위치, 점에서 m(미터) */
+    private record Foot(int seg, double t, double m) {
+        double[] at(RoadEdge e) {
+            return lerp(e.geometry().get(seg - 1), e.geometry().get(seg), t);
+        }
+    }
+
+    /** 길 e 위에서 점 p에 가장 가까운 발 */
+    private static Foot closest(double[] p, RoadEdge e) {
+        List<double[]> g = e.geometry();
+        Foot best = new Foot(1, 0, Double.MAX_VALUE);
+        for (int i = 1; i < g.size(); i++) {
+            double t = foot(p, g.get(i - 1), g.get(i));
+            double m = Geo.distance(p, lerp(g.get(i - 1), g.get(i), t));
+            if (m < best.m()) {
+                best = new Foot(i, t, m);
+            }
+        }
+        return best;
+    }
+
+    /** 길 e의 발 f에 붙인다 */
+    private Snap snapOn(double[] p, RoadEdge e, Foot f, Set<Long> within) {
+        long node = split(e, f.seg(), f.t());
         within.add(node);
         // 길 끝 노드에 붙였으면(나누지 않음) 그 노드까지 거리
-        return new Snap(node, node < 0 ? m : Geo.distance(p, nodes.get(node)));
+        return new Snap(node, node < 0 ? f.m() : Geo.distance(p, nodes.get(node)));
     }
 
     /** 점 p에서 at까지 곧은 줄이 큰 길(at이 놓인 길 skip은 빼고)을 가로지르는지 */
@@ -242,7 +241,7 @@ public final class RoadGraph {
      * 선분 a-b와 c-d가 엄밀히 엇갈리는지. 끝점이 다른 선분 위에 닿기만 하면 아니다 (발이 큰 길과 만나는 교차로 노드에
      * 놓여도 건넘이 아니다). 경도에 cos(위도)를 곱한 평면에서 잰다
      */
-    private static boolean crosses(double[] a, double[] b, double[] c, double[] d) {
+    public static boolean crosses(double[] a, double[] b, double[] c, double[] d) {
         double k = Math.cos(Math.toRadians(a[1]));
         return side(a, b, c, k) * side(a, b, d, k) < 0 && side(c, d, a, k) * side(c, d, b, k) < 0;
     }

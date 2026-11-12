@@ -211,21 +211,22 @@ public class RouteService {
         }
 
         Attempt a;
-        RoadGraph near = roads.load(BBox.around(points, props.searchMarginM()), underground);
+        RoadGraph graph = roads.load(BBox.around(points, props.searchMarginM()), underground);
         try {
-            a = attempt(near, underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed, reports);
+            a = attempt(graph, underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed, reports);
         } catch (RouteException e) {
             // 넓혀 다시 찾는 것은 길을 못 찾았을 때만 (이은 길이 빈 SAME_POINT 안전망은 넓혀도 같다)
             if (e.error() != RouteError.NO_ROUTE || props.retryMarginM() <= props.searchMarginM()) {
                 throw e;
             }
             // 강·철도·큰 도로를 범위 밖 다리로 돌아가야 하는 길. 넓혀 한 번 더 찾는다 (우회 한도 등 규칙은 같다)
-            a = attempt(roads.load(BBox.around(points, props.retryMarginM()), underground),
-                    underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed, reports);
+            graph = roads.load(BBox.around(points, props.retryMarginM()), underground);
+            a = attempt(graph, underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed, reports);
         }
         java.util.Map<RoadEvent, Long> reportEdges = a.reportEdges();
         RouteResult result = withStops(assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(),
-                a.nearby(), a.coverage(), events, a.avoided()::contains, (e, path) -> passes(e, path, reportEdges)),
+                a.nearby(), a.coverage(), events, a.avoided()::contains, (e, path) -> passes(e, path, reportEdges),
+                graph, roads.crosswalkPoints(eventBox)),
                 a, start, stops);
         if (profile.avoidUnpaved()) {
             result = withNotes(result, surfaceNotes(a.found(), profile));

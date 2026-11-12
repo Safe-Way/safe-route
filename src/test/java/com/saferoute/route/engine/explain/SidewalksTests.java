@@ -71,15 +71,21 @@ class SidewalksTests {
                 .containsExactly(tuple("both", false));
         assertThat(Sidewalks.along(path(List.of(unknown), List.of(A, B)), 0)).extracting(Sidewalk::side, Sidewalk::oneway)
                 .containsExactly(tuple("both", null));
-        // 큰 길이라도 인도 없음 태그는 그대로, 작은 길·진출입로는 모름 그대로
+        // 큰 길이라도 인도 없음 태그는 그대로. 연결로도 큰 길과 같고, 골목급은 일방이어도 모름
         RoadEdge none = edge(7, 1, 2, "secondary", List.of(A, B), "no", null, 0, null);
         RoadEdge small = edge(8, 1, 2, "residential", List.of(A, B), null, null, 0, null);
         RoadEdge link = edge(9, 1, 2, "primary_link", List.of(A, B), null, null, null, null);
+        RoadEdge smallOneway = edge(10, 1, 2, "service", List.of(A, B), null, null, 1, null);
+        RoadEdge linkOneway = edge(11, 1, 2, "tertiary_link", List.of(A, B), null, null, 1, null);
         assertThat(Sidewalks.along(path(List.of(none), List.of(A, B)), 0)).extracting(Sidewalk::side).containsExactly("no");
         assertThat(Sidewalks.along(path(List.of(small), List.of(A, B)), 0)).extracting(Sidewalk::side)
                 .containsExactly("unknown");
         assertThat(Sidewalks.along(path(List.of(link), List.of(A, B)), 0)).extracting(Sidewalk::side)
+                .containsExactly("both");
+        assertThat(Sidewalks.along(path(List.of(smallOneway), List.of(A, B)), 0)).extracting(Sidewalk::side)
                 .containsExactly("unknown");
+        assertThat(Sidewalks.along(path(List.of(linkOneway), List.of(A, B)), 0)).extracting(Sidewalk::side)
+                .containsExactly("right");
         // 요청 예: 3차로 일방 → 3 × 3.25 / 2 + 1.5 = 6.375 → 6.4
         RoadEdge three = edge(6, 1, 2, "primary", List.of(A, B), null, 3, 1, null);
         assertThat(Sidewalks.along(path(List.of(three), List.of(A, B)), 0))
