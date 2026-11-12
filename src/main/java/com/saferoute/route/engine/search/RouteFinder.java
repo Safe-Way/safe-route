@@ -147,6 +147,11 @@ public final class RouteFinder {
         return e.penalty().get(Penalty.UNPAVED) >= 1;
     }
 
+    /** 등산로 (OSM sac_scale이 붙은 산길·계단) */
+    public static boolean isTrail(RoadEdge e) {
+        return e.penalty().get(Penalty.TRAIL) >= 1;
+    }
+
     /** 재질을 모르는 산길 */
     public static boolean isSurfaceUnknown(RoadEdge e) {
         return e.penalty().get(Penalty.SURFACE_UNKNOWN) >= 1;

@@ -216,7 +216,7 @@ class RouteReportTests {
                 List.of(report("construction", new double[] {S_P[0] + 150 * 0.0011 / 100, LAT}))), 12);
         RouteResult r = service.route(new RouteRequest(new Place(LAT, S_P[0], "출발"),
                 new Place(LAT, g.point(T)[0], "도착"), "auto", "adult", null, null,
-                List.of(new Place(q[1], q[0], "가게"))));
+                List.of(new Place(q[1], q[0], "가게")), null));
 
         RouteResult.Route safe = r.routes().get(r.routes().size() - 1);
         assertThat(safe.events()).isEmpty();

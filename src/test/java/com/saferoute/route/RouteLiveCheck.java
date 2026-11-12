@@ -163,7 +163,7 @@ class RouteLiveCheck {
                 try {
                     RouteResult r = service.route(new RouteRequest(new Place(CULTURE_CENTER[1], CULTURE_CENTER[0], "문화전당"),
                             new Place(CULTURE_STATION[1], CULTURE_STATION[0], "문화전당역"), "auto", mode, null, "off",
-                            List.of(stop)));
+                            List.of(stop), null));
                     long ms = (System.nanoTime() - started) / 1_000_000;
                     RouteResult.Route safe = r.routes().get(r.routes().size() - 1);
                     RouteResult.Route shortest = r.routes().get(0);
@@ -191,7 +191,7 @@ class RouteLiveCheck {
                 long started = System.nanoTime();
                 try {
                     RouteResult r = service.route(new RouteRequest(new Place(t.from()[1], t.from()[0], null),
-                            new Place(t.to()[1], t.to()[0], null), "auto", mode, null, "off", TIMING_STOPS.subList(0, n)));
+                            new Place(t.to()[1], t.to()[0], null), "auto", mode, null, "off", TIMING_STOPS.subList(0, n), null));
                     long ms = (System.nanoTime() - started) / 1_000_000;
                     total += ms;
                     RouteResult.Route safe = r.routes().get(r.routes().size() - 1);

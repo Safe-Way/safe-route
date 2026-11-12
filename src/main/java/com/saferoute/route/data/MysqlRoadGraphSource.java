@@ -265,13 +265,14 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     enum Surface { PAVED, UNPAVED, TRAIL, UNCONFIRMED }
 
     /**
-     * 바닥 구분. 산길의 등산 난이도가 가장 먼저, 그다음 재질, 재질이 없으면 길 종류로 정한다.
+     * 바닥 구분. 산길·계단의 등산 난이도가 가장 먼저, 그다음 재질, 재질이 없으면 길 종류로 정한다.
      *
      * @param tracktype 농로 단단함 (OSM tracktype: grade1 포장 ~ grade5 흙)
      * @param sacScale  산길 등산 난이도 (OSM sac_scale)
      */
     static Surface classify(String surface, String highway, String tracktype, String sacScale) {
-        if ("path".equals(highway) && sacScale != null && !sacScale.isBlank()) {
+        // 등산로 위 계단도 등산로 (2026-11-12, 광주 14개 818m)
+        if (("path".equals(highway) || "steps".equals(highway)) && sacScale != null && !sacScale.isBlank()) {
             return Surface.TRAIL;
         }
         if (surface != null && !surface.isBlank()) {

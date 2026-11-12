@@ -50,7 +50,7 @@ class RouteStopsTests {
     }
 
     static RouteRequest request(double[] from, double[] to, String mode, Place... stops) {
-        return new RouteRequest(place(from, "출발"), place(to, "도착"), "auto", mode, null, null, List.of(stops));
+        return new RouteRequest(place(from, "출발"), place(to, "도착"), "auto", mode, null, null, List.of(stops), null);
     }
 
     static RouteService service(RoadGraph g, int hour) {
@@ -374,7 +374,7 @@ class RouteStopsTests {
         Place to = place(T_P, "도착");
 
         RouteResult before = s.route(new RouteRequest(from, to, "auto", "adult", null, null));
-        RouteResult empty = s.route(new RouteRequest(from, to, "auto", "adult", null, null, List.of()));
+        RouteResult empty = s.route(new RouteRequest(from, to, "auto", "adult", null, null, List.of(), null));
 
         assertThat(json.writeValueAsString(empty)).isEqualTo(json.writeValueAsString(before));
         assertThat(before.routes()).allSatisfy(rt -> assertThat(rt.stops()).isEmpty());
