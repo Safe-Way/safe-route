@@ -55,4 +55,44 @@ class EvalFix1111Tests {
         // 밝지 않으면(이유가 없으면) 말하지 않는다
         assertThat(AssistantService.mustSayTransit("집까지 18분 걸려요.", legs, List.of())).isEqualTo("집까지 18분 걸려요.");
     }
+
+    @Test
+    void eval13BodyOnlyIsRememberedAndAsksWhereBeforeGemini() {
+        AssistantTools tools = new AssistantTools(mock(KakaoLocalClient.class), mock(TripRecommender.class),
+                mock(FacilityRepository.class), mock(MemoryRepository.class), mock(ReportService.class),
+                mock(WeatherDustService.class), new NightJudge());
+        RuleBrain rules = new RuleBrain(tools, mock(MemoryRepository.class), mock(UnmetRepository.class));
+        AssistantRequest req = new AssistantRequest(null, "오늘 무릎이 아파", 35.148, 126.926, null, null, null, null,
+                null, "senior");
+        Turn t = new Turn(req, Conversation.start(), LocalDateTime.of(2026, 11, 12, 9, 55), false, null);
+        Outcome o = rules.noTool(t);
+        assertThat(o).isNotNull();
+        assertThat(o.ask()).contains("쉴 곳", "어디로");
+        assertThat(t.convo.bodyNote()).isEqualTo("오늘 무릎이 아파");
+        assertThat(t.convo.asked()).isEqualTo("destination");
+        // 휠체어로 바꾸지 않는다
+        assertThat(t.convo.mode()).isNull();
+        // 찾는 곳·가실 곳·다친 말이 같이 있으면 이 규칙이 아님
+        assertThat(RuleBrain.bodyOnly("배아파화장실어디야")).isFalse();
+        assertThat(RuleBrain.bodyOnly("다리아파서문화전당가자")).isFalse();
+        assertThat(RuleBrain.bodyOnly("다리를다쳐서휠체어타고다녀")).isFalse();
+        assertThat(RuleBrain.bodyOnly("오늘좀피곤해")).isTrue();
+    }
+
+    @Test
+    void eval18NightTransitThatIsNotBrighterSaysTheDarkLengthAndHowToGetHelp() {
+        String dark = TripScorer.nightStopDark(734);
+        assertThat(dark).isEqualTo("밤이라 정류장까지 가는 길에 어두운 곳이 약 730m 있어요");
+        List<TransitResult.Leg> legs = List.of();
+        assertThat(AssistantService.mustSayTransit("집까지 25분 걸려요.", legs, List.of(dark, "걷기보다 18분 빨라요")))
+                .isEqualTo("집까지 25분 걸려요. " + dark + ".");
+        // 이미 말했으면 또 붙이지 않는다
+        assertThat(AssistantService.mustSayTransit("어두운 곳이 좀 있어요.", legs, List.of(dark)))
+                .isEqualTo("어두운 곳이 좀 있어요.");
+        assertThat(Sentences.scared("집에 갈 건데 밤이라 무서워")).isTrue();
+        assertThat(Sentences.scared("집에 갈래")).isFalse();
+        assertThat(Sentences.SCARED_TIP).contains("도와줘");
+        // '도와줘'는 급한 말 규칙이 받는다
+        assertThat(RuleBrain.urgent("도와줘")).isTrue();
+    }
 }

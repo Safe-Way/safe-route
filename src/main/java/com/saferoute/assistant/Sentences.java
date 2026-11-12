@@ -168,6 +168,10 @@ final class Sentences {
         if (!walk && plan.scored().because().contains(TripScorer.NIGHT_STOP_BRIGHT)) {
             sb.append(" ").append(TripScorer.NIGHT_STOP_SAY);
         }
+        if (!walk) {
+            plan.scored().because().stream().filter(b -> b.startsWith(TripScorer.NIGHT_STOP_DARK)).findFirst()
+                    .ifPresent(b -> sb.append(" ").append(b).append("."));
+        }
         if (w.rain()) {
             sb.append(roof(best));
         }
@@ -180,8 +184,23 @@ final class Sentences {
         } else if ("senior".equals(mode)) {
             sb.append(" 정류장까지 걷다가 힘드시면 '쉴 곳 어디 있어'라고 물어보세요.");
         }
+        if (scared(t.text) && plan.night()) {
+            sb.append(" ").append(SCARED_TIP);
+        }
         sb.append(weatherTail(w));
         return sb.toString().strip();
+    }
+
+    /** 밤길이 무섭다고 한 사람에게 (점검 18번). '도와줘'는 급한 말 규칙이 받아 112·보호자를 안내한다 */
+    static final String SCARED_TIP = "가다가 무서우면 바로 '도와줘'라고 말해 주세요.";
+
+    /** "밤이라 무서워", "겁나", "불안해" */
+    static boolean scared(String text) {
+        if (text == null) {
+            return false;
+        }
+        String f = text.replace(" ", "");
+        return f.contains("무서") || f.contains("무섭") || f.contains("겁나") || f.contains("겁이") || f.contains("불안");
     }
 
     /**
