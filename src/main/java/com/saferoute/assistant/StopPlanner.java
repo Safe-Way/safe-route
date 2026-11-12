@@ -72,7 +72,17 @@ public class StopPlanner {
 
     /** 무엇을 들를지 */
     public record Ask(String guestId, double lat, double lon, Conversation.Place dest, List<Conversation.Stop> stops,
-                      boolean ordered, String mode, String night) {
+                      boolean ordered, String mode, String night, String fromName) {
+
+        public Ask(String guestId, double lat, double lon, Conversation.Place dest, List<Conversation.Stop> stops,
+                   boolean ordered, String mode, String night) {
+            this(guestId, lat, lon, dest, stops, ordered, mode, night, null);
+        }
+
+        /** 출발 이름 ("광주역에서"라고 말했으면 그 이름, 아니면 지금 위치) */
+        String from() {
+            return fromName == null || fromName.isBlank() ? "지금 위치" : fromName;
+        }
     }
 
     public Plan plan(Ask a) {
@@ -130,7 +140,7 @@ public class StopPlanner {
                 log.info("말한 순서 길 못 셈: {}", e.getClass().getSimpleName());
             }
         }
-        RouteRequest req = new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), "지금 위치"),
+        RouteRequest req = new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), a.from()),
                 new RouteRequest.Place(a.dest().lat(), a.dest().lon(), a.dest().name()), a.night(), a.mode(),
                 TripRecommender.blankToNull(a.guestId()));
         Map<String, Object> request = new LinkedHashMap<>(TripRecommender.request(req));
@@ -239,7 +249,7 @@ public class StopPlanner {
         for (Stop s : stops) {
             via.add(new RouteRequest.Place(s.lat(), s.lon(), s.name()));
         }
-        RouteResult r = routes.route(new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), "지금 위치"),
+        RouteResult r = routes.route(new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), a.from()),
                 new RouteRequest.Place(a.dest().lat(), a.dest().lon(), a.dest().name()), a.night(), a.mode(),
                 TripRecommender.blankToNull(a.guestId()), null, List.copyOf(via), null));
         RouteResult.Route pick = pick(r);
@@ -272,7 +282,7 @@ public class StopPlanner {
         int meters = 0;
         double fLat = a.lat();
         double fLon = a.lon();
-        String fName = "지금 위치";
+        String fName = a.from();
         List<double[]> points = new ArrayList<>();
         for (Stop s : stops) {
             points.add(new double[] {s.lat(), s.lon()});

@@ -73,6 +73,11 @@ public class AssistantService {
             return RuleBrain.emergency();
         }
         tools.loadProfile(t);
+        // ①-2 "광주역에서 …"처럼 출발지를 말했으면 떼어 찾아 두고, 나머지 말로 이어 간다 (11-12)
+        Outcome from = origin(t);
+        if (from != null) {
+            return from;
+        }
         // ② 저장 전 확인에 대한 답
         if (t.convo.pending() != null) {
             Outcome o = rules.confirm(t, t.convo.pending());
@@ -123,6 +128,31 @@ public class AssistantService {
         return rules.run(t);
     }
 
+    /** 출발지 말을 떼고 찾는다. 못 찾았을 때만 되묻는 답, 아니면 null */
+    private Outcome origin(Turn t) {
+        OriginReader.Split s = t.convo.asked() == null ? OriginReader.split(t.text) : null;
+        if (s == null) {
+            // 새 길 찾기 말에 출발지가 없으면 지금 위치에서 출발 (되묻는 중이면 앞서 말한 출발지 그대로)
+            if (t.convo.origin() != null && t.convo.asked() == null && t.req.choice() == null
+                    && t.convo.pending() == null) {
+                t.convo = t.convo.withOrigin(null);
+            }
+            return null;
+        }
+        t.text = s.rest();
+        if (s.origin() == null) {
+            t.convo = t.convo.withOrigin(null);
+            return null;
+        }
+        AssistantTools.OriginFound f = tools.findOrigin(t, s.origin());
+        if (f.place() == null) {
+            t.convo = t.convo.withOrigin(null);
+            return Outcome.ask(f.say());
+        }
+        t.convo = t.convo.withOrigin(f.place());
+        return null;
+    }
+
     AssistantReply reply(Turn t, Outcome o) {
         Pick pick = null;
         List<Other> others = List.of();
@@ -165,6 +195,10 @@ public class AssistantService {
                     && say != null && !say.contains("도와줘")) {
                 say = say.strip() + " " + Sentences.SCARED_TIP;
             }
+        }
+        Conversation.Place from = t.convo.origin();
+        if (pick != null && from != null && say != null && !say.contains(from.name())) {
+            say = from.name() + "에서 출발해요. " + say.strip();
         }
         if (ask != null && say != null && ask.strip().equals(say.strip())) {
             // 같은 문장을 두 번 보내지 않는다 (비서 점검 c10). 버튼(choices)은 그대로 간다
