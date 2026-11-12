@@ -14,7 +14,7 @@
 #           낮: 경찰·편의점·비상벨·아동안전지킴이집 / 밤: 지킴이집·건물 안 비상벨을 뺌 (24시간 경찰·길가 비상벨·편의점)
 #   school  어린이보호구역 대상 시설에서 반경 school-m 안
 #   rest    지금 이용 가능한 쉼터·공중화장실에서 반경 rest-m 안
-#   alley   골목길이 아닌 길 (시설이 아니라 길 성질이라 0 또는 1, 2026-11-12 카카오맵 현장 비교). 휠체어만 쓴다
+#   alley   골목길이 아닌 길 (시설이 아니라 길 성질이라 0 또는 1, 2026-11-12 카카오맵 현장 비교). 휠체어·노인·어린이가 쓴다 (어른은 안 씀)
 #           골목길 = 골목급 차도(service·residential·unclassified·living_street)인데 인도 태그가 없거나 no.
 #           인도 없는 골목은 차와 사람이 같이 써서 아무 데서나 차도를 건너게 된다. 보도·횡단보도 길, 인도 태그(left·right·both) 있는 길은 아님.
 #           응답 routes[].alleys·alleyM은 모든 모드에 주고, 설명 문장("큰 길로 가서 골목길을 ○m 줄여요", 알림 "골목길 약 ○m를 지납니다")은 이 기준을 쓸 때만
@@ -65,12 +65,12 @@ route:
       night-lead-min: 60
       avoid-events: [통제, 사고, 재난, 공사, 행사]   # 붐비는 곳에서 보호자를 놓치지 않게 행사도 피한다
       day:
-        weights: { school: 3, help: 1 }           # 보호구역 > 도움 시설
+        weights: { school: 3, help: 1, alley: 1 } # 보호구역 > 도움 시설 = 골목길 피하기. 골목 0.5~4 시험해 1 (2026-11-12, docs 2장)
         school-m: 300
         help-m: 150
         note: 어린이보호구역과 도움을 청할 곳이 가까운 길로 갑니다
       night:
-        weights: { light: 5, help: 2, cctv: 1 }   # 밤에는 보호구역을 쓰지 않는다
+        weights: { light: 5, help: 2, cctv: 1, alley: 0.5 }   # 밤에는 보호구역을 쓰지 않는다. 골목길은 CCTV 다음 (2026-11-12)
         help-m: 150
     senior:                # 노인
       max-detour: 1.2
@@ -79,11 +79,11 @@ route:
       avoid-stairs: true
       avoid-events: [통제, 사고, 재난, 공사, 행사]   # 붐비는 행사·좁아진 공사 길도 피한다
       day:
-        weights: { rest: 4 }                      # 지금 이용 가능한 쉼터·공중화장실 (어린이 낮 3+1과 같은 세기)
+        weights: { rest: 4, alley: 2 }            # 지금 이용 가능한 쉼터·공중화장실 (어린이 낮 3+1과 같은 세기) > 골목길. 골목 0.5~4 시험해 2 (2026-11-12, docs 2장)
         rest-m: 120
         note: 쉴 곳이 가까운 길로 갑니다
       night:
-        weights: { light: 5, help: 2, cctv: 1 }   # 공중화장실은 경로 계산에 넣지 않는다
+        weights: { light: 5, help: 2, cctv: 1, alley: 0.5 }   # 공중화장실은 경로 계산에 넣지 않는다. 골목길은 CCTV 다음 (2026-11-12)
         help-m: 120
     wheelchair:            # 휠체어: 계단·확인된 턱·못 지나는 육교를 뺀 길 중에서 고른다
       max-detour: 1.2      # 지날 수 있는 길 중 최단의 1.2배까지 (2026-11-04 결정. 이동이 힘들어 노인과 같은 값)
