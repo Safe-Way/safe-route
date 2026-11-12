@@ -91,6 +91,12 @@ class RuleBrain {
         if (asksWalkOk(f) && destination(t.text) == null) {
             return walkOk(t, f);
         }
+        // "오늘 무릎이 아파": 가실 곳 없이 몸 상태만 말함 → 기억해 두고 가실 곳을 묻는다
+        // (점검 13번 11/12: 제미나이가 무릎 아픈 것을 '일주일 휠체어'로 저장하려 함)
+        if (bodyOnly(f) && destination(t.text) == null && RuleReader.mode(t.text) == null) {
+            t.convo = t.convo.withBodyNote(t.text.length() > 30 ? t.text.substring(0, 30) : t.text).asked("destination");
+            return Outcome.ask(BODY_ASK);
+        }
         Outcome food = food(t, f);
         if (food != null) {
             return food;
@@ -129,6 +135,18 @@ class RuleBrain {
             "위험", "안전", "무리");
 
     /** "오늘 저녁에 걸어도 괜찮을까", "지금 산책해도 돼?" (띄어쓰기 뺀 말) */
+    static final String BODY_ASK = "많이 힘드시겠어요. 어디로 가세요? 덜 걷고 쉴 곳이 있는 길로 찾아 드릴게요.";
+
+    /** 몸이 아프다·힘들다는 말뿐인지. 화장실·약국처럼 찾는 곳이나 다친 말("다쳐서 휠체어")이 있으면 아님 */
+    static boolean bodyOnly(String flat) {
+        boolean body = flat.contains("아파") || flat.contains("아프") || flat.contains("힘들") || flat.contains("피곤");
+        boolean other = flat.contains("다쳐") || flat.contains("다쳤") || flat.contains("깁스") || flat.contains("수술")
+                || flat.contains("어디") || flat.contains("화장실") || flat.contains("약국") || flat.contains("병원")
+                || flat.contains("쉴") || flat.contains("쉼터") || flat.contains("가자") || flat.contains("가줘")
+                || flat.contains("갈래") || flat.contains("찾아") || flat.contains("앞으로") || flat.contains("이제부터");
+        return body && !other;
+    }
+
     static boolean asksWalkOk(String flat) {
         return WALK_WORDS.stream().anyMatch(flat::contains) && OK_WORDS.stream().anyMatch(flat::contains);
     }
@@ -516,7 +534,7 @@ class RuleBrain {
                 return Outcome.ask("잘 못 알아들었어요. 어디로 가실지 다시 말씀해 주시겠어요? (예: 문화전당 가자, 화장실 어디야)");
             }
             if (t.convo.bodyNote() != null) {
-                return Outcome.ask("많이 힘드시겠어요. 어디로 가세요? 덜 걷고 쉴 곳이 있는 길로 찾아 드릴게요.");
+                return Outcome.ask(BODY_ASK);
             }
             t.convo = t.convo.asked("destination");
             return Outcome.ask("어디로 가세요? 장소 이름을 말씀해 주세요. (예: 문화전당)");

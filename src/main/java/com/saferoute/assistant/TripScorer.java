@@ -63,6 +63,14 @@ public class TripScorer {
     /** 그 이유를 말로 (점검 18번: 밤이라 무서운데 대중교통을 고르면 밝은 길 얘기가 빠졌음) */
     static final String NIGHT_STOP_SAY = "밤이라 정류장까지 가는 길도 가로등이 많은 밝은 길로 골랐어요.";
 
+    /** 밤 대중교통인데 정류장까지 가는 길이 밝다고 못 할 때의 이유 앞부분 (뒤에 "약 N m 있어요") */
+    static final String NIGHT_STOP_DARK = "밤이라 정류장까지 가는 길에 어두운 곳이";
+
+    /** "밤이라 정류장까지 가는 길에 어두운 곳이 약 650m 있어요" (10m 단위) */
+    static String nightStopDark(int darkM) {
+        return NIGHT_STOP_DARK + " 약 " + Math.max(10, Math.round(darkM / 10.0) * 10) + "m 있어요";
+    }
+
     public record Context(String mode, boolean rain, boolean heat, boolean cold, boolean dustBad, boolean night,
                           boolean personalSpeed, Integer preferTransit, String habit, String bodyNote) {
 
@@ -333,9 +341,13 @@ public class TripScorer {
         // safeWalk는 엔진 길로 바꿨다는 뜻일 뿐이라, 다른 후보보다 어두운 길이 길면 밝다고 하지 않는다
         boolean notDarker = other == null || looks.get(best) == null || looks.get(other) == null
                 || looks.get(best).darkM() <= looks.get(other).darkM();
+        // 밝은 길이라고 못 하면(다른 후보보다 어두움) 어두운 길이를 사실대로 (점검 18번 11/12: 밤 얘기가 하나도 없었음)
+        // 밤 이유는 3개 자르기에서 빠지지 않게 맨 앞에 둔다
         if (!walk && ctx.night() && notDarker
                 && best.legs().stream().anyMatch(l -> Boolean.TRUE.equals(l.safeWalk()))) {
-            out.add(NIGHT_STOP_BRIGHT);
+            out.add(0, NIGHT_STOP_BRIGHT);
+        } else if (!walk && ctx.night() && looks.get(best) != null && looks.get(best).darkM() >= 50) {
+            out.add(0, nightStopDark(looks.get(best).darkM()));
         }
         if (!walk && "wheelchair".equals(ctx.mode())) {
             out.add("엘리베이터로 들어갈 수 있는 역만");
