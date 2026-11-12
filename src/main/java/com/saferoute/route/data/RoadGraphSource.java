@@ -1,5 +1,7 @@
 package com.saferoute.route.data;
 
+import java.util.List;
+
 import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.graph.RoadGraph;
 
@@ -17,5 +19,10 @@ public interface RoadGraphSource {
     /** underground: 지하 길(역 출구·대합실·지하상가)도 넣고 출구를 지상 길에 잇는지. 비 올 때 운행 시간 안에만 true (2026-11-09) */
     default RoadGraph load(BBox box, boolean underground) {
         return load(box);
+    }
+
+    /** 범위 안 횡단보도 점 {경도, 위도}. 응답 crossings의 큰 길 건너는 자리에 쓴다 (specs/014) */
+    default List<double[]> crosswalkPoints(BBox box) {
+        return List.of();
     }
 }

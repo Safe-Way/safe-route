@@ -150,7 +150,7 @@ final class Turns {
     }
 
     /** -180~180도로 */
-    private static double normalize(double d) {
+    static double normalize(double d) {
         return ((d % 360) + 540) % 360 - 180;
     }
 }

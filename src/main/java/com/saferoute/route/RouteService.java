@@ -214,10 +214,11 @@ public class RouteService {
         // 등산로 (2026-11-12): 등산로 없는 길이 넓힌 범위까지 어디에도 없을 때만 등산로를 지나고 알린다. 우회 한도 없음.
         // 출발·도착은 등산로 없는 길에 다시 붙여 보고(휠체어처럼 50m 더 멀어지는 데까지), 아니면 등산로에 붙인다 (attempt). 휠체어는 늘 뺀다(exclude)
         boolean avoidTrail = !Boolean.TRUE.equals(req.allowTrail()) && !profile.exclude().contains(Penalty.TRAIL);
+        RoadGraph[] used = new RoadGraph[1]; // 경로를 찾은 도로망. 건너는 곳(SideChanges)을 이 도로망에서 찾는다
         java.util.function.Function<Boolean, Attempt> search = noTrail -> {
-            RoadGraph near = roads.load(BBox.around(points, props.searchMarginM()), underground);
+            used[0] = roads.load(BBox.around(points, props.searchMarginM()), underground);
             try {
-                return attempt(near, underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed,
+                return attempt(used[0], underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed,
                         reports, noTrail);
             } catch (RouteException e) {
                 // 넓혀 다시 찾는 것은 길을 못 찾았을 때만 (이은 길이 빈 SAME_POINT 안전망은 넓혀도 같다)
@@ -225,8 +226,9 @@ public class RouteService {
                     throw e;
                 }
                 // 강·철도·큰 도로를 범위 밖 다리로 돌아가야 하는 길. 넓혀 한 번 더 찾는다 (우회 한도 등 규칙은 같다)
-                return attempt(roads.load(BBox.around(points, props.retryMarginM()), underground),
-                        underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed, reports, noTrail);
+                used[0] = roads.load(BBox.around(points, props.retryMarginM()), underground);
+                return attempt(used[0], underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed,
+                        reports, noTrail);
             }
         };
         Attempt a;
@@ -242,7 +244,8 @@ public class RouteService {
         }
         java.util.Map<RoadEvent, Long> reportEdges = a.reportEdges();
         RouteResult result = withStops(assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(),
-                a.nearby(), a.coverage(), events, a.avoided()::contains, (e, path) -> passes(e, path, reportEdges)),
+                a.nearby(), a.coverage(), events, a.avoided()::contains, (e, path) -> passes(e, path, reportEdges),
+                used[0], roads.crosswalkPoints(eventBox)),
                 a, start, stops);
         if (profile.avoidUnpaved()) {
             result = withNotes(result, surfaceNotes(a.found(), profile));
