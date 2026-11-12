@@ -95,4 +95,17 @@ class EvalFix1111Tests {
         // '도와줘'는 급한 말 규칙이 받는다
         assertThat(RuleBrain.urgent("도와줘")).isTrue();
     }
+
+    @Test
+    void eval11SeniorAnswerAlwaysTellsHowToFindARestPlace() {
+        AssistantReply.Pick transit = new AssistantReply.Pick("transit", java.util.Map.of(), "16분", 16, null);
+        AssistantReply.Pick walk = new AssistantReply.Pick("walk", java.util.Map.of(), "걸어서 12분", 12, "safe");
+        assertThat(AssistantService.mustSay("남광주시장까지 16분 걸려요.", "senior", transit))
+                .isEqualTo("남광주시장까지 16분 걸려요. " + AssistantService.SENIOR_REST_TRANSIT);
+        assertThat(AssistantService.mustSay("12분 걸려요.", "senior", walk)).contains("쉬어 가세요");
+        // 이미 말했거나 어르신이 아니면 그대로
+        assertThat(AssistantService.mustSay("쉴 곳이 3곳 있어요.", "senior", walk)).isEqualTo("쉴 곳이 3곳 있어요.");
+        assertThat(AssistantService.mustSay("16분 걸려요.", "adult", transit)).isEqualTo("16분 걸려요.");
+        assertThat(AssistantService.mustSay("어디로 가세요?", "senior", null)).isEqualTo("어디로 가세요?");
+    }
 }

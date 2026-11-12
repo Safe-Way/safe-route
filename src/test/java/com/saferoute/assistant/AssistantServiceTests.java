@@ -423,7 +423,7 @@ class AssistantServiceTests {
         assertThat(AssistantService.mustSay("턱을 피해서 골랐어요. 22분 걸려요.", "wheelchair", walk))
                 .isEqualTo("22분 걸려요. " + why);
         assertThat(why).contains("턱").doesNotContain("계단", "피한 길", "휠체어로");
-        assertThat(AssistantService.mustSay("22분 걸려요.", "senior", walk)).isEqualTo("22분 걸려요.");
+        assertThat(AssistantService.mustSay("22분 걸려요.", "senior", walk)).doesNotContain(why);
         AssistantReply.Pick bus = new AssistantReply.Pick("transit", null, "버스 59번", 18, null);
         assertThat(AssistantService.mustSay("18분 걸려요.", "wheelchair", bus)).isEqualTo("18분 걸려요.");
     }
