@@ -15,6 +15,7 @@ import org.jgrapht.graph.MaskSubgraph;
 import com.saferoute.route.api.RouteError;
 import com.saferoute.route.api.RouteException;
 import com.saferoute.route.engine.geo.Geo;
+import com.saferoute.route.engine.graph.Crossings;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadGraph;
@@ -165,7 +166,9 @@ public final class RouteFinder {
     private static RoadPath search(RoadGraph graph, Graph<Long, RoadEdge> usable, long from, long to,
             ToDoubleFunction<RoadEdge> cost) {
         // 요청마다 비용을 덧씌운 보기만 만들고, 여러 요청이 함께 쓰는 그래프는 그대로 둔다
-        var weighted = new AsWeightedGraph<>(usable, e -> cost.applyAsDouble(graph.original(e)), false, false);
+        // 건널 곳의 L·R 잇는 길은 길이만: 커버율·신고가 없는 가짜 길이라 밤 기준 비용이 붙으면 안 건너려고 돈다
+        var weighted = new AsWeightedGraph<>(usable,
+                e -> Crossings.isConnector(e) ? e.lengthM() : cost.applyAsDouble(graph.original(e)), false, false);
         // 비용은 길이보다 작아지지 않으므로 직선거리를 A* 추정값으로 쓸 수 있다.
         // 도로망 길이를 다른 지구 반지름으로 쟀을 수 있어 1% 낮춰 잡는다 (넘게 잡으면 최단을 놓친다)
         AStarAdmissibleHeuristic<Long> straight =

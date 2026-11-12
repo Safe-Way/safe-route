@@ -44,7 +44,7 @@ public record RouteResult(
      * @param sidewalks 차도를 따라 걷는 구간의 인도 쪽. 인도·보행로 같은 걷는 길은 없다
      * @param dark     밤에 조명이 적은 구간 (FR-31). 낮이면 빈 목록
      * @param turns    꺾는 곳 (FR-34)
-     * @param crossings 횡단보도를 건너는 구간. 꺾지 않고 곧장 건너는 곳도 있다
+     * @param crossings 횡단보도를 건너는 구간(꺾지 않고 곧장 건너는 곳도 있다)과 큰 길을 건너는 곳 (2026-11-11, specs/013). 거리순
      * @param covered  이 요청 기준(모드·낮밤)마다 경로가 그 범위 안을 걷는 길이(m). 예: 어린이 낮
      *                 {"school": 1905, "help": 2896} = 보호구역 300m 안 1905m, 도움 시설 150m 안 2896m.
      *                 비 오는 날 {"roof": 780} = 지붕 있는 길 780m (비 올 때만 키가 생김, 2026-11-09).
@@ -57,13 +57,13 @@ public record RouteResult(
      */
     public record Route(String kind, int distanceM, int durationMin, List<double[]> geometry,
             Map<String, Integer> counts, Map<String, Integer> covered, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
-            List<Stretch> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM,
+            List<Crossing> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM,
             List<StopMark> stops) {
 
         /** 들를 곳 없이 */
         public Route(String kind, int distanceM, int durationMin, List<double[]> geometry, Map<String, Integer> counts,
                 Map<String, Integer> covered, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
-                List<Stretch> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM) {
+                List<Crossing> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM) {
             this(kind, distanceM, durationMin, geometry, counts, covered, sidewalks, dark, turns, crossings, stairs,
                     events, unpavedM, surfaceUnknownM, List.of());
         }
@@ -71,7 +71,7 @@ public record RouteResult(
         /** 바닥 길이 없이 (시험·다른 파트 코드가 만드는 모양) */
         public Route(String kind, int distanceM, int durationMin, List<double[]> geometry, Map<String, Integer> counts,
                 Map<String, Integer> covered, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
-                List<Stretch> crossings, List<Stair> stairs, List<Event> events) {
+                List<Crossing> crossings, List<Stair> stairs, List<Event> events) {
             this(kind, distanceM, durationMin, geometry, counts, covered, sidewalks, dark, turns, crossings, stairs,
                     events, 0, 0);
         }
@@ -84,6 +84,22 @@ public record RouteResult(
      * @param atM  출발부터 경로를 따라 그 들를 곳을 붙인 길 위 점까지 거리(m). 시설 along.atM과 같은 기준
      */
     public record StopMark(String name, double lat, double lon, int atM) {
+    }
+
+    /**
+     * 건너는 곳 하나. 두 가지가 있다.
+     * <ul>
+     *   <li>경로가 횡단보도 길(footway=crossing)을 지나는 구간: fromM·toM만, 나머지 null</li>
+     *   <li>큰 길을 건너는 곳 (specs/013): fromM = toM = 그 자리, fromSide·toSide. 경로 선은 차도 가운데라 앱이
+     *       교차로 한가운데에서 쪽을 바꿔 그리던 것을 이 횡단보도 자리에서 건너게 그린다</li>
+     * </ul>
+     *
+     * @param fromM, toM 출발부터 경로를 따라 잰 시작·끝(m). 시설 along.atM과 같은 기준
+     * @param lat, lon   건너는 횡단보도 자리. 그 큰 길 위 30m 안 횡단보도를 못 찾으면 null
+     * @param kind       crossing(횡단보도 점) 또는 footway(횡단보도 길 가운데). 못 찾으면 null
+     * @param fromSide, toSide 건너기 앞뒤 큰길에서 걷는 방향 기준 left·right. 앞뒤가 큰길이 아니거나 횡단보도 길 구간이면 null
+     */
+    public record Crossing(int fromM, int toM, Double lat, Double lon, String kind, String fromSide, String toSide) {
     }
 
     /**

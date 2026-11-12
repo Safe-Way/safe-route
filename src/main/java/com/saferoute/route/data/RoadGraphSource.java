@@ -28,4 +28,9 @@ public interface RoadGraphSource {
     default List<double[]> crossingPoints(BBox box) {
         return List.of();
     }
+
+    /** 범위 안 횡단보도 점 {경도, 위도}만 (신호등 빼고). 응답 crossings의 큰 길 건너는 자리에 쓴다 (specs/013) */
+    default List<double[]> crosswalkPoints(BBox box) {
+        return List.of();
+    }
 }

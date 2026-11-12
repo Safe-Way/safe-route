@@ -226,8 +226,10 @@ public class RouteService {
                     underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed, reports);
         }
         java.util.Map<RoadEvent, Long> reportEdges = a.reportEdges();
+        // 횡단보도 점은 행사 범위(다시 찾는 도로망 + 500m)로 고른다: 경로에서 30m 안 점이 늘 들어간다
         RouteResult result = withStops(assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(),
-                a.nearby(), a.coverage(), events, a.avoided()::contains, (e, path) -> passes(e, path, reportEdges)),
+                a.nearby(), a.coverage(), events, a.avoided()::contains, (e, path) -> passes(e, path, reportEdges),
+                a.graph(), roads.crosswalkPoints(eventBox)),
                 a, start, stops);
         if (profile.avoidUnpaved()) {
             result = withNotes(result, surfaceNotes(a.found(), profile));
@@ -238,11 +240,12 @@ public class RouteService {
     /**
      * 한 도로망에서 찾은 결과. snapNotes: 휠체어가 가장 가까운 길이 아닌 곳에 붙었을 때 주의 (없으면 빈 목록).
      * avoided: 실제로 둘레를 피하려 한 행사·돌발. legs: 들를 곳 사이 구간마다 찾은 것 (들를 곳이 없으면 found 하나).
-     * reportEdges: 신고마다 이 도로망에서 신고된 길 번호 (20m 안에 길이 없는 신고는 없음)
+     * reportEdges: 신고마다 이 도로망에서 신고된 길 번호 (20m 안에 길이 없는 신고는 없음).
+     * graph: 찾은 도로망(나누기 전). 큰 길 건너는 자리(crossings)를 찾는 데 쓴다
      */
     private record Attempt(RouteFinder.Found found, List<RouteFinder.Found> legs, double snapM, Nearby nearby,
             List<RouteResult.Note> snapNotes, Coverage coverage, List<RoadEvent> avoided,
-            java.util.Map<RoadEvent, Long> reportEdges) {
+            java.util.Map<RoadEvent, Long> reportEdges, RoadGraph graph) {
     }
 
     /**
@@ -368,7 +371,8 @@ public class RouteService {
         RouteException failed;
         try {
             return joined(legs(cross.graph(), sides(cross, snaps, points), extra, score, profile, wideDetour,
-                    asides(graph, av, edges), cov, stops), snaps, nearby, List.of(), cov, av, edges, profile.avoid());
+                    asides(graph, av, edges), cov, stops), snaps, nearby, List.of(), cov, av, edges, profile.avoid(),
+                    graph);
         } catch (RouteException e) {
             if (profile.exclude().isEmpty()) {
                 throw e;
@@ -409,7 +413,7 @@ public class RouteService {
         return joined(legs(cross.graph(), sides(cross, moved, points),
                 withReports(score, reachable(graph, costed, moved), movedEdges, profile), score,
                 profile, wideDetour, asides(graph, movedAv, movedEdges), cov, stops), moved,
-                nearby, notes, cov, movedAv, movedEdges, profile.avoid());
+                nearby, notes, cov, movedAv, movedEdges, profile.avoid(), graph);
     }
 
     /** 붙인 노드가 큰길 위라 나뉘었으면 요청 점이 있는 쪽 노드로 (탐색용 도로망 번호). 붙인 거리는 그대로 */
@@ -424,9 +428,9 @@ public class RouteService {
     /** 구간 결과를 이어 하나의 시도로. 붙인 거리는 출발·도착만 더한다 (들를 곳 가게에서 길까지는 머무는 일에 가깝다) */
     private static Attempt joined(List<RouteFinder.Found> legs, List<RoadGraph.Snap> at, Nearby nearby,
             List<RouteResult.Note> notes, Coverage cov, List<RoadEvent> avoided,
-            java.util.Map<RoadEvent, Long> reportEdges, java.util.function.Predicate<RoadEdge> avoid) {
+            java.util.Map<RoadEvent, Long> reportEdges, java.util.function.Predicate<RoadEdge> avoid, RoadGraph graph) {
         return new Attempt(join(legs, avoid), legs, at.get(0).distanceM() + at.get(at.size() - 1).distanceM(), nearby, notes,
-                cov, avoided, reportEdges);
+                cov, avoided, reportEdges, graph);
     }
 
     /** 붙인 점 사이 구간마다 최단·안전 경로를 찾는다. 우회 한도는 구간마다 따로 지킨다 */

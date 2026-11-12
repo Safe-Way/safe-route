@@ -28,9 +28,13 @@ public final class RoadGraph {
     /** 점에서 이 거리 안의 길을 모두 붙일 후보로 본다 (2026-11-11, 진행표 w14 요청 값) */
     static final double SNAP_CANDIDATE_M = 30;
 
-    /** 걸어서 아무 데서나 못 건너는 큰 길. 붙일 때 점과 길 사이에 있으면 건너편 길로 안 붙이고, 탐색은 횡단보도에서만 건넌다 ({@link Crossings}) */
-    static final Set<String> BIG_ROADS = Set.of("primary", "primary_link", "secondary", "secondary_link",
-            "trunk", "trunk_link");
+    /**
+     * 걸어서 아무 데서나 못 건너는 큰 길. 붙일 때 점과 길 사이에 있으면 건너편 길로 안 붙이고, 탐색은 횡단보도에서만 건넌다 ({@link Crossings}).
+     * tertiary(2~4차로)도 넣는다: 앱이 인도 쪽으로 옮겨 그리는 길(sidewalks, w15)과 같아야 교차로 한가운데서 쪽이 바뀌지 않는다
+     * (2026-11-11, 전대의대앞 제봉로·백서로)
+     */
+    public static final Set<String> BIG_ROADS = Set.of("primary", "primary_link", "secondary", "secondary_link",
+            "trunk", "trunk_link", "tertiary", "tertiary_link");
 
     /** 길을 나눌 때 새로 만드는 노드·길 번호. OSM 번호(양수)와 겹치지 않게 음수 */
     private long nextVirtual = -1;
@@ -251,7 +255,7 @@ public final class RoadGraph {
      * 선분 a-b와 c-d가 엄밀히 엇갈리는지. 끝점이 다른 선분 위에 닿기만 하면 아니다 (발이 큰 길과 만나는 교차로 노드에
      * 놓여도 건넘이 아니다). 경도에 cos(위도)를 곱한 평면에서 잰다
      */
-    private static boolean crosses(double[] a, double[] b, double[] c, double[] d) {
+    public static boolean crosses(double[] a, double[] b, double[] c, double[] d) {
         double k = Math.cos(Math.toRadians(a[1]));
         return side(a, b, c, k) * side(a, b, d, k) < 0 && side(c, d, a, k) * side(c, d, b, k) < 0;
     }

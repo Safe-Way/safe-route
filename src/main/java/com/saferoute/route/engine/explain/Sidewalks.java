@@ -6,6 +6,7 @@ import java.util.Set;
 
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.engine.graph.RoadEdge;
+import com.saferoute.route.engine.graph.RoadGraph;
 import com.saferoute.route.engine.search.RoadPath;
 import com.saferoute.route.engine.search.RouteFinder;
 
@@ -27,10 +28,9 @@ public final class Sidewalks {
     /**
      * 인도 태그가 없을 때 쪽을 정하는 큰 길과 그 연결로: 일방은 차가 가는 방향 오른쪽, 양방(또는 모름)은 양쪽.
      * 도심 큰 길은 대개 인도가 있고, 양방향 길의 인도 태그는 primary 5%·secondary 20%·tertiary 22%뿐이라 모름으로 두면 앱이 선을 옮기지 못한다.
-     * 골목급(residential·service 등)은 인도가 없는 길이 많아 정하지 않는다 (2026-11-11, 진행표 w15)
+     * 골목급(residential·service 등)은 인도가 없는 길이 많아 정하지 않는다 (2026-11-11, 진행표 w15). 붙이기·횡단보도 건너기의 큰 길과 같은 목록
      */
-    static final Set<String> SIDE_BY_RULE = Set.of("trunk", "trunk_link", "primary", "primary_link", "secondary",
-            "secondary_link", "tertiary", "tertiary_link");
+    static final Set<String> SIDE_BY_RULE = RoadGraph.BIG_ROADS;
 
     /** 차로 하나 폭(m). 앱이 요청한 식의 값 (2026-11-11) */
     static final double LANE_M = 3.25;

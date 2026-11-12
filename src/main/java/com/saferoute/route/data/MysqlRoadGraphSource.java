@@ -47,7 +47,8 @@ import com.saferoute.route.engine.graph.UndergroundLinks;
  *       곧게 잇는 선이 있어 휠체어가 그 계단을 건너뛰게 된다 (11-10 확인, 광주 44줄, 문화전당 광장 포함. A파트 원래 메모대로).
  *       번호는 지하 길과 같은 -(10억 + id)</li>
  *   <li>건널 수 있는 곳 점 (2026-11-11, specs/011): poi kind = crosswalk ∪ road_node highway = traffic_signals.
- *       신호등 점을 빼면 신호 교차로 대부분이 "건널 수 없음"이 되어 시연 지역 경로 62%가 바뀐다(측정)</li>
+ *       신호등 점을 빼면 신호 교차로 대부분이 "건널 수 없음"이 되어 시연 지역 경로 62%가 바뀐다(측정).
+ *       횡단보도 점만은 응답 crossings의 큰 길 건너는 자리에 따로 쓴다 (specs/013)</li>
  * </ul>
  * route.yml의 route.road-source가 mysql일 때 쓴다 (기본값). none이면 {@link NoRoadGraphSource}.
  */
@@ -73,9 +74,10 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
      * @param area  모든 길을 감싼 사각형 (도로망을 넣은 지역)
      * @param exits 지하 길의 역 출구 점과 붙일 지상 길
      * @param crossings 건널 수 있는 곳 점 {경도, 위도}
+     * @param crosswalks crossings 중 횡단보도 점만 (신호등 빼고)
      */
     private record Network(List<RoadEdge> edges, double[][] boxes, BBox area, List<UndergroundLinks.Exit> exits,
-            List<double[]> crossings) {
+            List<double[]> crossings, List<double[]> crosswalks) {
     }
 
     public MysqlRoadGraphSource(JdbcTemplate jdbc) {
@@ -127,6 +129,11 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     @Override
     public List<double[]> crossingPoints(BBox box) {
         return network().crossings().stream().filter(p -> box.contains(p[0], p[1])).toList();
+    }
+
+    @Override
+    public List<double[]> crosswalkPoints(BBox box) {
+        return network().crosswalks().stream().filter(p -> box.contains(p[0], p[1])).toList();
     }
 
     /**
@@ -211,9 +218,11 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
                     return new UndergroundLinks.Exit(rs.getLong("id"), new double[] {rs.getDouble("lon"), rs.getDouble("lat")},
                             attach);
                 }).stream().filter(java.util.Objects::nonNull).toList();
-        List<double[]> crossings = jdbc.query("SELECT lon, lat FROM poi WHERE kind = 'crosswalk'"
-                + " UNION ALL SELECT lon, lat FROM road_node WHERE highway = 'traffic_signals'",
-                (rs, i) -> new double[] {rs.getDouble("lon"), rs.getDouble("lat")});
+        // 세 번째 값 1 = 횡단보도 점 (건너는 자리는 신호등 점을 안 쓴다, specs/013). 같은 질의에서 나눈다
+        List<double[]> crossings = jdbc.query("SELECT lon, lat, 1 AS walk FROM poi WHERE kind = 'crosswalk'"
+                + " UNION ALL SELECT lon, lat, 0 FROM road_node WHERE highway = 'traffic_signals'",
+                (rs, i) -> new double[] {rs.getDouble("lon"), rs.getDouble("lat"), rs.getInt("walk")});
+        List<double[]> crosswalks = crossings.stream().filter(p -> p[2] == 1).toList();
         double[][] boxes = new double[edges.size()][];
         double w = Double.MAX_VALUE, so = Double.MAX_VALUE, e = -Double.MAX_VALUE, no = -Double.MAX_VALUE;
         for (int i = 0; i < edges.size(); i++) {
@@ -230,7 +239,7 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             e = Math.max(e, b[2]);
             no = Math.max(no, b[3]);
         }
-        return new Network(edges, boxes, edges.isEmpty() ? null : new BBox(w, so, e, no), exits, crossings);
+        return new Network(edges, boxes, edges.isEmpty() ? null : new BBox(w, so, e, no), exits, crossings, crosswalks);
     }
 
     /** 지상(road_edge)·지하(road_edge_excluded) 두 표에서 같은 칸을 같은 이름으로 읽는 SELECT 부분. t는 표 별칭 */

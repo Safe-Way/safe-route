@@ -89,7 +89,8 @@ class CrossingsTests {
         // 신호등 점이 Y에서 큰길 선 위 10m (15m 안·선 5m 안)
         Crossings c = new Crossings(road(), List.of(at(110, 1)));
 
-        assertThat(c.place(3, at(100, 50))).isEqualTo(3);
+        // 건널 곳도 양쪽으로 나누고 잇는 길로 잇는다: GPS 쪽 노드에서 시작하고, 잇는 길은 경로에 안 나온다
+        assertThat(c.place(3, at(100, 50))).isNotEqualTo(3).isNotEqualTo(c.place(3, at(100, -50)));
         assertThat(ids(shortest(c, 5, 8))).containsExactly(4L, 2L, 7L);
         // X에서 건너편은 Y 횡단보도까지 갔다 온다
         assertThat(ids(shortest(c, 5, 6))).containsExactly(4L, 2L, 2L, 5L);
@@ -115,22 +116,28 @@ class CrossingsTests {
 
         Crossings c = new Crossings(g, List.of());
 
-        assertThat(c.graph()).isSameAs(g);
+        // 횡단보도 길은 붙은 쪽(북쪽) 노드에 이어지고, 남쪽 골목으로는 잇는 길을 건너 간다
         assertThat(ids(shortest(c, 5, 6))).containsExactly(4L, 5L);
+        assertThat(shortest(c, 5, 6).lengthM()).isEqualTo(100, org.assertj.core.api.Assertions.within(0.5));
     }
 
     @Test
-    void threeBigRoadsOrOneBigRoadEndIsNotSplit() {
-        // X: 큰길 3개 (T자 교차로), W·E·N: 큰길 1개 (끝)
+    void junctionIsSplitIntoSectorsButBigRoadEndIsNot() {
+        // X: 큰길 3개 (T자 교차로, 북쪽 갈래), W·E·N: 큰길 1개 (끝). 남쪽 골목은 X의 남쪽 칸에 붙는다
         RoadGraph g = new Net().node(1, -500, 0).node(2, 0, 0).node(3, 500, 0).node(4, 0, 300).node(5, 30, -50)
                 .edge(1, 1, 2, "primary").edge(2, 2, 3, "primary").edge(3, 2, 4, "secondary")
                 .edge(4, 2, 5, "residential").graph();
 
         Crossings c = new Crossings(g, List.of());
 
-        assertThat(c.graph()).isSameAs(g);
-        assertThat(c.place(2, at(0, -10))).isEqualTo(2);
+        long south = c.place(2, at(0, -10));
+        assertThat(south).isNotEqualTo(2).isNotEqualTo(c.place(2, at(-10, 10))).isNotEqualTo(c.place(2, at(10, 10)));
+        assertThat(c.graph().graph().edgesOf(south)).extracting(e -> c.graph().original(e).id()).contains(4L);
         assertThat(c.place(1, at(-500, -10))).isEqualTo(1);
+        // 교차로는 횡단보도 점이 없어도 갈래마다 건넌다: 북서 칸에서 북동 칸으로 N 갈래를 건너 30m
+        RoadPath p = shortest(c, c.place(2, at(-10, 10)), c.place(2, at(10, 10)));
+        assertThat(p.edges()).isEmpty();
+        assertThat(p.crosses()).singleElement().satisfies(x -> assertThat(x.node()).isEqualTo(2));
     }
 
     @Test
@@ -143,8 +150,13 @@ class CrossingsTests {
         RoadGraph loop = new Net().node(1, -500, 0).node(2, 0, 0).node(3, 500, 0)
                 .edge(1, 1, 2, "primary").edge(2, 2, 3, "primary").edge(9, 2, 2, "footway").graph();
 
+        // 교차로의 두 갈래가 5° 차이: 사이 칸이 의미 없다
+        RoadGraph narrow = new Net().node(1, -500, 0).node(2, 0, 0).node(3, 500, 0).node(4, 500, 44)
+                .edge(1, 1, 2, "primary").edge(2, 2, 3, "primary").edge(3, 2, 4, "secondary").graph();
+
         assertThat(new Crossings(twin, List.of()).place(2, at(0, 10))).isEqualTo(2);
         assertThat(new Crossings(loop, List.of()).place(2, at(0, 10))).isEqualTo(2);
+        assertThat(new Crossings(narrow, List.of()).place(2, at(0, 10))).isEqualTo(2);
     }
 
     @Test
