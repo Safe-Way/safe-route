@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.saferoute.route.data.InMemoryRoadGraphSource;
 import com.saferoute.route.data.NoRoadGraphSource;
@@ -155,17 +157,18 @@ class GraphTests {
         assertThat(g.graph().edgesOf(snap.node())).noneMatch(RouteFinder::isStairs);
     }
 
-    @Test
-    void footOnIntersectionWithBigRoadIsNotCrossing() {
+    @ParameterizedTest
+    @ValueSource(strings = {"trunk", "tertiary"})
+    void footOnIntersectionWithBigRoadIsNotCrossing(String big) {
         // 남북 큰 길이 노드 10을 지나고, 인도 30→10이 동쪽에서 그 노드로 들어온다. 점은 노드 10의 남서쪽 약 7m.
         // 점 남쪽 3m의 다른 큰 길 너머 노드 40(6m)이 더 가깝지만 건너야 하므로, 교차로 노드 10에 붙어야 한다
         Map<Long, double[]> nodes = Map.of(10L, at(0, 0), 11L, at(0, -100), 12L, at(0, 100), 30L, at(100, 0),
                 21L, at(-100, -8), 22L, at(100, -8), 40L, at(-5, -11), 41L, at(-5, -100));
-        RoadGraph g = new RoadGraph(nodes, List.of(road(1, 11, 10, "trunk", nodes), road(2, 10, 12, "trunk", nodes),
-                road(3, 30, 10, "footway", nodes), road(4, 21, 22, "trunk", nodes), road(5, 40, 41, "footway", nodes)));
+        RoadGraph g = new RoadGraph(nodes, List.of(road(1, 11, 10, big, nodes), road(2, 10, 12, big, nodes),
+                road(3, 30, 10, "footway", nodes), road(4, 21, 22, big, nodes), road(5, 40, 41, "footway", nodes)));
 
         RoadGraph.Snap snap = g.nearest(at(-5, -5)[0], at(-5, -5)[1], new HashSet<>(nodes.keySet()),
-                e -> !"trunk".equals(e.highway()));
+                e -> !big.equals(e.highway()));
 
         assertThat(snap.node()).isEqualTo(10L);
         assertThat(snap.distanceM()).isBetween(6.5, 7.5);

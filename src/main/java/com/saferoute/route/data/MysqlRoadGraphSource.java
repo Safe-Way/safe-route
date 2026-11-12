@@ -46,6 +46,8 @@ import com.saferoute.route.engine.graph.UndergroundLinks;
  *       ({@link Penalty#PLAZA}, route.yml wheelchair exclude): 높낮이를 모르는 선이라 높낮이가 다른 광장에서는 계단 양 끝을
  *       곧게 잇는 선이 있어 휠체어가 그 계단을 건너뛰게 된다 (11-10 확인, 광주 44줄, 문화전당 광장 포함. A파트 원래 메모대로).
  *       번호는 지하 길과 같은 -(10억 + id)</li>
+ *   <li>횡단보도 점 (2026-11-12, specs/014): poi kind = crosswalk. 응답 crossings의 큰 길 건너는 자리에만 쓴다.
+ *       신호등 점은 교차로 가운데라 쓰지 않는다</li>
  * </ul>
  * route.yml의 route.road-source가 mysql일 때 쓴다 (기본값). none이면 {@link NoRoadGraphSource}.
  */
@@ -70,8 +72,10 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
      * @param boxes 길마다 선을 감싼 사각형 {서, 남, 동, 북}. 범위로 고를 때 쓴다
      * @param area  모든 길을 감싼 사각형 (도로망을 넣은 지역)
      * @param exits 지하 길의 역 출구 점과 붙일 지상 길
+     * @param crosswalks 횡단보도 점 {경도, 위도}
      */
-    private record Network(List<RoadEdge> edges, double[][] boxes, BBox area, List<UndergroundLinks.Exit> exits) {
+    private record Network(List<RoadEdge> edges, double[][] boxes, BBox area, List<UndergroundLinks.Exit> exits,
+            List<double[]> crosswalks) {
     }
 
     public MysqlRoadGraphSource(JdbcTemplate jdbc) {
@@ -118,6 +122,11 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             nodes.putIfAbsent(e.to(), e.geometry().get(e.geometry().size() - 1));
         }
         return new RoadGraph(nodes, edges);
+    }
+
+    @Override
+    public List<double[]> crosswalkPoints(BBox box) {
+        return network().crosswalks().stream().filter(p -> box.contains(p[0], p[1])).toList();
     }
 
     /**
@@ -202,6 +211,8 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
                     return new UndergroundLinks.Exit(rs.getLong("id"), new double[] {rs.getDouble("lon"), rs.getDouble("lat")},
                             attach);
                 }).stream().filter(java.util.Objects::nonNull).toList();
+        List<double[]> crosswalks = jdbc.query("SELECT lon, lat FROM poi WHERE kind = 'crosswalk'",
+                (rs, i) -> new double[] {rs.getDouble("lon"), rs.getDouble("lat")});
         double[][] boxes = new double[edges.size()][];
         double w = Double.MAX_VALUE, so = Double.MAX_VALUE, e = -Double.MAX_VALUE, no = -Double.MAX_VALUE;
         for (int i = 0; i < edges.size(); i++) {
@@ -218,7 +229,8 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             e = Math.max(e, b[2]);
             no = Math.max(no, b[3]);
         }
-        return new Network(edges, boxes, edges.isEmpty() ? null : new BBox(w, so, e, no), exits);
+        return new Network(edges, boxes, edges.isEmpty() ? null : new BBox(w, so, e, no), exits,
+                crosswalks);
     }
 
     /** 지상(road_edge)·지하(road_edge_excluded) 두 표에서 같은 칸을 같은 이름으로 읽는 SELECT 부분. t는 표 별칭 */
@@ -253,13 +265,14 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     enum Surface { PAVED, UNPAVED, TRAIL, UNCONFIRMED }
 
     /**
-     * 바닥 구분. 산길의 등산 난이도가 가장 먼저, 그다음 재질, 재질이 없으면 길 종류로 정한다.
+     * 바닥 구분. 산길·계단의 등산 난이도가 가장 먼저, 그다음 재질, 재질이 없으면 길 종류로 정한다.
      *
      * @param tracktype 농로 단단함 (OSM tracktype: grade1 포장 ~ grade5 흙)
      * @param sacScale  산길 등산 난이도 (OSM sac_scale)
      */
     static Surface classify(String surface, String highway, String tracktype, String sacScale) {
-        if ("path".equals(highway) && sacScale != null && !sacScale.isBlank()) {
+        // 등산로 위 계단도 등산로 (2026-11-12, 광주 14개 818m)
+        if (("path".equals(highway) || "steps".equals(highway)) && sacScale != null && !sacScale.isBlank()) {
             return Surface.TRAIL;
         }
         if (surface != null && !surface.isBlank()) {

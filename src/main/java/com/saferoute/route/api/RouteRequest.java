@@ -10,13 +10,15 @@ package com.saferoute.route.api;
  *                모드 기준 대신 쓴다. 없으면 모드 기준 (2026-11-09)
  * @param rain  auto(기본, 기상청 지금 날씨)·on·off. 비면 지붕 있는 길을 먼저 찾는다 (2026-11-09). 시연 때 on
  * @param stops 들를 곳 최대 3곳, 이 순서대로 거친다 (2026-11-10). 없으면 null 또는 빈 목록
+ * @param allowTrail 등산로(OSM sac_scale이 붙은 산길)를 지나도 되는지. null·false면 등산로 없는 길이 있는 한 그 길로 간다 (한도 없음).
+ *                   휠체어는 true여도 등산로를 지나지 않는다 (2026-11-12)
  */
 public record RouteRequest(Place origin, Place destination, String night, String mode, String guestId, String rain,
-        java.util.List<Place> stops) {
+        java.util.List<Place> stops, Boolean allowTrail) {
 
     /** 들를 곳 없이 */
     public RouteRequest(Place origin, Place destination, String night, String mode, String guestId, String rain) {
-        this(origin, destination, night, mode, guestId, rain, null);
+        this(origin, destination, night, mode, guestId, rain, null, null);
     }
 
     /** 비 판단 없이 (auto, 날씨를 따름) */

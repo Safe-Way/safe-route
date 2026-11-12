@@ -12,6 +12,8 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
+import com.saferoute.route.engine.geo.BBox;
+
 /** 도로망 읽기에서 DB 없이 확인할 수 있는 부분 */
 class MysqlRoadGraphSourceTests {
 
@@ -41,6 +43,9 @@ class MysqlRoadGraphSourceTests {
         // 산길: 등산 난이도가 있으면 산행 길(재질과 상관없이), 없으면 확인 안 됨
         assertThat(MysqlRoadGraphSource.classify("asphalt", "path", null, "hiking")).isEqualTo(MysqlRoadGraphSource.Surface.TRAIL);
         assertThat(MysqlRoadGraphSource.classify(null, "path", null, null)).isEqualTo(MysqlRoadGraphSource.Surface.UNCONFIRMED);
+        // 등산로 위 계단도 등산로 (2026-11-12). 등산 난이도가 없는 계단은 재질대로
+        assertThat(MysqlRoadGraphSource.classify("rock", "steps", null, "mountain_hiking")).isEqualTo(MysqlRoadGraphSource.Surface.TRAIL);
+        assertThat(MysqlRoadGraphSource.classify("rock", "steps", null, null)).isEqualTo(MysqlRoadGraphSource.Surface.UNPAVED);
     }
 
     @Test
@@ -104,10 +109,20 @@ class MysqlRoadGraphSourceTests {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         new MysqlRoadGraphSource(jdbc).covers(126.92, 35.14);
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-        verify(jdbc, times(2)).query(sql.capture(), any(RowMapper.class));
+        verify(jdbc, times(3)).query(sql.capture(), any(RowMapper.class));
         assertThat(sql.getAllValues().get(0))
                 .contains("x.reason IN ('underground', 'plaza')")
                 .contains("x.reason = 'underground' AS underground")
                 .contains("x.reason = 'plaza' AS plaza");
+    }
+
+    @Test
+    void crosswalkPointsAreCrosswalkPoiOnly() {
+        // 응답 crossings의 큰 길 건너는 자리 (specs/014): 신호등 점(교차로 가운데)은 읽지 않는다
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        assertThat(new MysqlRoadGraphSource(jdbc).crosswalkPoints(new BBox(126.9, 35.1, 127.0, 35.2))).isEmpty();
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbc, times(3)).query(sql.capture(), any(RowMapper.class));
+        assertThat(sql.getAllValues().get(2)).isEqualTo("SELECT lon, lat FROM poi WHERE kind = 'crosswalk'");
     }
 }

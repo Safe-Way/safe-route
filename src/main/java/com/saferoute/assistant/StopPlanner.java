@@ -241,7 +241,7 @@ public class StopPlanner {
         }
         RouteResult r = routes.route(new RouteRequest(new RouteRequest.Place(a.lat(), a.lon(), "지금 위치"),
                 new RouteRequest.Place(a.dest().lat(), a.dest().lon(), a.dest().name()), a.night(), a.mode(),
-                TripRecommender.blankToNull(a.guestId()), null, List.copyOf(via)));
+                TripRecommender.blankToNull(a.guestId()), null, List.copyOf(via), null));
         RouteResult.Route pick = pick(r);
         List<RouteResult.StopMark> marks = pick.stops() == null ? List.of() : pick.stops();
         if (marks.size() != stops.size()) {
