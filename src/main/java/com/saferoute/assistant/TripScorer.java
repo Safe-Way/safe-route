@@ -340,6 +340,14 @@ public class TripScorer {
         if (!walk && "wheelchair".equals(ctx.mode())) {
             out.add("엘리베이터로 들어갈 수 있는 역만");
         }
+        // 맑은 날 대중교통이 1등이면 위 이유가 하나도 없어 빈 칸이 됨 → 걷기 후보와 비교 (남는 칸만 채움)
+        Trip walking = walk ? null : all.stream().filter(t -> "walk".equals(t.type())).findFirst().orElse(null);
+        if (walking != null && best.minutes() < walking.minutes()) {
+            out.add("걷기보다 " + (walking.minutes() - best.minutes()) + "분 빨라요");
+        }
+        if (walking != null && best.walkM() < walking.walkM()) {
+            out.add("걷는 거리 " + (walking.walkM() - best.walkM()) + "m 줄어요");
+        }
         if (walk && other != null && best.minutes() < other.minutes()) {
             out.add(best.minutes() + "분으로 " + (other.minutes() - best.minutes()) + "분 더 빨라요");
         }

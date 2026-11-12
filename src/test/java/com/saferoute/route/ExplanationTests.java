@@ -72,7 +72,7 @@ class ExplanationTests {
         RouteProperties.Profile senior = TestRoutes.props().profile("senior");
         RouteProperties.Profile wheel = TestRoutes.props().profile("wheelchair");
         Conditions day = new Conditions(false, "auto", null);
-        ExplanationBuilder.Avoided stairs = new ExplanationBuilder.Avoided(true, false, false);
+        ExplanationBuilder.Avoided stairs = new ExplanationBuilder.Avoided(1, 0, false, false);
 
         // 노인 낮: 쉼 곳 차이. 가로등 차이는 노인 낮 기준이 아니라 말하지 않는다
         assertThat(ExplanationBuilder.text(day, senior, senior.day(), false, false, 96, 2,
@@ -83,6 +83,26 @@ class ExplanationTests {
                 .isEqualTo("96m(2분) 더 돌지만 계단을 피하고 쉼 곳 +11곳");
         assertThat(ExplanationBuilder.text(day, senior, senior.day(), false, false, 40, 1, Map.of(), stairs))
                 .isEqualTo("40m(1분) 더 돌지만 계단을 피하는 길로 갑니다");
+        // 일부만 피했으면 개수로. 남은 계단은 주의(stairsNotes)가 따로 알린다
+        ExplanationBuilder.Avoided some = new ExplanationBuilder.Avoided(3, 1, false, false);
+        assertThat(ExplanationBuilder.text(day, senior, senior.day(), false, false, 96, 2,
+                Map.of(FacilityGroup.REST, 11), some))
+                .isEqualTo("96m(2분) 더 돌지만 계단 3곳 중 2곳을 피하고 쉼 곳 +11곳");
+        assertThat(ExplanationBuilder.text(day, senior, senior.day(), false, false, 40, 1, Map.of(), some))
+                .isEqualTo("40m(1분) 더 돌지만 계단 3곳 중 2곳을 피하는 길로 갑니다");
+        assertThat(ExplanationBuilder.text(day, senior, senior.day(), false, false, 40, 1, Map.of(),
+                new ExplanationBuilder.Avoided(3, 1, true, false)))
+                .isEqualTo("40m(1분) 더 돌지만 계단 3곳 중 2곳과 비포장을 피하는 길로 갑니다");
+        assertThat(ExplanationBuilder.text(day, senior, senior.day(), false, false, 40, 1, Map.of(),
+                new ExplanationBuilder.Avoided(1, 0, true, false)))
+                .isEqualTo("40m(1분) 더 돌지만 계단·비포장을 피하는 길로 갑니다");
+        // 하나도 못 피했으면(같거나 더 많으면) 계단을 피했다고 하지 않는다
+        assertThat(ExplanationBuilder.text(day, senior, senior.day(), false, false, 96, 2,
+                Map.of(FacilityGroup.REST, 11), new ExplanationBuilder.Avoided(1, 1, false, false)))
+                .isEqualTo("96m(2분) 더 돌지만 쉼 곳 +11곳");
+        assertThat(ExplanationBuilder.stairsNotes(1, true)).singleElement()
+                .extracting(com.saferoute.route.api.RouteResult.Note::text)
+                .isEqualTo("계단 1곳을 지납니다. 계단을 피하는 길은 너무 멉니다");
         // 어린이 낮: 보호구역·도움 지점(비상벨 포함) 차이
         assertThat(ExplanationBuilder.text(day, child, child.day(), false, false, 84, 1,
                 Map.of(FacilityGroup.SCHOOL, 1, FacilityGroup.HELP, 2, FacilityGroup.BELL, 1),
@@ -90,7 +110,7 @@ class ExplanationTests {
                 .isEqualTo("84m(1분) 더 돌지만 도움 지점 +2곳, 어린이보호구역 +1곳, 비상벨 +1개");
         // 휠체어 낮: 행사만 피해 돌았으면 비포장 문장을 쓰지 않는다 (withEvents가 바꿀 수 있게 DAY)
         assertThat(ExplanationBuilder.text(day, wheel, wheel.day(), false, false, 30, 1, Map.of(),
-                new ExplanationBuilder.Avoided(false, false, true))).isEqualTo("지금은 밤이 아니라 가장 짧은 길을 안내합니다");
+                new ExplanationBuilder.Avoided(0, 0, false, true))).isEqualTo("지금은 밤이 아니라 가장 짧은 길을 안내합니다");
     }
 
     @Test
