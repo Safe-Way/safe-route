@@ -82,22 +82,37 @@ class SideChangesTests {
     }
 
     @Test
-    void bothSidesOnlyWhenTurningAtBigJunction() {
+    void oneBothSideOnlyWhenTurningAtBigJunction() {
         RoadEdge w = road(1, 1, 0, "primary", null);
         RoadEdge e = road(2, 0, 2, "primary", null);
-        RoadEdge n = road(3, 0, 3, "primary", null);
+        RoadEdge n = road(3, 0, 3, "primary", "right");
         RoadEdge s = road(4, 0, 4, "primary", null);
         RoadGraph junction = graph(w, e, n, s);
         // 북쪽 갈래 위와 동쪽 갈래 위 횡단보도
         List<double[]> cw = List.of(at(0, 8), at(8, 0));
 
         assertThat(SideChanges.along(path(w, e), 0, junction, cw)).isEmpty();
+        // both → right: 꺾으면 북쪽 갈래 횡단보도에서 건넌다
         assertThat(SideChanges.along(path(w, n), 0, junction, cw)).singleElement().satisfies(c -> {
             assertThat(c.at()).isEqualTo(1);
             assertThat(c.lat()).isEqualTo(at(0, 8)[1]);
         });
         // 큰 길 2개뿐인 모퉁이는 꺾어도 건너지 않는다
         assertThat(SideChanges.along(path(w, n), 0, graph(w, n), cw)).isEmpty();
+    }
+
+    @Test
+    void bothToBothIsNotACrossingEvenWhenTurning() {
+        // 앞뒤 모두 인도 태그 없는 양방향 큰 길(both): 양쪽에 인도가 있어 건널 필요가 없다 (w19, 지그재그)
+        RoadEdge w = road(1, 1, 0, "primary", null);
+        RoadEdge e = road(2, 0, 2, "primary", null);
+        RoadEdge n = road(3, 0, 3, "primary", null);
+        RoadEdge s = road(4, 0, 4, "primary", null);
+        RoadGraph junction = graph(w, e, n, s);
+        List<double[]> cw = List.of(at(0, 8), at(8, 0));
+
+        assertThat(SideChanges.along(path(w, n), 0, junction, cw)).isEmpty();
+        assertThat(SideChanges.along(path(w, e), 0, junction, cw)).isEmpty();
     }
 
     @Test

@@ -16,8 +16,9 @@ import com.saferoute.route.engine.search.RoadPath;
  * 경로 선은 차도 가운데라 앱이 교차로 한가운데에서 쪽을 바꿔 그렸다. 경로는 그대로 두고 자리만 알려 준다.
  * <ul>
  *   <li>건너는 곳: 앞뒤로 붙은 두 큰 길 길에서 걷는 방향 기준 인도 쪽({@link Sidewalks}와 같은 값)이 left ↔ right로 바뀌는 노드.
- *       한쪽이 both면 쪽으로는 알 수 없어, 큰 길 교차로(큰 길 길 3개 이상)에서 {@link #TURN_DEG}보다 크게 꺾을 때만 본다
- *       (곧장 지나면 안 보냄, 민수 요청 ②)</li>
+ *       한쪽만 both면 쪽으로는 알 수 없어, 큰 길 교차로(큰 길 길 3개 이상)에서 {@link #TURN_DEG}보다 크게 꺾을 때만 본다
+ *       (곧장 지나면 안 보냄, 민수 요청 ②). 앞뒤가 둘 다 both면 양쪽에 다 인도가 있어 건널 필요가 없으니 보내지 않는다
+ *       (앱이 그 자리로 건넜다가 같은 쪽으로 돌아와 지그재그로 그렸다, 전대병원응급실앞, 2026-11-12 진행표 w19 재휘 결정)</li>
  *   <li>횡단보도: 노드 {@link #NEAR_M} 안이면서 앞·뒤 큰 길 선 {@link #LINE_M} 안인 가장 가까운 횡단보도 점 →
  *       없으면 그 선과 만나거나 닿는 횡단보도 길(footway=crossing)의 가운데({@link #NEAR_M} 안) → 없으면 보내지 않는다(1안)</li>
  * </ul>
@@ -61,8 +62,10 @@ public final class SideChanges {
             String from = Sidewalks.side(Sidewalks.drawnSide(a), forward[i]);
             String to = Sidewalks.side(Sidewalks.drawnSide(b), forward[i + 1]);
             long node = forward[i] ? a.to() : a.from();
+            boolean bothSides = "both".equals(from) && "both".equals(to);
             boolean change = LEFT_RIGHT.contains(from) && LEFT_RIGHT.contains(to) ? !from.equals(to)
-                    : ("both".equals(from) || "both".equals(to)) && bigJunction(graph, node) && turned(in, next);
+                    : !bothSides && ("both".equals(from) || "both".equals(to)) && bigJunction(graph, node)
+                            && turned(in, next);
             if (!change) {
                 continue;
             }
