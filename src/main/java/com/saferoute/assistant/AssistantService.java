@@ -73,6 +73,8 @@ public class AssistantService {
             return RuleBrain.emergency();
         }
         tools.loadProfile(t);
+        // ①-1 말로 할 때 끼는 "어.. 잠시만.. 아" 같은 말은 빼고 본다 (11-12 음성 시험)
+        t.text = Fillers.clean(t.text);
         // ①-2 "광주역에서 …"처럼 출발지를 말했으면 떼어 찾아 두고, 나머지 말로 이어 간다 (11-12)
         Outcome from = origin(t);
         if (from != null) {

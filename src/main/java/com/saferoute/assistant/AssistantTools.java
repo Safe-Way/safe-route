@@ -241,6 +241,40 @@ public class AssistantTools {
         return new Found("choose", cand);
     }
 
+    /** 이름으로 광주 안 첫 장소 하나 (근처를 정할 기준점). 대화는 바꾸지 않는다. 못 찾으면 null */
+    Place firstPlace(Turn t, String name) {
+        try {
+            for (com.saferoute.place.Place p : kakao.search(name, t.lat, t.lon)) {
+                Place c = new Place(p.name(), p.address(), p.lat(), p.lon());
+                if (inGwangju(c)) {
+                    return c;
+                }
+            }
+        } catch (PlaceSearchException e) {
+            log.warn("비서 기준점 찾기 실패: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /** anchor 근처 kind 를 가까운 순 3곳 고르게 한다 ("시장 갔다 근처 병원"). 거리는 anchor 에서 잰 것 */
+    Found around(Turn t, String kind, Place anchor) {
+        t.tools.add("search_place");
+        List<com.saferoute.place.Place> found;
+        try {
+            found = new ArrayList<>(kakao.search(kind, anchor.lat(), anchor.lon()));
+        } catch (PlaceSearchException e) {
+            log.warn("비서 장소 검색 실패: {}", e.getMessage());
+            return new Found("error", List.of());
+        }
+        found.sort(AssistantTools::byDistance);
+        List<Place> cand = found.stream().map(p -> new Place(p.name(), p.address(), p.lat(), p.lon(), p.distanceM()))
+                .filter(AssistantTools::inGwangju).limit(MAX_CANDIDATES).toList();
+        if (cand.isEmpty()) {
+            return new Found(found.isEmpty() ? "none" : "outside", List.of());
+        }
+        return decide(t, cand, kind);
+    }
+
     private static final java.util.regex.Pattern AREA = java.util.regex.Pattern.compile(
             "^[가-힣]{1,8}(대로|로|길|동)(\\d{1,2}가)?$");
 
