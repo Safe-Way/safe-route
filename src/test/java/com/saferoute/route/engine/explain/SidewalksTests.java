@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.route.api.RouteResult.Sidewalk;
+import com.saferoute.route.engine.geo.Geo;
+import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadEdge.EdgePenalty;
 import com.saferoute.route.engine.search.RoadPath;
@@ -119,6 +122,49 @@ class SidewalksTests {
         assertThat(Sidewalks.along(path, 0)).containsExactly(
                 new Sidewalk(0, 2, "right", "primary", 4, false, null, 8.0),
                 new Sidewalk(2, 3, "right", "primary", 6, false, null, 11.3));
+    }
+
+    @Test
+    void bothTakesSideOfSeparateSidewalkPastAlleyAndCrosswalk() {
+        // 서남동 행정복지센터 앞 (w20): 태그 없는 동서 큰 길(both) → 북쪽 골목 7m → 골목 횡단보도 → 따로 그린 북쪽 인도
+        double[] w = m(-100, 0), o = m(0, 0), n1 = m(0, 7), n2 = m(6, 7), n3 = m(100, 7);
+        RoadEdge road = way(1, 1, 2, "primary", false, w, o);
+        RoadEdge alley = way(2, 2, 3, "residential", false, o, n1);
+        RoadEdge zebra = way(3, 3, 4, "footway", true, n1, n2);
+        RoadEdge walk = way(4, 4, 5, "footway", false, n2, n3);
+
+        // 동쪽으로 걸으면 북쪽 인도는 왼쪽
+        assertThat(Sidewalks.along(path(List.of(road, alley, zebra, walk), List.of(w, o, n1, n2, n3)), 0).get(0).side())
+                .isEqualTo("left");
+        // 거꾸로 걸으면 인도가 큰 길 앞에 있다(뒤엔 없음). 서쪽으로 걸으면 북쪽은 오른쪽
+        List<Sidewalk> back = Sidewalks.along(path(List.of(walk, zebra, alley, road), List.of(n3, n2, n1, o, w)), 0);
+        assertThat(back.get(back.size() - 1).side()).isEqualTo("right");
+    }
+
+    @Test
+    void walkwayFartherThan25mFromTheRoadIsNotItsSidewalk() {
+        double[] w = m(-100, 0), o = m(0, 0);
+        for (double north : new double[] {20, 28}) {
+            double[] n1 = m(0, north), n2 = m(100, north);
+            RoadEdge road = way(1, 1, 2, "primary", false, w, o);
+            RoadEdge alley = way(2, 2, 3, "residential", false, o, n1);
+            RoadEdge walk = way(3, 3, 4, "footway", false, n1, n2);
+
+            assertThat(Sidewalks.along(path(List.of(road, alley, walk), List.of(w, o, n1, n2)), 0).get(0).side())
+                    .isEqualTo(north < 25 ? "left" : "both");
+        }
+    }
+
+    /** (126.93, 35.14)에서 동쪽·북쪽으로 m만큼 떨어진 점 */
+    private static double[] m(double eastM, double northM) {
+        return new double[] {126.93 + eastM / (111_195.0 * Math.cos(Math.toRadians(35.14))), 35.14 + northM / 111_195.0};
+    }
+
+    /** 길이를 실제로 잰 길. crosswalk면 횡단보도 길(footway=crossing) */
+    private static RoadEdge way(long id, long from, long to, String highway, boolean crosswalk, double[]... points) {
+        List<double[]> line = List.of(points);
+        return new RoadEdge(id, from, to, Geo.length(line), highway, line,
+                crosswalk ? new EdgePenalty(Map.of(Penalty.CROSSWALK, 1.0)) : EdgePenalty.NONE);
     }
 
     private static RoadPath path(List<RoadEdge> edges, List<double[]> line) {

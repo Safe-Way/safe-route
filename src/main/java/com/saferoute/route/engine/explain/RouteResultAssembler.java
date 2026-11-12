@@ -108,12 +108,13 @@ public class RouteResultAssembler {
                     SideChanges.along(found.shortest(), found.shortest().startOffset(start), graph, crosswalks),
                     stairs(found.shortest(), start), shortEvents, found.shortest()));
         }
+        SideChanges.Found safeCross = SideChanges.find(found.safe(), found.safe().startOffset(start), graph, crosswalks);
         routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts,
                 safeCovered,
                 Sidewalks.along(found.safe(), found.safe().startOffset(start)),
                 dark(cond, found.safe(), start, cov), turns(found.safe(), start),
                 crossings(found.safe(), start),
-                SideChanges.along(found.safe(), found.safe().startOffset(start), graph, crosswalks),
+                safeCross.crossAt(),
                 stairs(found.safe(), start), safeEvents, found.safe()));
 
         int extraM = same ? 0 : safeM - shortM;
@@ -135,6 +136,10 @@ public class RouteResultAssembler {
         }
         notes.addAll(ExplanationBuilder.eventNotes(summary, same ? List.of() : shortEvents, safeEvents));
         ExplanationBuilder.undergroundNote(found.safe()).ifPresent(notes::add);
+        // 따로 그린 인도가 큰 길 양쪽으로 갈리는데 그 구간에 횡단보도가 없다 (진행표 w20). 여러 곳이어도 한 번
+        if (safeCross.withoutCrosswalk()) {
+            notes.add(RouteResult.Note.warn("crossing", "횡단보도 없이 길을 건너요"));
+        }
         summary = ExplanationBuilder.withWarnings(summary, notes);
 
         return new RouteResult(

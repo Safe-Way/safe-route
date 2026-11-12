@@ -145,6 +145,68 @@ class SideChangesTests {
                 .satisfies(c -> assertThat(p.line().get(c.at())).isEqualTo(at(0, 0)));
     }
 
+    @Test
+    void sidewalksOnOppositeSidesAroundBothStretchCrossOnIt() {
+        // 남쪽 인도 → 연결 골목 8m → 태그 없는 큰 길(both, 동쪽으로) → 북쪽 골목 7m → 골목 횡단보도 → 북쪽 인도 (w20)
+        Map<Long, double[]> n = Map.of(1L, at(-100, -8), 2L, at(-50, -8), 3L, at(-50, 0), 4L, at(50, 0), 5L, at(50, 7),
+                6L, at(56, 7), 7L, at(150, 7));
+        RoadEdge south = road(1, 1, 2, "footway", null, n);
+        RoadEdge link = road(2, 2, 3, "residential", null, n);
+        RoadEdge big = road(3, 3, 4, "primary", null, n);
+        RoadEdge alley = road(4, 4, 5, "residential", null, n);
+        RoadEdge zebra = crosswalk(5, 5, 6, n.get(5L), n.get(6L));
+        RoadEdge north = road(6, 6, 7, "footway", null, n);
+        RoadPath p = path(south, link, big, alley, zebra, north);
+        RoadGraph g = graph(south, link, big, alley, zebra, north);
+        // 큰 길 위 횡단보도 점: 구간 서쪽 끝(geometry 2번)에서 30m, 동쪽 끝(3번)에서 70m
+        double[] cw = at(-20, 0);
+
+        SideChanges.Found found = SideChanges.find(p, 0, g, List.of(cw));
+        assertThat(found.crossAt()).singleElement().satisfies(c -> {
+            assertThat(c.at()).isEqualTo(2);
+            assertThat(c.lon()).isEqualTo(cw[0]);
+            assertThat(c.kind()).isEqualTo("crossing");
+        });
+        assertThat(found.withoutCrosswalk()).isFalse();
+        // 횡단보도가 없으면 보내지 않고 알린다. 골목 횡단보도 길은 큰 길 선에서 7m라 쓰지 않는다
+        SideChanges.Found none = SideChanges.find(p, 0, g, List.of());
+        assertThat(none.crossAt()).isEmpty();
+        assertThat(none.withoutCrosswalk()).isTrue();
+    }
+
+    @Test
+    void bothStretchResolvedOppositeToPreviousTaggedStretchCrossesOnIt() {
+        // 남쪽 인도 태그(오른쪽) 큰 길 → 태그 없는 큰 길(both) → 북쪽 골목 7m → 북쪽 인도: both 구간에서 건넌다 (w20)
+        Map<Long, double[]> n = Map.of(1L, at(-100, 0), 2L, at(0, 0), 3L, at(100, 0), 4L, at(100, 7), 5L, at(200, 7));
+        RoadEdge tagged = road(1, 1, 2, "primary", "right", n);
+        RoadEdge big = road(2, 2, 3, "primary", null, n);
+        RoadEdge alley = road(3, 3, 4, "residential", null, n);
+        RoadEdge north = road(4, 4, 5, "footway", null, n);
+        RoadPath p = path(tagged, big, alley, north);
+        RoadGraph g = graph(tagged, big, alley, north);
+
+        // 큰 길 2개뿐이라 노드 규칙(both 한쪽은 큰 길 교차로에서만)은 안 잡는다. both 구간 위 횡단보도: 동쪽 끝(2번)에 가깝다
+        assertThat(SideChanges.find(p, 0, g, List.of(at(80, 0))).crossAt()).singleElement()
+                .satisfies(c -> assertThat(c.at()).isEqualTo(2));
+        assertThat(SideChanges.find(p, 0, g, List.of()).withoutCrosswalk()).isTrue();
+    }
+
+    @Test
+    void sidewalksOnSameSideAroundBothStretchIsNoCrossing() {
+        Map<Long, double[]> n = Map.of(1L, at(-100, 8), 2L, at(-50, 8), 3L, at(-50, 0), 4L, at(50, 0), 5L, at(50, 8),
+                6L, at(150, 8));
+        RoadEdge before = road(1, 1, 2, "footway", null, n);
+        RoadEdge link = road(2, 2, 3, "residential", null, n);
+        RoadEdge big = road(3, 3, 4, "primary", null, n);
+        RoadEdge alley = road(4, 4, 5, "residential", null, n);
+        RoadEdge after = road(5, 5, 6, "footway", null, n);
+
+        SideChanges.Found found = SideChanges.find(path(before, link, big, alley, after), 0,
+                graph(before, link, big, alley, after), List.of());
+        assertThat(found.crossAt()).isEmpty();
+        assertThat(found.withoutCrosswalk()).isFalse();
+    }
+
     /** (126.93, LAT)에서 동쪽·북쪽으로 m만큼 떨어진 점 */
     private static double[] at(double eastM, double northM) {
         return new double[] {126.93 + eastM / (111_195.0 * Math.cos(Math.toRadians(LAT))), LAT + northM / 111_195.0};

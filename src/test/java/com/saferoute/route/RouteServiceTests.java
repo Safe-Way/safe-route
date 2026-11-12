@@ -374,6 +374,40 @@ class RouteServiceTests {
                 + ",\"kind\":\"crossing\",\"from\":null,\"to\":null}]");
     }
 
+    @Test
+    void crossingBigRoadBetweenSidewalksWithoutCrosswalkWarnsOnce() {
+        // 남쪽 인도 → 골목 → 큰 길(both) → 골목 → 북쪽 인도, 횡단보도 없음 (w20)
+        double mLat = Geo.distance(0, 0, 0, 1);
+        double mLon = Geo.distance(0, LAT, 1, LAT);
+        java.util.function.BiFunction<Double, Double, double[]> m = (east, north) -> new double[] {
+                126.93 + east / mLon, LAT + north / mLat};
+        List<double[]> pts = List.of(m.apply(-100.0, -8.0), m.apply(-50.0, -8.0), m.apply(-50.0, 0.0),
+                m.apply(50.0, 0.0), m.apply(50.0, 8.0), m.apply(150.0, 8.0));
+        String[] kinds = {"footway", "residential", "primary", "residential", "footway"};
+        Map<Long, double[]> nodes = new java.util.HashMap<>();
+        List<com.saferoute.route.engine.graph.RoadEdge> edges = new ArrayList<>();
+        for (int i = 0; i < kinds.length; i++) {
+            nodes.put((long) i, pts.get(i));
+            nodes.put((long) i + 1, pts.get(i + 1));
+            edges.add(new com.saferoute.route.engine.graph.RoadEdge(i, i, i + 1, Geo.distance(pts.get(i), pts.get(i + 1)),
+                    kinds[i], List.of(pts.get(i), pts.get(i + 1)), EdgePenalty.NONE));
+        }
+        RouteService s = new RouteService(new com.saferoute.route.data.InMemoryRoadGraphSource(new RoadGraph(nodes, edges)),
+                facilities(List.of()), new com.saferoute.situation.NightJudge(),
+                new com.saferoute.route.engine.score.RouteScorer(props()),
+                new com.saferoute.route.engine.explain.RouteResultAssembler(
+                        new com.saferoute.route.engine.facility.FacilityCounter(props()), props()),
+                props(), java.time.Clock.fixed(at(12).toInstant(), at(12).getZone()));
+        double[] a = pts.get(0);
+        double[] b = pts.get(pts.size() - 1);
+
+        RouteResult r = s.route(new RouteRequest(new Place(a[1], a[0], "출발"), new Place(b[1], b[0], "도착"), "auto"));
+
+        RouteResult.Route safe = r.routes().get(r.routes().size() - 1);
+        assertThat(safe.crossAt()).isEmpty();
+        assertThat(r.explanation().notes()).containsOnlyOnce(RouteResult.Note.warn("crossing", "횡단보도 없이 길을 건너요"));
+    }
+
     private static void assertError(Runnable call, RouteError expected) {
         assertThatThrownBy(call::run)
                 .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(expected));

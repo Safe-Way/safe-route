@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Set;
 
 import com.saferoute.route.api.RouteResult;
+import com.saferoute.route.engine.geo.Geo;
+import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadGraph;
 import com.saferoute.route.engine.search.RoadPath;
@@ -18,6 +20,9 @@ import com.saferoute.route.engine.search.RouteFinder;
  * 차가 가는 방향 오른쪽 바깥에 인도가 있다고 보고(방향별로 두 줄 그린 큰길, 2026-11-11), 태그가 없는 양방향 큰 길은
  * 양쪽(both)으로 본다. 둘 다 trunk·primary·secondary·tertiary와 그 연결로만이고 골목급은 모름 (w15).
  * 인도·보행로·계단처럼 사람이 걷는 길 자체는 넣지 않는다. 인도 쪽·길 종류·차로·일방·폭이 모두 같은 길만 한 구간으로 묶는다.
+ * <p>
+ * 큰 길 both 구간 바로 뒤(없으면 앞)에 따로 그린 인도가 붙어 있으면 그 인도가 있는 쪽(left·right)으로 보낸다. 앱이 내 위치 쪽으로
+ * 옮긴 선이 반대쪽 인도로 이어지며 횡단보도 없는 곳에서 차도를 건너는 것처럼 보였다 (서남동 행정복지센터 앞, 2026-11-12 진행표 w20).
  */
 public final class Sidewalks {
 
@@ -37,14 +42,34 @@ public final class Sidewalks {
     /** 차도 끝에서 인도 가운데까지(m). 보도 폭 3m 가정 */
     static final double CURB_TO_SIDEWALK_M = 1.5;
 
+    /** both 구간에서 이 거리(m) 안 골목·횡단보도 길을 지나 붙은 인도까지 본다. 현장 예는 골목 7m + 골목 횡단보도 */
+    static final double LOOK_M = 30;
+    /** 차도 선에서 이보다 먼 걷는 길은 그 길 인도가 아니다 */
+    static final double WALKWAY_MAX_M = 25;
+    /** 걷는 길로 이만큼(m) 들어간 점으로 쪽을 본다. 붙는 끝은 골목 입구나 차도 선 위일 수 있다 */
+    static final double INTO_M = 5;
+    /** 차도 선(연장선)에서 이보다 가까우면 쪽을 모른다: 큰 길이 끝나고 같은 줄로 이어지는 보행로 */
+    static final double ON_LINE_M = 1;
+
     private Sidewalks() {
+    }
+
+    /**
+     * 인도 쪽 구간과 그 구간의 경로 길 번호 first..last. before·after = 큰 길 both 구간 앞·뒤에 붙은 따로 그린 인도 쪽
+     * (걷는 방향 기준 left·right, 없으면 null). 그 밖 구간은 둘 다 null
+     */
+    record Stretch(RouteResult.Sidewalk sidewalk, int first, int last, String before, String after) {
     }
 
     /**
      * @param offset path.line()의 첫 점이 응답 geometry에서 몇 번째인지 ({@link RoadPath#startOffset})
      */
     public static List<RouteResult.Sidewalk> along(RoadPath path, int offset) {
-        List<RouteResult.Sidewalk> out = new ArrayList<>();
+        return stretches(path, offset).stream().map(Stretch::sidewalk).toList();
+    }
+
+    static List<Stretch> stretches(RoadPath path, int offset) {
+        List<Stretch> out = new ArrayList<>();
         boolean[] forward = path.forward();
         int at = offset;
         for (int i = 0; i < path.edges().size(); i++) {
@@ -56,16 +81,70 @@ public final class Sidewalks {
                 Boolean oneway = e.oneway() == null ? null : e.oneway() != 0;
                 RouteResult.Sidewalk s = new RouteResult.Sidewalk(at, to, side(drawnSide(e), forward[i]), e.highway(),
                         e.lanes(), oneway, e.widthM(), offsetM(e.highway(), e.lanes(), oneway, e.widthM()));
-                RouteResult.Sidewalk last = out.isEmpty() ? null : out.get(out.size() - 1);
-                if (last != null && last.to() == at && last.equals(span(s, last.from(), at))) {
-                    out.set(out.size() - 1, span(s, last.from(), to));
+                Stretch last = out.isEmpty() ? null : out.get(out.size() - 1);
+                RouteResult.Sidewalk l = last == null ? null : last.sidewalk();
+                if (l != null && l.to() == at && l.equals(span(s, l.from(), at))) {
+                    out.set(out.size() - 1, new Stretch(span(s, l.from(), to), last.first(), i, null, null));
                 } else {
-                    out.add(s);
+                    out.add(new Stretch(s, i, i, null, null));
                 }
             }
             at = to;
         }
+        for (int k = 0; k < out.size(); k++) {
+            Stretch t = out.get(k);
+            RouteResult.Sidewalk s = t.sidewalk();
+            if (!"both".equals(s.side()) || !big(path.edges().get(t.first()))) {
+                continue;
+            }
+            List<double[]> line = path.line().subList(s.from() - offset, s.to() - offset + 1);
+            String before = walkwaySide(path, forward, t.first() - 1, -1, line);
+            String after = walkwaySide(path, forward, t.last() + 1, 1, line);
+            String side = after != null ? after : before != null ? before : "both";
+            out.set(k, new Stretch(new RouteResult.Sidewalk(s.from(), s.to(), side, s.highway(), s.lanes(), s.oneway(),
+                    s.widthM(), s.offsetM()), t.first(), t.last(), before, after));
+        }
         return out;
+    }
+
+    /**
+     * 경로 길 j부터 dir(+1 뒤, −1 앞) 쪽으로 처음 만나는 따로 그린 인도가 큰 길 구간 선 line(걷는 방향)의 어느 쪽인지.
+     * 사이 골목·횡단보도 길은 {@link #LOOK_M}까지 건너뛰고, 큰 길을 먼저 만나거나 인도가 선에서 멀면 null
+     */
+    private static String walkwaySide(RoadPath path, boolean[] forward, int j, int dir, List<double[]> line) {
+        double walked = 0;
+        for (; j >= 0 && j < path.edges().size() && walked <= LOOK_M; j += dir) {
+            RoadEdge e = path.edges().get(j);
+            if (big(e)) {
+                return null;
+            }
+            if (sidewalkLike(e)) {
+                // 큰 길 쪽 끝에서 시작하는 선: 뒤 인도는 걷는 방향 그대로, 앞 인도는 거꾸로
+                List<double[]> g = forward[j] == dir > 0 ? e.geometry() : e.geometry().reversed();
+                double[] p = Turns.walk(g, 0, INTO_M, 1);
+                double[] a = line.get(dir > 0 ? line.size() - 2 : 0);
+                double[] b = line.get(dir > 0 ? line.size() - 1 : 1);
+                // 큰 길 끝 조각의 연장선에서 p까지 수직 거리. 오른쪽이 +
+                double right = Geo.distance(a, p) * Math.sin(Math.toRadians(Turns.heading(a, p) - Turns.heading(a, b)));
+                if (Math.abs(right) < ON_LINE_M || Geo.distanceToLine(p, line) > WALKWAY_MAX_M) {
+                    return null;
+                }
+                return right > 0 ? "right" : "left";
+            }
+            walked += e.lengthM();
+        }
+        return null;
+    }
+
+    /** 길가 인도로 볼 걷는 길. 계단·건물 안 통로·지하 길·횡단보도 길은 아니다 */
+    private static boolean sidewalkLike(RoadEdge e) {
+        return e.highway() != null && WALKWAYS.contains(e.highway()) && !"steps".equals(e.highway())
+                && !"corridor".equals(e.highway()) && e.penalty().get(Penalty.CROSSWALK) < 1
+                && !RouteFinder.isUnderground(e);
+    }
+
+    static boolean big(RoadEdge e) {
+        return e.highway() != null && RoadGraph.BIG_ROADS.contains(e.highway());
     }
 
     /**

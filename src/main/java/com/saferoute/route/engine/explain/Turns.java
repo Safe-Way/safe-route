@@ -106,7 +106,7 @@ final class Turns {
     }
 
     /** 선의 k번째 점에서 dir(+1 앞, −1 뒤) 쪽으로 선을 따라 lookM 간 점. 선 끝에 닿으면 끝 점 */
-    private static double[] walk(List<double[]> line, int k, double lookM, int dir) {
+    static double[] walk(List<double[]> line, int k, double lookM, int dir) {
         double left = lookM;
         for (int i = k; i + dir >= 0 && i + dir < line.size(); i += dir) {
             double[] a = line.get(i);
