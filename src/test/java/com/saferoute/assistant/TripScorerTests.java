@@ -258,4 +258,20 @@ class TripScorerTests {
         assertThat(s.best().type()).isEqualTo("walk");
         assertThat(s.because()).contains("22분으로 14분 더 빨라요");
     }
+
+    @Test
+    void clearDayTransitWinnerSaysHowItBeatsWalking() {
+        // 맑은 낮 어른, 습관 없음: 예전엔 because 가 비었다 (학교 서버 "집에 가자")
+        TripScorer.Scored s = scorer.score(List.of(walk(40, 3200), bus(20, 280, false)), ctx("adult", false));
+        assertThat(s.best().type()).isEqualTo("transit");
+        assertThat(s.because()).containsExactly("걷기보다 20분 빨라요", "걷는 거리 2920m 줄어요");
+    }
+
+    @Test
+    void rainyTransitWinnerKeepsWeatherFirstWithinThreeLines() {
+        TripScorer.Scored s = scorer.score(List.of(walk(40, 3200), bus(20, 280, true)), rain("wheelchair", "transit"));
+        assertThat(s.best().type()).isEqualTo("transit");
+        assertThat(s.because()).hasSizeLessThanOrEqualTo(3).first().isEqualTo("비가 와서 덜 걷는 길");
+        assertThat(s.because()).doesNotContain("걷기보다 20분 빨라요", "걷는 거리 2920m 줄어요");
+    }
 }

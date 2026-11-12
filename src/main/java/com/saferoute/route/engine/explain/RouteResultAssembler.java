@@ -114,7 +114,8 @@ public class RouteResultAssembler {
         int extraMin = same ? 0 : profile.minutes(safeM) - profile.minutes(shortM);
         Map<FacilityGroup, Integer> diff = safeCounts.minus(shortCounts);
         ExplanationBuilder.Avoided avoided = same ? ExplanationBuilder.Avoided.NONE : new ExplanationBuilder.Avoided(
-                profile.avoidStairs() && avoids(found, RouteFinder::isStairs),
+                profile.avoidStairs() ? stairs(found.shortest(), start).size() : 0,
+                profile.avoidStairs() ? stairs(found.safe(), start).size() : 0,
                 profile.avoidUnpaved() && avoids(found, RouteFinder::isUnpaved),
                 !ExplanationBuilder.avoided(shortEvents, safeEvents).isEmpty());
         int roofGainM = same ? 0 : safeCovered.getOrDefault("roof", 0) - shortCovered.getOrDefault("roof", 0);

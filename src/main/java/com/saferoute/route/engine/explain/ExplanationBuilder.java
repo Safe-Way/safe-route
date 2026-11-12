@@ -25,6 +25,7 @@ import com.saferoute.route.engine.search.RoadPath;
  * 낮·밤 모두 그 모드가 길을 고른 기준의 실제 차이로 말한다 (2026-11-06).
  * 노인 낮 "96m(2분) 더 돌지만 쉼 곳 +11곳", 어린이 낮 "…어린이보호구역 +1곳, 도움 지점 +2곳".
  * 최단 경로의 계단·비포장을 피했으면 "계단을 피하고 쉼 곳 +11곳"·"비포장을 피하는 길로 갑니다"처럼 앞에 말한다.
+ * 계단을 일부만 피했으면 "계단 3곳 중 2곳을 피하고 …"처럼 개수로 말한다 (남은 계단은 주의로 따로 알린다).
  * 비 오는 날 지붕 있는 길로 돌았으면 "…더 돌지만 비가 와서 지붕 있는 길 +780m"처럼 시설 차이보다 앞에 말한다 (2026-11-09).
  * 말할 차이가 없으면 route.yml의 note(밤은 "더 밝고 사람 눈이 닿는 길로 갑니다")를 쓴다.
  */
@@ -47,13 +48,14 @@ public final class ExplanationBuilder {
     /**
      * 최단 경로에 있던 것 중 안전 경로가 피한 것.
      *
-     * @param stairs  계단 (계단을 피하는 모드)
-     * @param unpaved 비포장 (비포장을 피하는 모드)
-     * @param events  행사·돌발상황 둘레
+     * @param shortStairs 최단 경로의 계단 곳 수 (계단을 피하는 모드만, 아니면 0)
+     * @param stairs      안전 경로에 남은 계단 곳 수
+     * @param unpaved     비포장 (비포장을 피하는 모드)
+     * @param events      행사·돌발상황 둘레
      */
-    public record Avoided(boolean stairs, boolean unpaved, boolean events) {
+    public record Avoided(int shortStairs, int stairs, boolean unpaved, boolean events) {
 
-        public static final Avoided NONE = new Avoided(false, false, false);
+        public static final Avoided NONE = new Avoided(0, 0, false, false);
     }
 
     /** 문장에 넣는 시설 차이 개수 */
@@ -128,9 +130,12 @@ public final class ExplanationBuilder {
         if (roofGainM > 0 && phase.weight(Criterion.ROOF) > 0) {
             gains = "비가 와서 지붕 있는 길 +" + roofGainM + "m" + (gains.isEmpty() ? "" : ", " + gains);
         }
-        // "계단을 피하고 쉼 곳 +11곳", 시설 차이가 없으면 "계단을 피하는 길로 갑니다"
-        String what = avoided.stairs() && avoided.unpaved() ? "계단·비포장" : avoided.stairs() ? "계단"
-                : avoided.unpaved() ? "비포장" : null;
+        // "계단을 피하고 쉼 곳 +11곳", 시설 차이가 없으면 "계단을 피하는 길로 갑니다". 일부만 피했으면 "계단 3곳 중 2곳"
+        int cut = avoided.shortStairs() - avoided.stairs();
+        String stairs = cut <= 0 ? null : avoided.stairs() == 0 ? "계단"
+                : "계단 %d곳 중 %d곳".formatted(avoided.shortStairs(), cut);
+        String what = stairs != null && avoided.unpaved() ? stairs + (avoided.stairs() == 0 ? "·" : "과 ") + "비포장"
+                : stairs != null ? stairs : avoided.unpaved() ? "비포장" : null;
         if (what != null) {
             return detour + " " + (gains.isEmpty() ? what + "을 피하는 길로 갑니다" : what + "을 피하고 " + gains);
         }
