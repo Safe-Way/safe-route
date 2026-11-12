@@ -287,8 +287,8 @@
         "recommend_trip"
       ],
       "expect": [
-        "밝은",
-        "가로등"
+        "어두운",
+        "도와줘"
       ],
       "must_not": [],
       "at": [
