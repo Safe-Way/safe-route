@@ -107,7 +107,8 @@ public class AssistantTools {
         if (!near && t.req.favorites() != null) {
             for (AssistantRequest.Favorite f : t.req.favorites()) {
                 if (f != null && f.name() != null && f.lat() != null && f.lon() != null
-                        && (f.name().contains(q) || q.contains(f.name()))) {
+                        && (f.name().contains(q) || q.contains(f.name())
+                        || f.name().replace(" ", "").equals(q.replace(" ", "")))) {
                     return decide(t, List.of(new Place(f.name(), null, f.lat(), f.lon())), q);
                 }
             }
@@ -142,6 +143,21 @@ public class AssistantTools {
             log.warn("비서 장소 검색 실패: {}", e.getMessage());
             return new Found("error", List.of());
         }
+        // "남광주 시장"처럼 띄어 써서 광주에 맞는 곳이 없으면 붙여서 다시 (11-12 음성 인식 ④)
+        String joined = q.replace(" ", "");
+        if (!near && !joined.equals(q) && joined.length() >= 2
+                && found.stream().map(p -> new Place(p.name(), p.address(), p.lat(), p.lon())).noneMatch(AssistantTools::inGwangju)) {
+            try {
+                boolean hit = kakao.search(joined, t.lat, t.lon).stream()
+                        .map(p -> new Place(p.name(), p.address(), p.lat(), p.lon())).anyMatch(AssistantTools::inGwangju);
+                if (hit) {
+                    t.tools.remove("search_place"); // 다시 부르면서 한 번 더 넣으므로
+                    return searchPlace(t, joined);
+                }
+            } catch (PlaceSearchException e) {
+                log.info("띄어쓰기 뺀 이름 찾기 실패: {}", e.getMessage());
+            }
+        }
         // "조용한 공원"처럼 꾸미는 말이 붙어 광주에 맞는 곳이 없으면 마지막 낱말("공원")로 가까운 곳을 다시 (사용성 점검)
         String head = headWord(q);
         if (head != null && t.located() && found.stream().map(p -> new Place(p.name(), p.address(), p.lat(), p.lon()))
@@ -163,7 +179,61 @@ public class AssistantTools {
         }
         List<Place> cand = ordered.stream().limit(MAX_CANDIDATES)
                 .map(p -> new Place(p.name(), p.address(), p.lat(), p.lon(), p.distanceM())).toList();
-        return decide(t, cand, q);
+        Found r = decide(t, cand, q);
+        if (!near && ("none".equals(r.status()) || "outside".equals(r.status()))) {
+            Found loose = loose(t, q);
+            if (loose != null) {
+                return loose;
+            }
+        }
+        return r;
+    }
+
+    /**
+     * 못 찾은 이름을 한 번 더 (11-12 음성 인식 ④): 자주 가는 곳 이름과 한두 글자만 다르면 그곳 ("문화전딩" → 문화전당).
+     * 띄어쓰기를 뺀 다시 찾기는 searchPlace 안에서 먼저 한다. 그래도 없으면 null
+     */
+    private Found loose(Turn t, String q) {
+        String joined = q.replace(" ", "");
+        if (t.req.favorites() != null && joined.length() >= 3) {
+            AssistantRequest.Favorite best = null;
+            int bestD = Integer.MAX_VALUE;
+            for (AssistantRequest.Favorite f : t.req.favorites()) {
+                if (f == null || f.name() == null || f.lat() == null || f.lon() == null) {
+                    continue;
+                }
+                int d = editDistance(f.name().replace(" ", ""), joined);
+                if (d < bestD) {
+                    bestD = d;
+                    best = f;
+                }
+            }
+            int allowed = joined.length() >= 6 ? 2 : 1;
+            if (best != null && bestD <= allowed) {
+                return decide(t, List.of(new Place(best.name(), null, best.lat(), best.lon())), best.name());
+            }
+        }
+        return null;
+    }
+
+    /** 두 글자 사이 몇 글자를 바꾸면 같아지나 (레벤슈타인 거리) */
+    static int editDistance(String a, String b) {
+        int[] prev = new int[b.length() + 1];
+        int[] cur = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) {
+            prev[j] = j;
+        }
+        for (int i = 1; i <= a.length(); i++) {
+            cur[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                cur[j] = Math.min(Math.min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+            }
+            int[] tmp = prev;
+            prev = cur;
+            cur = tmp;
+        }
+        return prev[b.length()];
     }
 
     /** "집에 가자"의 집. 휴대폰 자주 가는 곳·다녀온 곳에 없으면 no_home */
