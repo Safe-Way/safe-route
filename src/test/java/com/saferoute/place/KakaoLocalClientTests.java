@@ -52,6 +52,20 @@ class KakaoLocalClientTests {
     }
 
     @Test
+    void searchesByAddress() {
+        kakao.expect(requestTo(Matchers.startsWith("https://dapi.kakao.com/v2/local/search/address.json")))
+                .andExpect(header("Authorization", "KakaoAK test-key"))
+                .andRespond(withSuccess("""
+                        { "documents": [ { "address_name": "광주 동구 서석동 3", "address_type": "REGION_ADDR",
+                          "x": "126.9301", "y": "35.1455", "address": {}, "road_address": null } ] }
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThat(client.searchAddress("서석동 3")).containsExactly(
+                new Place(null, "광주 동구 서석동 3", "광주 동구 서석동 3", 35.1455, 126.9301, null));
+        kakao.verify();
+    }
+
+    @Test
     void kakaoErrorBecomesPlaceSearchException() {
         kakao.expect(requestTo(Matchers.startsWith("https://dapi.kakao.com/")))
                 .andRespond(withServerError());

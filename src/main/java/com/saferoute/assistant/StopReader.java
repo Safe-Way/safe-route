@@ -17,12 +17,14 @@ final class StopReader {
 
     /** 들르는 말. 이 말이 있어야 들를 곳 묶기로 본다 (택배는 "택배 찾고 집 가자"처럼 도착이 따로 있을 때만) */
     private static final Pattern STOP_WORD = Pattern.compile("들르|들러|들렀|들려|들리고");
+    /** "다이소 갔다가 집 갈래"의 갔다가. 이 말만 있으면 끝에 가자는 말이 있을 때만 들를 곳 묶기로 본다 ("거기 갔다가 넘어졌어"는 아님) */
+    private static final Pattern WENT_WORD = Pattern.compile("갔다가|갔다가서|다녀와서|다녀오고");
     /** 들를 곳 사이를 나누는 말 */
     private static final Pattern SPLIT = Pattern.compile(
             "\\s*(?:갔다가|갔다 가서?|다녀와서|다녀오고|들르고서?|들렀다가?|들렀다 가|들러서|들러|들려서|들리고|찾고|찾아서|부치고|보내고|사고|그다음에?|그 다음에?"
                     + "|다음에|그리고|,|→)\\s*");
     /** 도착 뒤에 붙는 가자는 말 */
-    private static final Pattern GO_TAIL = Pattern.compile("\\s*(가자|갈래|가 줘|가줘|갈게|가고 싶어|가야 해|갈 거야|가려고|가요)\\s*$");
+    private static final Pattern GO_TAIL = Pattern.compile("\\s*(가자|갈래|가 줘|가줘|갈게|갈께|가고 싶어|가고싶어|가야 해|가야해|갈 거야|갈거야|갈 꺼야|갈꺼야|가려고|가려구|가요|갈래요|갈게요)\\s*$");
     /** 도착 자리에 남은 말 끝 조각 ("야 해", "서 가") */
     private static final Pattern TAIL_BITS = Pattern.compile("^(야|서|도|요|줘|봐|볼|다|고)(\\s|$)");
     /** 들를 곳 앞에 붙는 말 */
@@ -56,7 +58,8 @@ final class StopReader {
                 parts.addAll(joined(p.strip()));
             }
         }
-        boolean stopWord = STOP_WORD.matcher(flat).find();
+        boolean stopWord = STOP_WORD.matcher(flat).find()
+                || WENT_WORD.matcher(flat).find() && parts.size() >= 2 && goes(parts.get(parts.size() - 1));
         boolean parcel = flat.contains("택배") && parts.size() >= 2;
         if (!stopWord && !parcel || parts.isEmpty()) {
             return null;
@@ -161,6 +164,7 @@ final class StopReader {
     private static boolean goes(String s) {
         String f = s.replace(" ", "");
         return f.endsWith("가자") || f.endsWith("갈래") || f.endsWith("가줘") || f.endsWith("갈게") || f.contains("가고싶")
-                || f.endsWith("가야해") || f.endsWith("갈거야") || f.endsWith("가려고") || f.endsWith("가요");
+                || f.endsWith("가야해") || f.endsWith("갈거야") || f.endsWith("갈꺼야") || f.endsWith("갈께") || f.endsWith("가려고")
+                || f.endsWith("가려구") || f.endsWith("가요");
     }
 }
