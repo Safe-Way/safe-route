@@ -586,7 +586,10 @@ class RuleBrain {
     }
 
     private Outcome stopDest(Turn t, String dest) {
-        AssistantTools.Found f = tools.searchPlace(t, dest);
+        AssistantTools.Found f = aroundLastStop(t, dest);
+        if (f == null) {
+            f = tools.searchPlace(t, dest);
+        }
         switch (f.status()) {
             case "no_home":
                 t.convo = t.convo.asked("destination");
@@ -829,6 +832,34 @@ class RuleBrain {
             n.add(tools.layerName(l));
         }
         return String.join(", ", n);
+    }
+
+    /**
+     * "남광주시장 갔다 근처 병원으로"의 근처는 지금 위치가 아니라 마지막 들를 곳 근처 (11-12).
+     * 도착이 "근처·가까운·주변 ○○"이고 들를 곳이 있으면, 마지막 들를 곳을 먼저 찾아 그 근처 ○○을 고르게 한다. 아니면 null
+     */
+    private AssistantTools.Found aroundLastStop(Turn t, String dest) {
+        Conversation.Errand e = t.convo.errand();
+        String kind = nearKindWord(dest);
+        if (kind == null || e == null || e.stops().isEmpty()) {
+            return null;
+        }
+        Place anchor = tools.firstPlace(t, e.stops().get(e.stops().size() - 1).query());
+        return anchor == null ? null : tools.around(t, kind, anchor);
+    }
+
+    /** "근처 병원", "가까운 약국", "주변 카페" → 병원·약국·카페. 아니면 null */
+    static String nearKindWord(String dest) {
+        if (dest == null) {
+            return null;
+        }
+        String d = dest.strip();
+        for (String w : List.of("근처에 있는 ", "근처에 ", "근처 ", "가까운 ", "주변 ", "가까이 있는 ")) {
+            if (d.startsWith(w) && d.length() > w.length()) {
+                return RuleReader.stripParticle(d.substring(w.length()).strip());
+            }
+        }
+        return null;
     }
 
     static Outcome choosePlace(Turn t, String query, List<Place> cand) {

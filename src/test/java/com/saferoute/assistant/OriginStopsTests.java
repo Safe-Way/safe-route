@@ -139,6 +139,30 @@ class OriginStopsTests {
     }
 
     @Test
+    void hesitationIsSkippedAndNearMeansNearTheLastStop() {
+        // 음성 시험 (11-12): 뜸 들이는 말 + "갔다" + 근처 병원 = 시장 근처 병원
+        when(kakao.search(eq("남광주시장"), anyDouble(), anyDouble())).thenReturn(List.of(
+                new Place("20", "남광주시장", "광주 동구 학동", 35.1385, 126.9245, 1000)));
+        when(kakao.search(eq("병원"), eq(35.1385), eq(126.9245))).thenReturn(List.of(
+                new Place("22", "학동연합의원", "광주 동구 학동", 35.1390, 126.9250, 70),
+                new Place("21", "남광주의원", "광주 동구 학동", 35.1388, 126.9248, 40)));
+        AssistantReply r = ask("어.. 어디더라 잠시만.. 아 남광주시장으로 갔다 근처 병원으로 갈거야!");
+        assertThat(r.choices()).extracting(AssistantReply.Choice::label)
+                .first().asString().startsWith("남광주의원"); // 시장에서 가까운 순
+        assertThat(r.choices()).hasSize(2);
+    }
+
+    @Test
+    void fillersAreOnlyWholeWords() {
+        assertThat(Fillers.clean("어.. 어디더라 잠시만.. 아 남광주시장으로 갔다 근처 병원으로 갈거야!"))
+                .isEqualTo("남광주시장으로 갔다 근처 병원으로 갈거야");
+        assertThat(Fillers.clean("음 그러니까 문화전당 가자")).isEqualTo("문화전당 가자");
+        assertThat(Fillers.clean("아파")).isEqualTo("아파");
+        assertThat(Fillers.clean("아니 저장하지 마")).isEqualTo("아니 저장하지 마");
+        assertThat(Fillers.clean("음..")).isEqualTo("음..");
+    }
+
+    @Test
     void addressWordsAreRead() {
         assertThat(RuleBrain.destination("서석동 3으로 가자")).isEqualTo("서석동 3");
         assertThat(RuleBrain.destination("충장로 45-1로 가자")).isEqualTo("충장로 45-1");
