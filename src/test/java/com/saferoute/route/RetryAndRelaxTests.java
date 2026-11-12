@@ -191,4 +191,86 @@ class RetryAndRelaxTests {
         assertThatThrownBy(() -> s.route(toward(north(T, 70), "wheelchair")))
                 .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
     }
+
+    /** 등산로 지름길 S–T(약 365m)와, 북쪽 400m로 돌아가는 보통 길 S–N–T(약 880m, 2.4배) */
+    static RoadGraph trailOrAround() {
+        double[] n = north(new double[] {126.932, LAT}, 400);
+        return new RoadGraph(Map.of(1L, S, 2L, T, 3L, n), List.of(
+                edge(1, 1, 2, S, T, new EdgePenalty(Map.of(Penalty.TRAIL, 1.0))),
+                edge(2, 1, 3, S, n, EdgePenalty.NONE), edge(3, 3, 2, n, T, EdgePenalty.NONE)));
+    }
+
+    static RouteRequest request(String mode, Boolean allowTrail) {
+        return new RouteRequest(new Place(S[1], S[0], null), new Place(T[1], T[0], null), "auto", mode, null, null,
+                null, allowTrail);
+    }
+
+    @Test
+    void avoidsTrailWithoutDetourLimitByDefault() {
+        RouteResult r = service(new InMemoryRoadGraphSource(trailOrAround())).route(request("adult"));
+
+        // 어른 우회 한도 1.3배를 넘어도 등산로 없는 길로 (2026-11-12). 최단도 등산로 없는 길 중에서
+        assertThat(r.routes()).allSatisfy(rt -> assertThat(rt.distanceM()).isGreaterThan(800));
+        assertThat(r.explanation().text()).doesNotContain("등산로");
+    }
+
+    @Test
+    void allowTrailUsesTrail() {
+        RouteResult r = service(new InMemoryRoadGraphSource(trailOrAround())).route(request("adult", true));
+
+        assertThat(r.routes().get(0).distanceM()).isLessThan(400);
+        assertThat(r.explanation().text()).doesNotContain("등산로");
+    }
+
+    @Test
+    void trailOnlyWayIsUsedWithWarning() {
+        RouteResult r = service(new InMemoryRoadGraphSource(oneEdge(
+                new EdgePenalty(Map.of(Penalty.TRAIL, 1.0))))).route(request("adult"));
+
+        assertThat(r.routes().get(0).distanceM()).isLessThan(400);
+        assertThat(r.explanation().notes()).anySatisfy(n -> {
+            assertThat(n.kind()).isEqualTo("trail");
+            assertThat(n.text()).isEqualTo("등산로 약 364m를 지납니다. 등산로를 피하는 길은 없습니다");
+        });
+    }
+
+    @Test
+    void wheelchairNeverUsesTrailEvenWhenAllowed() {
+        RouteResult r = service(new InMemoryRoadGraphSource(trailOrAround())).route(request("wheelchair", true));
+
+        assertThat(r.routes()).allSatisfy(rt -> assertThat(rt.distanceM()).isGreaterThan(800));
+        RouteService only = service(new InMemoryRoadGraphSource(oneEdge(new EdgePenalty(Map.of(Penalty.TRAIL, 1.0)))));
+        assertThatThrownBy(() -> only.route(request("wheelchair", true))).isInstanceOfSatisfying(RouteException.class,
+                e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
+    }
+
+    /** trailOrAround에 출발 쪽 등산로 꼬리 S0–S를 붙인 도로망. S0은 S 남쪽 stubM */
+    static RoadGraph trailStubAtStart(double stubM) {
+        double[] s0 = north(S, -stubM);
+        RoadGraph g = trailOrAround();
+        Map<Long, double[]> nodes = new HashMap<>(g.nodes());
+        nodes.put(4L, s0);
+        List<RoadEdge> edges = new java.util.ArrayList<>(g.graph().edgeSet());
+        edges.add(edge(4, 4, 1, s0, S, new EdgePenalty(Map.of(Penalty.TRAIL, 1.0))));
+        return new RoadGraph(nodes, edges);
+    }
+
+    @Test
+    void startOnTrailStubSnapsToNearbyRoadInsteadOfOpeningAllTrails() {
+        RouteRequest fromStub = new RouteRequest(new Place(north(S, -30)[1], S[0], null), new Place(T[1], T[0], null),
+                "auto", "adult");
+
+        RouteResult r = service(new InMemoryRoadGraphSource(trailStubAtStart(30))).route(fromStub);
+
+        // 등산로 꼬리에 붙으면 등산로 없이는 못 나가, 예전엔 지름길 등산로까지 열려 377m 등산로 길이 됐다 (리뷰 11-12)
+        assertThat(r.routes()).allSatisfy(rt -> assertThat(rt.distanceM()).isGreaterThan(800));
+        assertThat(r.explanation().notes()).noneSatisfy(n -> assertThat(n.kind()).isEqualTo("trail"));
+        assertThat(r.explanation().text()).contains("출발점 근처 약 30m는 등산로 없이 이어진 길이 확인되지 않았습니다");
+
+        // 등산로 없는 길이 50m 넘게 더 멀면(산속) 등산로에 붙여 등산로로 간다
+        RouteRequest deep = new RouteRequest(new Place(north(S, -80)[1], S[0], null), new Place(T[1], T[0], null),
+                "auto", "adult");
+        RouteResult d = service(new InMemoryRoadGraphSource(trailStubAtStart(80))).route(deep);
+        assertThat(d.explanation().notes()).anySatisfy(n -> assertThat(n.kind()).isEqualTo("trail"));
+    }
 }

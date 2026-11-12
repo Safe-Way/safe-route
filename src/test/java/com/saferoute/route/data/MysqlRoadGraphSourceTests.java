@@ -41,6 +41,9 @@ class MysqlRoadGraphSourceTests {
         // 산길: 등산 난이도가 있으면 산행 길(재질과 상관없이), 없으면 확인 안 됨
         assertThat(MysqlRoadGraphSource.classify("asphalt", "path", null, "hiking")).isEqualTo(MysqlRoadGraphSource.Surface.TRAIL);
         assertThat(MysqlRoadGraphSource.classify(null, "path", null, null)).isEqualTo(MysqlRoadGraphSource.Surface.UNCONFIRMED);
+        // 등산로 위 계단도 등산로 (2026-11-12). 등산 난이도가 없는 계단은 재질대로
+        assertThat(MysqlRoadGraphSource.classify("rock", "steps", null, "mountain_hiking")).isEqualTo(MysqlRoadGraphSource.Surface.TRAIL);
+        assertThat(MysqlRoadGraphSource.classify("rock", "steps", null, null)).isEqualTo(MysqlRoadGraphSource.Surface.UNPAVED);
     }
 
     @Test
