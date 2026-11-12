@@ -186,11 +186,14 @@ public class TripScorer {
             double sum = 0;
             double missing = 0;
             for (Map.Entry<Criterion, Double> w : profile.day().weights().entrySet()) {
+                if (w.getKey() == Criterion.ALLEY) {
+                    continue; // 골목길(휠체어 낮, 2026-11-12)은 covered에 없다. 추천 점수 값 정책(11-09)을 바꾸지 않으려 넣지 않는다
+                }
                 int in = rt.covered() == null ? 0 : rt.covered().getOrDefault(w.getKey().name().toLowerCase(), 0);
                 missing += w.getValue() * Math.max(0, rt.distanceM() - in);
                 sum += w.getValue();
             }
-            b += x * missing / sum / BURDEN_SPEED;
+            b += sum > 0 ? x * missing / sum / BURDEN_SPEED : 0;
         }
         if ("senior".equals(mode) && rt.stairs() != null) {
             b += rt.stairs().size() * STAIRS_MIN;
