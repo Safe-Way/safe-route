@@ -512,7 +512,7 @@ public class RouteService {
             }
             return new RouteResult.Route(rt.kind(), rt.distanceM(), rt.durationMin(), rt.geometry(), rt.counts(),
                     rt.covered(), rt.sidewalks(), rt.dark(), rt.turns(), rt.crossings(), rt.stairs(), rt.events(),
-                    rt.unpavedM(), rt.surfaceUnknownM(), marks);
+                    rt.unpavedM(), rt.surfaceUnknownM(), marks, rt.crossAt());
         }).toList();
         return new RouteResult(r.conditions(), routes, r.explanation(), r.facilities(), r.dataQuality());
     }

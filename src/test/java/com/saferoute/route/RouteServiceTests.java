@@ -25,6 +25,7 @@ import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.data.PoiSource;
 import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.geo.BBox;
+import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge.EdgePenalty;
 import com.saferoute.route.engine.graph.RoadGraph;
@@ -330,6 +331,47 @@ class RouteServiceTests {
 
         assertThat(r.routes()).isNotEmpty();
         assertThat(ms).isLessThan(2000);
+    }
+
+    @Test
+    void crossAtPointsAtTheCrossingNodeInGeometryEvenWithSnappedStart() {
+        // 서–가운데–동 큰 길 한 줄. 인도가 왼쪽에서 오른쪽으로 바뀌는 가운데 노드에서 건넌다 (specs/014)
+        double mLat = Geo.distance(0, 0, 0, 1);
+        // 서쪽 끝은 북쪽으로 20m 올려 둔다: 도로망 범위(노드 상자) 안에 길 밖 출발을 둘 자리
+        double[] w = {126.93000, LAT + 20 / mLat};
+        double[] o = {126.93110, LAT};
+        double[] e = {126.93220, LAT};
+        RoadGraph g = new RoadGraph(Map.of(1L, w, 2L, o, 3L, e), List.of(
+                new com.saferoute.route.engine.graph.RoadEdge(1, 1, 2, Geo.distance(w, o), "primary", List.of(w, o),
+                        EdgePenalty.NONE, "left"),
+                new com.saferoute.route.engine.graph.RoadEdge(2, 2, 3, Geo.distance(o, e), "primary", List.of(o, e),
+                        EdgePenalty.NONE, "right")));
+        double[] cw = {126.93118, LAT};
+        RouteService s = new RouteService(new com.saferoute.route.data.InMemoryRoadGraphSource(g) {
+            @Override
+            public List<double[]> crosswalkPoints(BBox box) {
+                return List.of(cw);
+            }
+        }, facilities(List.of()), new com.saferoute.situation.NightJudge(), new com.saferoute.route.engine.score.RouteScorer(props()),
+                new com.saferoute.route.engine.explain.RouteResultAssembler(
+                        new com.saferoute.route.engine.facility.FacilityCounter(props()), props()),
+                props(), java.time.Clock.fixed(at(12).toInstant(), at(12).getZone()));
+        // 출발은 서쪽 길 한가운데에서 북쪽으로 5m: 응답 첫 점은 요청 출발, 길 위 발이 geometry 1번
+        double[] start = {126.93055, LAT + 15 / mLat};
+
+        RouteResult r = s.route(new RouteRequest(new Place(start[1], start[0], "출발"), new Place(LAT, e[0], "도착"), "auto"));
+
+        RouteResult.Route safe = r.routes().get(r.routes().size() - 1);
+        assertThat(safe.crossAt()).singleElement().satisfies(c -> {
+            assertThat(Geo.distance(safe.geometry().get(c.at()), o)).isLessThan(0.01);
+            assertThat(c.at()).isEqualTo(2);
+            assertThat(c.lon()).isEqualTo(cw[0]);
+            assertThat(c.kind()).isEqualTo("crossing");
+        });
+        assertThat(safe.crossings()).isEmpty();
+        String json = JsonMapper.builder().build().writeValueAsString(safe);
+        assertThat(json).contains("\"crossAt\":[{\"at\":2,\"lat\":" + LAT + ",\"lon\":" + cw[0]
+                + ",\"kind\":\"crossing\",\"from\":null,\"to\":null}]");
     }
 
     private static void assertError(Runnable call, RouteError expected) {
