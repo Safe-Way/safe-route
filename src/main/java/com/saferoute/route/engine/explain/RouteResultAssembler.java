@@ -104,15 +104,17 @@ public class RouteResultAssembler {
                     shortCovered,
                     Sidewalks.along(found.shortest(), found.shortest().startOffset(start)),
                     dark(cond, found.shortest(), start, cov), turns(found.shortest(), start),
-                    crossings(found.shortest(), start, graph, crosswalks), stairs(found.shortest(), start), shortEvents,
-                    found.shortest()));
+                    crossings(found.shortest(), start),
+                    SideChanges.along(found.shortest(), found.shortest().startOffset(start), graph, crosswalks),
+                    stairs(found.shortest(), start), shortEvents, found.shortest()));
         }
         routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts,
                 safeCovered,
                 Sidewalks.along(found.safe(), found.safe().startOffset(start)),
                 dark(cond, found.safe(), start, cov), turns(found.safe(), start),
-                crossings(found.safe(), start, graph, crosswalks), stairs(found.safe(), start), safeEvents,
-                found.safe()));
+                crossings(found.safe(), start),
+                SideChanges.along(found.safe(), found.safe().startOffset(start), graph, crosswalks),
+                stairs(found.safe(), start), safeEvents, found.safe()));
 
         int extraM = same ? 0 : safeM - shortM;
         // 반올림을 따로 하면 "22분 / 24분"인데 "(1분) 더"가 나올 수 있어, 두 경로 시간의 차로 구한다
@@ -145,12 +147,12 @@ public class RouteResultAssembler {
 
     private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts,
             Map<String, Integer> covered, List<RouteResult.Sidewalk> sidewalks, List<RouteResult.Stretch> dark, List<RouteResult.Turn> turns,
-            List<RouteResult.Crossing> crossings, List<RouteResult.Stair> stairs, List<RouteResult.Event> events,
-            RoadPath path) {
+            List<RouteResult.Stretch> crossings, List<RouteResult.CrossAt> crossAt, List<RouteResult.Stair> stairs,
+            List<RouteResult.Event> events, RoadPath path) {
         return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()), covered,
                 sidewalks,
                 dark, turns, crossings, stairs, events, (int) Math.round(path.lengthM(RouteFinder::isUnpaved)),
-                (int) Math.round(path.lengthM(RouteFinder::isSurfaceUnknown)));
+                (int) Math.round(path.lengthM(RouteFinder::isSurfaceUnknown)), List.of(), crossAt);
     }
 
     /** 이 요청 기준마다 경로가 그 범위 안을 걷는 길이(m). 키는 기준 이름 소문자 (school, help, rest, light, cctv, 비 오는 날 roof) */
@@ -222,20 +224,11 @@ public class RouteResultAssembler {
         return start && end ? "both" : start ? "start" : end ? "end" : null;
     }
 
-    /** 횡단보도 길 구간(새 칸 null)과 큰 길을 건너는 곳을 합쳐 거리순으로. 횡단보도 길 구간 안에서 건넌 곳은 같은 건너기라 뺀다 */
-    static List<RouteResult.Crossing> crossings(RoadPath path, double[] start, RoadGraph graph,
-            List<double[]> crosswalks) {
+    private static List<RouteResult.Stretch> crossings(RoadPath path, double[] start) {
         double startM = Geo.distance(start, path.line().get(0));
-        List<RouteResult.Crossing> ways = Turns.crossings(path, startM).stream()
-                .map(c -> new RouteResult.Crossing((int) Math.round(c[0]), (int) Math.round(c[1]), null, null, null,
-                        null, null))
+        return Turns.crossings(path, startM).stream()
+                .map(c -> new RouteResult.Stretch((int) Math.round(c[0]), (int) Math.round(c[1])))
                 .toList();
-        List<RouteResult.Crossing> out = new ArrayList<>(ways);
-        SideChanges.along(path, startM, graph, crosswalks).stream()
-                .filter(c -> ways.stream().noneMatch(w -> w.fromM() <= c.fromM() && c.fromM() <= w.toM()))
-                .forEach(out::add);
-        out.sort(Comparator.comparingInt(RouteResult.Crossing::fromM));
-        return out;
     }
 
     private List<RouteResult.Turn> turns(RoadPath path, double[] start) {

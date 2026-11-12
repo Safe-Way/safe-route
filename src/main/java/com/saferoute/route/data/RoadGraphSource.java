@@ -21,7 +21,7 @@ public interface RoadGraphSource {
         return load(box);
     }
 
-    /** 범위 안 횡단보도 점 {경도, 위도}. 응답 crossings의 큰 길 건너는 자리에 쓴다 (specs/014) */
+    /** 범위 안 횡단보도 점 {경도, 위도}. 응답 crossAt의 큰 길 건너는 자리에 쓴다 (specs/014) */
     default List<double[]> crosswalkPoints(BBox box) {
         return List.of();
     }

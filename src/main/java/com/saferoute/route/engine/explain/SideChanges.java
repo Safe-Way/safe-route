@@ -21,6 +21,8 @@ import com.saferoute.route.engine.search.RoadPath;
  *   <li>횡단보도: 노드 {@link #NEAR_M} 안이면서 앞·뒤 큰 길 선 {@link #LINE_M} 안인 가장 가까운 횡단보도 점 →
  *       없으면 그 선과 만나거나 닿는 횡단보도 길(footway=crossing)의 가운데({@link #NEAR_M} 안) → 없으면 보내지 않는다(1안)</li>
  * </ul>
+ * 응답 crossAt 항목: at = 그 노드의 응답 geometry 점 번호({@link Sidewalks}의 from·to와 같은 기준), from·to = 횡단보도 길의
+ * 첫 점·끝 점 [위도, 경도]. 횡단보도 점은 양 끝을 몰라 null (앱 요청 모양, 2026-11-12).
  */
 public final class SideChanges {
 
@@ -37,19 +39,19 @@ public final class SideChanges {
     }
 
     /**
-     * @param startM     요청 출발에서 경로 첫 점까지(m). 기존 crossings·시설 along.atM과 같은 기준
+     * @param offset     path.line()의 첫 점이 응답 geometry에서 몇 번째인지 ({@link RoadPath#startOffset}, {@link Sidewalks#along}과 같은 기준)
      * @param graph      요청 도로망. 노드의 큰 길 수와 횡단보도 길을 찾는다
      * @param crosswalks 횡단보도 점 {경도, 위도}
      */
-    static List<RouteResult.Crossing> along(RoadPath path, double startM, RoadGraph graph, List<double[]> crosswalks) {
-        List<RouteResult.Crossing> out = new ArrayList<>();
+    static List<RouteResult.CrossAt> along(RoadPath path, int offset, RoadGraph graph, List<double[]> crosswalks) {
+        List<RouteResult.CrossAt> out = new ArrayList<>();
         List<RoadEdge> edges = path.edges();
         boolean[] forward = path.forward();
-        double at = startM;
+        int at = offset;
         for (int i = 0; i + 1 < edges.size(); i++) {
             RoadEdge a = edges.get(i);
             RoadEdge b = edges.get(i + 1);
-            at += a.lengthM();
+            at += a.geometry().size() - 1;
             // 들를 곳에서 같은 길로 되돌아가면 걷는 방향만 바뀌어 쪽이 뒤집힌다. 건넌 것이 아니다
             if (!big(a) || !big(b) || a.id() == b.id()) {
                 continue;
@@ -66,15 +68,19 @@ public final class SideChanges {
             }
             Spot s = crosswalk(next.get(0), List.of(a.geometry(), b.geometry()), graph, crosswalks);
             if (s != null) {
-                int m = (int) Math.round(at);
-                out.add(new RouteResult.Crossing(m, m, s.p()[1], s.p()[0], s.kind(), from, to));
+                out.add(new RouteResult.CrossAt(at, s.p()[1], s.p()[0], s.kind(), latLon(s.from()), latLon(s.to())));
             }
         }
         return out;
     }
 
-    /** 찾은 횡단보도 자리 {경도, 위도}와 kind (crossing·footway) */
-    private record Spot(double[] p, String kind) {
+    /** {경도, 위도} → [위도, 경도]. null이면 null */
+    private static double[] latLon(double[] p) {
+        return p == null ? null : new double[] {p[1], p[0]};
+    }
+
+    /** 찾은 횡단보도 자리 {경도, 위도}와 kind (crossing·footway), 횡단보도 길이면 그 양 끝 {경도, 위도} (점이면 null) */
+    private record Spot(double[] p, String kind, double[] from, double[] to) {
     }
 
     /** 노드 p 가까이에서 큰 길 선 lines를 건너는 횡단보도. 없으면 null */
@@ -89,8 +95,9 @@ public final class SideChanges {
             }
         }
         if (best != null) {
-            return new Spot(best, "crossing");
+            return new Spot(best, "crossing", null, null);
         }
+        List<double[]> way = null;
         for (RoadEdge e : graph.graph().edgeSet()) {
             List<double[]> g = e.geometry();
             if (e.penalty().get(Penalty.CROSSWALK) < 1 || !touches(g, lines)) {
@@ -102,9 +109,10 @@ public final class SideChanges {
             if (d <= bestM) {
                 best = mid;
                 bestM = d;
+                way = g;
             }
         }
-        return best == null ? null : new Spot(best, "footway");
+        return best == null ? null : new Spot(best, "footway", way.get(0), way.get(way.size() - 1));
     }
 
     private static boolean near(double[] q, List<List<double[]>> lines) {
