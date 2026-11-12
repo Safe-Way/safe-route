@@ -213,8 +213,15 @@ public class AssistantService {
             String rest = CURB_CLAIM.matcher(say).replaceAll("").strip();
             return (rest.isEmpty() ? "" : rest + " ") + WHEELCHAIR_WHY;
         }
+        // 어르신: 제미나이가 줄이면서 쉴 곳 안내를 빼먹으면 서버가 붙인다 (점검 11번 11/12, 규칙 답과 같은 문장)
+        if ("senior".equals(mode) && pick != null && !say.contains("쉴") && !say.contains("쉬어")) {
+            return say.strip() + " " + ("walk".equals(pick.type()) ? SENIOR_REST_WALK : SENIOR_REST_TRANSIT);
+        }
         return say;
     }
+
+    static final String SENIOR_REST_WALK = "힘드시면 중간에 쉬어 가세요. '쉴 곳 어디 있어'라고 물으시면 가까운 쉼터를 알려 드려요.";
+    static final String SENIOR_REST_TRANSIT = "정류장까지 걷다가 힘드시면 '쉴 곳 어디 있어'라고 물어보세요.";
 
     /**
      * 대중교통을 추천했는데 제미나이가 말을 줄이면서 빼먹은 것을 서버가 붙인다 (비서 점검 1번 11/10).
