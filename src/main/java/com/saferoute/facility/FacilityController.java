@@ -21,6 +21,8 @@ import com.saferoute.common.ErrorResponse;
  * <ul>
  *   <li>GET /api/places/nearby?lat=&lon=&kind=toilet&mode=senior : 지금 이용 가능한 가장 가까운 곳 (FR-50)</li>
  *   <li>GET /api/pois?bbox=서,남,동,북&kinds=cctv,police,shelter : 지도 범위 안 시설 (FR-48)</li>
+ *   <li>kind·kinds 에 elevator 를 주면 엘리베이터 육교 + 엘리베이터 있는 지하철 출구 (11-13). 답의 kind 는 원래 종류
+ *       (footbridge, subway_entrance) 그대로</li>
  * </ul>
  * 앱은 고른 곳의 좌표로 POST /api/route를 불러 경로를 받는다 (경로 계산은 여기서 하지 않음).
  */
@@ -29,10 +31,11 @@ public class FacilityController {
 
     /** 가까운 곳에서 고를 수 있는 종류 (FR-50, 앱 설정의 "가까운 곳" 목록) */
     static final Set<String> NEARBY_KINDS = Set.of("toilet", "police", "guard_house", "school_zone", "shelter",
-            "bell", "store", "subway");
+            "bell", "store", "subway", FacilityRepository.ELEVATOR);
     /** 지도에 띄울 수 있는 종류. 등(light)은 8만 개가 넘어 점으로 보내지 않는다 (밝기는 경로 계산에만) */
     static final Set<String> MAP_KINDS = Set.of("cctv", "police", "bell", "store", "guard_house", "school_zone",
-            "shelter", "toilet", "footbridge", "crosswalk", "stairs", "subway", "subway_entrance");
+            "shelter", "toilet", "footbridge", "crosswalk", "stairs", "subway", "subway_entrance",
+            FacilityRepository.ELEVATOR);
     static final Set<String> MODES = Set.of("adult", "child", "senior", "wheelchair");
     /** 장애인 모드에서 휠체어로 쓸 수 있는 것만 고를 종류 (장애인 화장실, 엘리베이터 있는 역) */
     static final Set<String> WHEELCHAIR_FILTERED = Set.of("toilet", "subway");

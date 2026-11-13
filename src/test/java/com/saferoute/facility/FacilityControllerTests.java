@@ -123,6 +123,18 @@ class FacilityControllerTests {
     }
 
     @Test
+    void elevatorIsAKindForNearbyAndMap() {
+        when(repo.near(anyDouble(), anyDouble(), anyString(), anyBoolean(), anyInt())).thenReturn(List.of());
+        when(repo.within(anyDouble(), anyDouble(), anyDouble(), anyDouble(), eq(Set.of("elevator")), anyInt()))
+                .thenReturn(List.of());
+
+        assertThat(controller.nearby(35.14, 126.92, "elevator", "wheelchair").getStatusCode().value()).isEqualTo(200);
+        assertThat(controller.pois("126.91,35.14,126.93,35.15", "elevator", null).getStatusCode().value())
+                .isEqualTo(200);
+        verify(repo).near(35.14, 126.92, "elevator", false, 1000);
+    }
+
+    @Test
     void poisAcceptsSubwayEntrances() {
         when(repo.within(anyDouble(), anyDouble(), anyDouble(), anyDouble(), eq(Set.of("subway", "subway_entrance")),
                 anyInt())).thenReturn(List.of());
