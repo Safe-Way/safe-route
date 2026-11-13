@@ -40,11 +40,12 @@ class FieldTest1113Tests {
     final KakaoLocalClient kakao = mock(KakaoLocalClient.class);
     final FacilityRepository facilities = mock(FacilityRepository.class);
     final TripRecommender trips = mock(TripRecommender.class);
+    final AssistantTools tools;
     final AssistantService service;
 
     FieldTest1113Tests() {
         MemoryRepository memory = mock(MemoryRepository.class);
-        AssistantTools tools = new AssistantTools(kakao, trips, facilities,
+        tools = new AssistantTools(kakao, trips, facilities,
                 memory, mock(ReportService.class), mock(WeatherDustService.class), new NightJudge(),
                 new StopPlanner(kakao, mock(RouteService.class), mock(WalkSpeedService.class)));
         JsonMapper json = JsonMapper.builder().build();
@@ -101,5 +102,85 @@ class FieldTest1113Tests {
         assertThat(PlaceAlias.of("금남 지하상가")).isEqualTo("금남지하상가");
         assertThat(PlaceAlias.of("금남지하도상가")).isEqualTo("금남지하상가");
         assertThat(PlaceAlias.of("충금지하상가")).isEqualTo("충금지하상가");
+    }
+
+    @Test
+    void busStopNearANamedPlace() {
+        com.saferoute.bus.BusStopRepository stops = mock(com.saferoute.bus.BusStopRepository.class);
+        tools.setBusStops(stops);
+        when(kakao.search(eq("광주송정역"), anyDouble(), anyDouble())).thenReturn(List.of(
+                new Place("1", "광주송정역", "광주 광산구 상무대로 201", 35.1378, 126.7934, 12000)));
+        when(stops.near(35.1378, 126.7934, 1000, 1)).thenReturn(List.of(
+                new com.saferoute.bus.BusStop(6001, "광주송정역", "송정공원", 35.1381, 126.7930, 40)));
+        AssistantReply r = ask("송정역 근처 정류장 어디야");
+        assertThat(r.say()).contains("광주송정역 근처에서 찾았어요", "가장 가까운 버스 정류장은 광주송정역 정류장으로 40m예요");
+    }
+
+    @Test
+    void busLineAndBusToAPlace() {
+        com.saferoute.bus.BusLineRepository lines = mock(com.saferoute.bus.BusLineRepository.class);
+        tools.setBusLines(lines);
+        when(lines.find("03")).thenReturn(List.of(new com.saferoute.bus.BusLine(103, "03", "수완지구", "조선대",
+                java.time.LocalTime.of(5, 40), java.time.LocalTime.of(22, 20), 15, 35.19, 126.82)));
+        assertThat(ask("03번 버스 어디로 가?").say())
+                .isEqualTo("03번은 수완지구 ↔ 조선대 · 첫차 05:40 막차 22:20 · 15분마다예요.");
+        when(lines.endingAt("수완")).thenReturn(List.of(new com.saferoute.bus.BusLine(103, "03", "수완지구", "조선대",
+                null, null, null, null, null)));
+        assertThat(ask("수완동으로 가는 버스 알려줘").say()).startsWith("수완동으로 가는 버스는 03번(수완지구 ↔ 조선대)이 있어요.")
+                .contains("'수완동 가자'");
+        // 종점인 노선이 없으면 택시 권하기
+        when(lines.endingAt("양림")).thenReturn(List.of());
+        when(kakao.search(eq("택시승강장"), anyDouble(), anyDouble())).thenReturn(List.of(
+                new Place("5", "조선대 택시승강장", "광주 동구", 35.141, 126.932, 150)));
+        assertThat(ask("양림동 가는 버스").say()).contains("양림동이 처음이나 끝 정류장인 버스는 없어요", "아직 준비 중", "택시를 추천해요",
+                "조선대 택시승강장");
+    }
+
+    @Test
+    void busPassingAPlace() {
+        com.saferoute.bus.BusLineRepository lines = mock(com.saferoute.bus.BusLineRepository.class);
+        com.saferoute.bus.BusLineStops passing = mock(com.saferoute.bus.BusLineStops.class);
+        tools.setBusLines(lines);
+        tools.setLineStops(passing);
+        when(kakao.search(eq("수완동"), anyDouble(), anyDouble())).thenReturn(List.of(
+                new Place("9", "수완동", "광주 광산구 수완동", 35.19, 126.82, 9000)));
+        com.saferoute.bus.BusLine l = new com.saferoute.bus.BusLine(28, "03", "첨단공영차고지", "조선대", null, null,
+                null, null, null);
+        when(passing.to("수완동", 35.19, 126.82)).thenReturn(List.of(new com.saferoute.bus.BusLineStops.Hit(l,
+                new com.saferoute.bus.LineStop(20, 501, "수완지구", 35.191, 126.821))));
+        assertThat(ask("수완동으로 가는 버스").say())
+                .startsWith("수완동으로 가는 버스는 03번(수완지구를 지나요, 첨단공영차고지 ↔ 조선대)이 있어요.");
+    }
+
+    @Test
+    void busGoingThereOffersTheNearestStopOfThatLine() {
+        com.saferoute.bus.BusLineRepository lines = mock(com.saferoute.bus.BusLineRepository.class);
+        com.saferoute.bus.BusLineStops passing = mock(com.saferoute.bus.BusLineStops.class);
+        tools.setBusLines(lines);
+        tools.setLineStops(passing);
+        when(kakao.search(eq("수완지구"), anyDouble(), anyDouble())).thenReturn(List.of(
+                new Place("9", "수완지구", "광주 광산구 수완동", 35.19, 126.82, 9000)));
+        com.saferoute.bus.BusLine l = new com.saferoute.bus.BusLine(28, "03", "첨단공영차고지", "조선대", null, null,
+                null, null, null);
+        com.saferoute.bus.LineStop near = new com.saferoute.bus.LineStop(3, 77, "조선대병원", 35.1410, 126.9300);
+        when(passing.to("수완지구", 35.19, 126.82)).thenReturn(List.of(new com.saferoute.bus.BusLineStops.Hit(l,
+                new com.saferoute.bus.LineStop(20, 501, "수완지구", 35.191, 126.821))));
+        when(passing.stopsOf(28)).thenReturn(List.of(near));
+        when(passing.nearestStop(28, LAT, LON)).thenReturn(near);
+
+        AssistantReply first = ask("수완지구 가는 버스");
+        assertThat(first.say()).startsWith("수완지구로 가는 버스는 03번(")
+                .endsWith("03번이 서는 가장 가까운 정류장으로 안내할까요?");
+        assertThat(first.choices()).extracting(AssistantReply.Choice::label).containsExactly("네", "아니요");
+
+        AssistantReply yes = service.answer(new AssistantRequest(A, "", LAT, LON, null, first.conversationId(), "yes",
+                null, null, "adult"));
+        assertThat(yes.say()).contains("03번이 서는 정류장은 조선대병원", "[여기로 가기]");
+        assertThat(yes.place().lat()).isEqualTo(35.1410);
+
+        AssistantReply no = service.answer(new AssistantRequest(A, "아니요", LAT, LON, null, first.conversationId(), null,
+                null, null, "adult"));
+        assertThat(no.say()).startsWith("알겠어요. 03번 타는 곳이");
+        assertThat(no.place()).isNull();
     }
 }

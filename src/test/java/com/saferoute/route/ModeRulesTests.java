@@ -163,18 +163,23 @@ class ModeRulesTests {
 
     /** 지름길 S–M–T는 인도 없는 골목(residential), 북쪽 S–N–T는 큰 길(tertiary) */
     static RoadGraph alleyDiamond(double north) {
+        return alleyDiamond(north, null);
+    }
+
+    /** 골목의 인도 태그(sidewalk)만 바꾼 alleyDiamond. null 모름, no 없음(휠체어 제외), both 있음(큰 길) */
+    static RoadGraph alleyDiamond(double north, String sidewalk) {
         double[] nP = {126.93110, LAT + north};
         return new RoadGraph(Map.of(TestRoutes.S, TestRoutes.S_P, TestRoutes.M, TestRoutes.M_P, TestRoutes.T,
                 TestRoutes.T_P, TestRoutes.N, nP), List.of(
-                road(10, TestRoutes.S, TestRoutes.M, TestRoutes.S_P, TestRoutes.M_P, "residential"),
-                road(11, TestRoutes.M, TestRoutes.T, TestRoutes.M_P, TestRoutes.T_P, "residential"),
-                road(12, TestRoutes.S, TestRoutes.N, TestRoutes.S_P, nP, "tertiary"),
-                road(13, TestRoutes.T, TestRoutes.N, TestRoutes.T_P, nP, "tertiary")));
+                road(10, TestRoutes.S, TestRoutes.M, TestRoutes.S_P, TestRoutes.M_P, "residential", sidewalk),
+                road(11, TestRoutes.M, TestRoutes.T, TestRoutes.M_P, TestRoutes.T_P, "residential", sidewalk),
+                road(12, TestRoutes.S, TestRoutes.N, TestRoutes.S_P, nP, "tertiary", null),
+                road(13, TestRoutes.T, TestRoutes.N, TestRoutes.T_P, nP, "tertiary", null)));
     }
 
-    static RoadEdge road(long id, long from, long to, double[] a, double[] b, String highway) {
+    static RoadEdge road(long id, long from, long to, double[] a, double[] b, String highway, String sidewalk) {
         List<double[]> line = List.of(a, b);
-        return new RoadEdge(id, from, to, Geo.length(line), highway, line, EdgePenalty.NONE);
+        return new RoadEdge(id, from, to, Geo.length(line), highway, line, EdgePenalty.NONE, sidewalk);
     }
 
     @Test
@@ -215,5 +220,151 @@ class ModeRulesTests {
         assertThat(r.routes().get(0).alleyM()).isEqualTo(200);
         assertThat(r.explanation().text())
                 .isEqualTo("휠체어로 지날 수 있는 길 중 가장 짧은 길입니다 (알림: 골목길 약 200m를 지납니다)");
+    }
+
+    @Test
+    void wheelchairNeverUsesNoSidewalkAlleyEvenPastDetourLimit() {
+        // 큰 길 약 1.34배 > 1.2여도 인도 없다고 확인된 골목은 안 쓴다 (2026-11-13). 노인은 감점만 하고 골목 지름길로
+        RouteResult r = route(alleyDiamond(0.0008, "no"), List.of(), at(12), "wheelchair", "auto");
+        assertThat(north(r)).isTrue();
+        assertThat(r.routes()).allMatch(x -> x.alleyM() == 0);
+        assertThat(r.explanation().notes()).noneMatch(n -> n.kind().equals("no_sidewalk_alley"));
+
+        RouteResult senior = route(alleyDiamond(0.0008, "no"), List.of(), at(12), "senior", "auto");
+        assertThat(north(senior)).isFalse();
+        assertThat(senior.routes().get(0).alleyM()).isEqualTo(200);
+    }
+
+    @Test
+    void wheelchairUsesNoSidewalkAlleyOnlyWhenNothingElseConnects() {
+        // 보행로 S–A, 인도 없는 골목 A–B(약 255m, 출발·도착 골목 200m 규칙 밖), 보행로 B–T. 골목을 빼면 이어지지 않아
+        // 골목을 넣어 다시 찾고 주의를 붙인다 (2026-11-13)
+        double[] a = {126.93050, LAT};
+        double[] b = {126.93330, LAT};
+        double[] t = {126.93380, LAT};
+        RoadGraph g = new RoadGraph(Map.of(1L, TestRoutes.S_P, 2L, a, 3L, b, 4L, t), List.of(
+                TestRoutes.edge(1, 1, 2, TestRoutes.S_P, a, EdgePenalty.NONE),
+                road(2, 2, 3, a, b, "residential", "no"),
+                TestRoutes.edge(3, 3, 4, b, t, EdgePenalty.NONE)));
+        RouteService s = TestRoutes.service(g, TestRoutes.pois(List.of()), at(12), props());
+
+        RouteResult r = s.route(new RouteRequest(new Place(LAT, TestRoutes.S_P[0], "출발"), new Place(LAT, t[0], "도착"),
+                "auto", "wheelchair"));
+
+        assertThat(r.routes().get(0).alleyM()).isBetween(250, 260);
+        assertThat(r.explanation().notes()).anySatisfy(n -> {
+            assertThat(n.kind()).isEqualTo("no_sidewalk_alley");
+            assertThat(n.level()).isEqualTo("warn");
+            assertThat(n.text()).matches("인도 없는 골목 약 25\\dm를 지납니다");
+        });
+    }
+
+    @Test
+    void wheelchairFallbackUsesLeastNoSidewalkAlley() {
+        // 보행로 S–A, B–T 사이를 잇는 길은 인도 없는 골목뿐: A–B 곧은 골목 300m(전체 약 400m)와
+        // 북쪽 150m 보행로로 돌아 C–D 골목 40m만 지나는 길(약 590m). 골목 1m = 10m라 낮·밤 모두 40m 쪽 (배수 1이면 300m 쪽, 2026-11-13)
+        double north = 150 / 111_195.0;
+        double[] a = {126.93055, LAT};
+        double[] b = {126.93385, LAT};
+        double[] t = {126.93440, LAT};
+        double[] c = {126.93055, LAT + north};
+        double[] d = {126.93099, LAT + north};
+        RoadGraph g = new RoadGraph(Map.of(1L, TestRoutes.S_P, 2L, a, 3L, b, 4L, t, 5L, c, 6L, d), List.of(
+                TestRoutes.edge(1, 1, 2, TestRoutes.S_P, a, EdgePenalty.NONE),
+                road(2, 2, 3, a, b, "residential", "no"),
+                TestRoutes.edge(3, 3, 4, b, t, EdgePenalty.NONE),
+                TestRoutes.edge(4, 2, 5, a, c, EdgePenalty.NONE),
+                road(5, 5, 6, c, d, "residential", "no"),
+                TestRoutes.edge(6, 6, 3, d, b, EdgePenalty.NONE)));
+        for (int hour : new int[] {12, 21}) {
+            RouteService s = TestRoutes.service(g, TestRoutes.pois(List.of()), at(hour), props());
+            RouteResult r = s.route(new RouteRequest(new Place(LAT, TestRoutes.S_P[0], "출발"), new Place(LAT, t[0], "도착"),
+                    "auto", "wheelchair"));
+
+            assertThat(r.routes()).allSatisfy(x -> assertThat(x.alleyM()).isBetween(38, 42));
+            // 응답 거리는 실제 길이 (부풀린 비용이 아님)
+            assertThat(r.routes().get(0).distanceM()).isBetween(570, 610);
+            assertThat(r.explanation().notes()).anySatisfy(n -> assertThat(n.text()).matches("인도 없는 골목 약 4\\dm를 지납니다"));
+        }
+    }
+
+    /** 출발점 기준 동쪽 x m, 북쪽 y m */
+    static double[] xy(double x, double y) {
+        return new double[] {126.93 + x / (111_195.0 * Math.cos(Math.toRadians(LAT))), LAT + y / 111_195.0};
+    }
+
+    /** 출발점 남쪽 25m에 인도 없는 골목(동서 200m), 북쪽 roadM에 보행로. 둘은 양 끝 보행로로 이어지고 도착은 보행로 동쪽 300m */
+    static RouteResult alleyOrRoad(double roadM) {
+        double[] a1 = xy(-100, -25);
+        double[] a2 = xy(100, -25);
+        double[] f1 = xy(-100, roadM);
+        double[] f0 = xy(0, roadM);
+        double[] f2 = xy(100, roadM);
+        double[] f3 = xy(300, roadM);
+        RoadGraph g = new RoadGraph(Map.of(1L, a1, 2L, a2, 3L, f1, 4L, f0, 5L, f2, 6L, f3), List.of(
+                road(1, 1, 2, a1, a2, "residential", "no"),
+                TestRoutes.edge(2, 1, 3, a1, f1, EdgePenalty.NONE), TestRoutes.edge(3, 2, 5, a2, f2, EdgePenalty.NONE),
+                TestRoutes.edge(4, 3, 4, f1, f0, EdgePenalty.NONE), TestRoutes.edge(5, 4, 5, f0, f2, EdgePenalty.NONE),
+                TestRoutes.edge(6, 5, 6, f2, f3, EdgePenalty.NONE)));
+        RouteService s = TestRoutes.service(g, TestRoutes.pois(List.of()), at(12), props());
+        return s.route(new RouteRequest(new Place(LAT, 126.93, "출발"), new Place(f3[1], f3[0], "도착"), "auto", "wheelchair"));
+    }
+
+    @Test
+    void wheelchairSnapsToRoadUnlessAlleyIsMuchCloser() {
+        // 골목 25m, 지날 수 있는 길 45m: 50m(passable-snap-extra-m) 안이라 길에 붙는다 (2026-11-13, 4번 출구)
+        RouteResult road = alleyOrRoad(45);
+        assertThat(road.routes().get(0).alleyM()).isZero();
+        assertThat(road.routes().get(0).geometry().get(1)[1]).isGreaterThan(LAT); // 0번은 요청 출발점
+        // 길이 120m면 골목에 붙고 골목을 따라 나간다 (출발·도착 골목 200m)
+        RouteResult alley = alleyOrRoad(120);
+        assertThat(alley.routes().get(0).alleyM()).isBetween(95, 105);
+        assertThat(alley.routes().get(0).geometry().get(1)[1]).isLessThan(LAT);
+    }
+
+    @Test
+    void wheelchairKeepsAlleyWithUnknownOrBothSidewalk() {
+        // 인도 모름: 예전대로 감점만 (1.34배라 골목으로). 인도 있음: 큰 길로 보고 1.09배여도 지름길
+        assertThat(north(route(alleyDiamond(0.0008, null), List.of(), at(12), "wheelchair", "auto"))).isFalse();
+        RouteResult both = route(alleyDiamond(0.0004, "both"), List.of(), at(12), "wheelchair", "auto");
+        assertThat(north(both)).isFalse();
+        assertThat(both.routes()).hasSize(1);
+        assertThat(both.routes().get(0).alleyM()).isZero();
+    }
+
+    /** 출발 S에서 골목을 따라 동쪽 90m (인도 없는 골목 안). 지날 수 있는 큰 길(S–N)까지 약 60m라 50m 넘게 멀어 골목에 붙는다 */
+    static final double[] IN_ALLEY = {126.93000 + 0.00099, LAT};
+
+    static RouteResult fromAlley(String... overrides) {
+        RouteService s = TestRoutes.service(alleyDiamond(0.0008, "no"), TestRoutes.pois(List.of()), at(12), props(overrides));
+        return s.route(new RouteRequest(new Place(IN_ALLEY[1], IN_ALLEY[0], "출발"), new Place(LAT, 126.93220, "도착"),
+                "auto", "wheelchair"));
+    }
+
+    @Test
+    void wheelchairStartsInsideNoSidewalkAlley() {
+        // 출발점이 인도 없는 골목 안이면 그 골목에 붙여 골목을 따라 나간다 (end-alley-m 200m 안: 10m + 100m로 T까지)
+        RouteResult r = fromAlley();
+        RouteResult.Route route = r.routes().get(0);
+        assertThat(north(r)).isFalse();
+        assertThat(route.geometry().get(0)[0]).isCloseTo(IN_ALLEY[0], org.assertj.core.data.Offset.offset(1e-6));
+        assertThat(route.alleyM()).isBetween(105, 115);
+        assertThat(r.explanation().notes()).noneMatch(n -> n.kind().equals("snap"));
+
+        // 50m까지만 열면 골목을 못 나가 예전처럼 큰 길에 다시 붙이고(약 60m) 알린다
+        RouteResult short50 = fromAlley("route.end-alley-m=50");
+        assertThat(north(short50)).isTrue();
+        assertThat(short50.explanation().notes()).anyMatch(n -> n.kind().equals("snap"));
+    }
+
+    @Test
+    void wheelchairStopInsideNoSidewalkAlley() {
+        // 들를 곳(M)이 인도 없는 골목 안: 그 골목으로 드나든다. 다른 경로 없이 NO_ROUTE가 되지 않는다
+        RouteService svc = TestRoutes.service(alleyDiamond(0.0008, "no"), TestRoutes.pois(List.of()), at(12), props());
+        RouteResult r = svc.route(new RouteRequest(new Place(LAT, 126.93000, "출발"), new Place(LAT, 126.93220, "도착"),
+                "auto", "wheelchair", null, null, List.of(new Place(LAT, TestRoutes.M_P[0], "가게")), null));
+        assertThat(r.routes().get(0).stops()).hasSize(1);
+        assertThat(r.routes().get(0).alleyM()).isEqualTo(200);
+        assertThat(r.explanation().notes()).noneMatch(n -> n.kind().equals("snap"));
     }
 }

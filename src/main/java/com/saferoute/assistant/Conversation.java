@@ -23,11 +23,12 @@ import tools.jackson.databind.json.JsonMapper;
  * @param bodyNote    오늘 몸 상태 한마디 ("무릎이 아파"). 없으면 null
  * @param errand      가는 길에 들를 곳 ("다이소 들르고 택배 찾고 집 갈래"). 도착지가 정해지면 같이 길을 찾는다. 없으면 null
  * @param origin      "광주역에서 …"처럼 말한 출발지. 없으면 null (지금 위치에서 출발)
+ * @param why         마지막으로 고른 걷는 길의 엔진 이유 (11-13 "왜 이 길이야?"). 없으면 null
  * @param lastTools   바로 전 질문에 부른 도구 이름 (이어지는 말에 같은 도구를 보내려고, 토큰 줄이기 R2). 없으면 빈 목록
  */
 public record Conversation(List<Turn> turns, Place destination, List<Place> candidates, String mode, String asked,
                            Pending pending, Map<String, String> setup, String bodyNote, Errand errand,
-                           List<String> lastTools, Place origin) {
+                           List<String> lastTools, Place origin, String why) {
 
     static final int MAX_TURNS = 6;
     static final int MAX_TEXT = 200;
@@ -77,7 +78,7 @@ public record Conversation(List<Turn> turns, Place destination, List<Place> cand
     }
 
     static Conversation start() {
-        return new Conversation(List.of(), null, List.of(), null, null, null, Map.of(), null, null, List.of(), null);
+        return new Conversation(List.of(), null, List.of(), null, null, null, Map.of(), null, null, List.of(), null, null);
     }
 
     Conversation withTurn(String role, String text) {
@@ -90,48 +91,48 @@ public record Conversation(List<Turn> turns, Place destination, List<Place> cand
         while (t.size() > MAX_TURNS) {
             t.remove(0);
         }
-        return new Conversation(List.copyOf(t), destination, candidates, mode, asked, pending, setup, bodyNote, errand, lastTools, origin);
+        return new Conversation(List.copyOf(t), destination, candidates, mode, asked, pending, setup, bodyNote, errand, lastTools, origin, why);
     }
 
     Conversation withDestination(Place d) {
-        return new Conversation(turns, d, List.of(), mode, asked, pending, setup, bodyNote, errand, lastTools, origin);
+        return new Conversation(turns, d, List.of(), mode, asked, pending, setup, bodyNote, errand, lastTools, origin, why);
     }
 
     Conversation withCandidates(List<Place> c) {
-        return new Conversation(turns, destination, List.copyOf(c), mode, asked, pending, setup, bodyNote, errand, lastTools, origin);
+        return new Conversation(turns, destination, List.copyOf(c), mode, asked, pending, setup, bodyNote, errand, lastTools, origin, why);
     }
 
     Conversation withMode(String m) {
-        return new Conversation(turns, destination, candidates, m, asked, pending, setup, bodyNote, errand, lastTools, origin);
+        return new Conversation(turns, destination, candidates, m, asked, pending, setup, bodyNote, errand, lastTools, origin, why);
     }
 
     Conversation asked(String what) {
-        return new Conversation(turns, destination, candidates, mode, what, pending, setup, bodyNote, errand, lastTools, origin);
+        return new Conversation(turns, destination, candidates, mode, what, pending, setup, bodyNote, errand, lastTools, origin, why);
     }
 
     Conversation withPending(Pending p) {
-        return new Conversation(turns, destination, candidates, mode, asked, p, setup, bodyNote, errand, lastTools, origin);
+        return new Conversation(turns, destination, candidates, mode, asked, p, setup, bodyNote, errand, lastTools, origin, why);
     }
 
     Conversation withSetup(Map<String, String> s) {
-        return new Conversation(turns, destination, candidates, mode, asked, pending, Map.copyOf(s), bodyNote, errand, lastTools, origin);
+        return new Conversation(turns, destination, candidates, mode, asked, pending, Map.copyOf(s), bodyNote, errand, lastTools, origin, why);
     }
 
     Conversation withErrand(Errand e) {
-        return new Conversation(turns, destination, candidates, mode, asked, pending, setup, bodyNote, e, lastTools, origin);
+        return new Conversation(turns, destination, candidates, mode, asked, pending, setup, bodyNote, e, lastTools, origin, why);
     }
 
     Conversation withLastTools(List<String> names) {
         return new Conversation(turns, destination, candidates, mode, asked, pending, setup, bodyNote, errand,
-                names == null ? List.of() : List.copyOf(names), origin);
+                names == null ? List.of() : List.copyOf(names), origin, why);
     }
 
     Conversation withOrigin(Place o) {
-        return new Conversation(turns, destination, candidates, mode, asked, pending, setup, bodyNote, errand, lastTools, o);
+        return new Conversation(turns, destination, candidates, mode, asked, pending, setup, bodyNote, errand, lastTools, o, why);
     }
 
     Conversation withBodyNote(String note) {
-        return new Conversation(turns, destination, candidates, mode, asked, pending, setup, note, errand, lastTools, origin);
+        return new Conversation(turns, destination, candidates, mode, asked, pending, setup, note, errand, lastTools, origin, why);
     }
 
     /** conversationId 글자 ↔ 대화. 글자가 틀렸으면 새 대화로 본다 */
@@ -157,7 +158,7 @@ public record Conversation(List<Turn> turns, Place destination, List<Place> cand
                 return new Conversation(c.turns() == null ? List.of() : c.turns(), c.destination(),
                         c.candidates() == null ? List.of() : c.candidates(), c.mode(), c.asked(), c.pending(),
                         c.setup() == null ? Map.of() : c.setup(), c.bodyNote(), c.errand(),
-                        c.lastTools() == null ? List.of() : c.lastTools(), c.origin());
+                        c.lastTools() == null ? List.of() : c.lastTools(), c.origin(), c.why());
             } catch (IllegalArgumentException | JacksonException e) {
                 return start();
             }
@@ -166,5 +167,11 @@ public record Conversation(List<Turn> turns, Place destination, List<Place> cand
         static String text(byte[] b) {
             return new String(b, StandardCharsets.UTF_8);
         }
+    }
+
+    /** 마지막으로 고른 걷는 길의 엔진 이유 ("왜 이 길이야?"에 그대로 답함). 없으면 null */
+    Conversation withWhy(String w) {
+        return new Conversation(turns, destination, candidates, mode, asked, pending, setup, bodyNote, errand, lastTools,
+                origin, w);
     }
 }

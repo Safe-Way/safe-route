@@ -102,7 +102,7 @@ class TmapCompareCheck {
         MysqlPoiSource pois = new MysqlPoiSource(db);
         FacilityCounter counter = new FacilityCounter(props);
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Asia/Seoul")).withHour(hour).withMinute(0);
-        RouteService service = new RouteService(new MysqlRoadGraphSource(db), pois, new NightJudge(),
+        RouteService service = new RouteService(new MysqlRoadGraphSource(db, props), pois, new NightJudge(),
                 new RouteScorer(props), new RouteResultAssembler(counter, props), props,
                 Clock.fixed(now.toInstant(), now.getZone()));
         TmapWalkClient tmap = new TmapWalkClient(env.getOrDefault("TMAP_APP_KEY", ""));

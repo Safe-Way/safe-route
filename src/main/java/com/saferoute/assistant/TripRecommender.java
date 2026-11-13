@@ -92,7 +92,14 @@ public class TripRecommender {
      * @param night    밤이면 true
      * @param failText 둘 다 못 찾았을 때 사용자에게 할 말. 아니면 null
      */
-    public record Plan(TripScorer.Scored scored, WeatherDust weather, boolean night, String failText) {
+    /**
+     * @param why 엔진이 고른 걷는 길(safe)의 이유 한 줄 (explanation.summary, 예 "인도가 있는 길로 갑니다"). 없으면 null.
+     *            비서가 "왜 이 길이야?"에 그대로 말한다 (11-13 원일님 부탁)
+     */
+    public record Plan(TripScorer.Scored scored, WeatherDust weather, boolean night, String failText, String why) {
+        public Plan(TripScorer.Scored scored, WeatherDust weather, boolean night, String failText) {
+            this(scored, weather, night, failText, null);
+        }
     }
 
     public Plan recommend(Ask a) {
@@ -108,6 +115,7 @@ public class TripRecommender {
         WalkSpeed speed = speed(a.guestId(), a.mode());
         boolean personal = speed != null && speed.personal();
         String failText = null;
+        String why = null;
 
         // 1. 걷는 길 (원일님 엔진): 최단·맞춤 중 피할 것이 적은 길을 걷기 후보로
         try {
@@ -119,6 +127,7 @@ public class TripRecommender {
                 int minutes = personal ? (int) Math.ceil(w.distanceM() / speed.speedMMin()) : w.durationMin();
                 Map<String, Integer> diff = r.explanation() == null || r.explanation().diff() == null
                         ? Map.of() : r.explanation().diff();
+                why = engineWhy(r, w);
                 trips.add(new Trip("walk", minutes, w.distanceM(), 0, near.getOrDefault(w.kind(), 0),
                         minutes + "분, " + String.format("%,d", w.distanceM()) + "m",
                         request(req), w.kind(), diff, w.events() == null ? List.of() : w.events(), false, null,
@@ -170,7 +179,16 @@ public class TripRecommender {
         Profile pf = a.profile();
         TripScorer.Context ctx = new TripScorer.Context(a.mode(), w.rain(), w.heat(), w.cold(), w.dustBad(), night,
                 personal, pf == null ? null : pf.preferTransit(), habit(a.guestId(), w), a.bodyNote());
-        return new Plan(scorer.score(trips, ctx), w, night, null);
+        return new Plan(scorer.score(trips, ctx), w, night, null, why);
+    }
+
+    /** 엔진 설명(explanation.summary)은 safe 길을 고른 이유라서, 걷기 후보가 safe 길일 때만 쓴다 */
+    static String engineWhy(RouteResult r, RouteResult.Route w) {
+        if (r.explanation() == null || w == null || !"safe".equals(w.kind())) {
+            return null;
+        }
+        String s = r.explanation().summary();
+        return s == null || s.isBlank() ? null : s.strip();
     }
 
     /** 날씨가 같았던 지난 이동에서 더 많이 고른 것 (transit, walk). 기록이 없거나 같으면 null */

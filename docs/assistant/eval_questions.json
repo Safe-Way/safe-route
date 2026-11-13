@@ -639,6 +639,68 @@
         "어디로"
       ],
       "must_not": []
+    },
+    {
+      "id": 42,
+      "guest": "B",
+      "weather": "clear",
+      "time": "화 18:10",
+      "text": "광주역에서 다이소 갔다가 문화전당으로 갈거야",
+      "expect_tools": ["plan_stops"],
+      "expect": [
+        "광주역에서 출발",
+        "다이소",
+        "국립아시아문화전당"
+      ],
+      "must_not": [
+        "찾지 못했어요"
+      ]
+    },
+    {
+      "id": 43,
+      "guest": "B",
+      "weather": "clear",
+      "time": "화 18:10",
+      "text": "문화전당에서 서석동 갔다가 금남지하상가로 갈거야",
+      "expect_tools": ["plan_stops"],
+      "expect": [
+        "국립아시아문화전당에서 출발",
+        "동구 서석동",
+        "금남지하상가"
+      ],
+      "must_not": [
+        "찾지 못했어요"
+      ]
+    },
+    {
+      "id": 44,
+      "guest": "B",
+      "weather": "clear",
+      "time": "화 18:10",
+      "text": "어.. 문화전당역에서 푸른길 갔다가 조선대로 갈께",
+      "expect_tools": ["plan_stops"],
+      "expect": [
+        "출발",
+        "푸른길",
+        "조선대학교"
+      ],
+      "must_not": [
+        "3곳을 찾았어요"
+      ]
+    },
+    {
+      "id": 45,
+      "guest": "B",
+      "weather": "clear",
+      "time": "화 18:10",
+      "text": "남광주역에서 약국 들렀다가 집에 갈래",
+      "expect_tools": ["plan_stops"],
+      "expect": [
+        "남광주역",
+        "약국",
+        "집까지"
+      ],
+      "must_not": []
     }
   ]
 }

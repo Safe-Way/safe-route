@@ -358,6 +358,15 @@ public class AssistantTools {
                     return c;
                 }
             }
+            if (!n.startsWith("광주")) {
+                // 광주 안 결과가 하나도 없으면 "광주 "를 붙여 한 번 더 (경기 고양·성남 같은 곳이 앞을 채울 때, 11-13)
+                for (com.saferoute.place.Place p : kakao.search("광주 " + n, t.lat, t.lon)) {
+                    Place c = new Place(p.name(), p.address(), p.lat(), p.lon());
+                    if (inGwangju(c)) {
+                        return c;
+                    }
+                }
+            }
         } catch (PlaceSearchException e) {
             log.warn("비서 기준점 찾기 실패: {}", e.getMessage());
         }
@@ -763,6 +772,112 @@ public class AssistantTools {
 
     private com.saferoute.bus.BusStopRepository busStops;
 
+    private com.saferoute.bus.BusLineRepository busLines;
+
+    /** 버스 노선 표 (DB 없는 테스트에서는 안 넣음) */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setBusLines(com.saferoute.bus.BusLineRepository busLines) {
+        this.busLines = busLines;
+    }
+
+    /** "03번 버스 어디로 가?" → 노선 한 줄씩 (최대 3개). 못 찾으면 null */
+    String busLineInfo(Turn t, String number) {
+        t.tools.add("find_nearby");
+        if (busLines == null) {
+            return null;
+        }
+        try {
+            List<com.saferoute.bus.BusLine> found = busLines.find(number);
+            if (found.isEmpty()) {
+                return number + "번 버스는 광주 버스 목록에서 찾지 못했어요. 번호를 다시 말씀해 주시겠어요?";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (com.saferoute.bus.BusLine l : found.stream().limit(3).toList()) {
+                sb.append(sb.isEmpty() ? "" : " ").append(l.name()).append("번은 ").append(l.summary()).append("예요.");
+            }
+            if (found.size() > 3) {
+                sb.append(" 이름이 비슷한 버스가 ").append(found.size() - 3).append("개 더 있어요.");
+            }
+            return sb.toString();
+        } catch (DataAccessException e) {
+            log.warn("비서 노선 조회 실패: {}", e.getMostSpecificCause().getMessage());
+            return "지금은 버스 노선 정보를 불러오지 못했어요. 잠시 뒤에 다시 물어봐 주세요.";
+        }
+    }
+
+    private com.saferoute.bus.BusLineStops lineStops;
+
+    /** 노선마다 지나는 정류장 (DB 없는 테스트에서는 안 넣음 → 기점·종점으로만) */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setLineStops(com.saferoute.bus.BusLineStops lineStops) {
+        this.lineStops = lineStops;
+    }
+
+    /** 노선별 정류장 파일을 읽었는지 (없으면 "지나가는 버스"는 모르고 기점·종점만 앎) */
+    boolean passingKnown() {
+        return lineStops != null && lineStops.loaded() > 0;
+    }
+
+    /**
+     * "수완동으로 가는 버스" (11-13): 그곳을 지나는 노선(광주버스정보 노선별 정류장) + 그쪽이 기점·종점인 노선.
+     * 없으면 null. 노선 표를 못 읽으면 빈 문자열
+     */
+    String busLinesTo(Turn t, String place) {
+        t.tools.add("find_nearby");
+        if (busLines == null) {
+            return "";
+        }
+        try {
+            List<String> parts = new ArrayList<>();
+            int total;
+            if (lineStops != null) {
+                Place at = firstPlace(t, com.saferoute.place.BusLineQuery.anchor(place));
+                List<com.saferoute.bus.BusLineStops.Hit> hits = lineStops.to(place, at == null ? null : at.lat(),
+                        at == null ? null : at.lon());
+                total = hits.size();
+                if (!hits.isEmpty() && !lineStops.stopsOf(hits.get(0).line().id()).isEmpty()) {
+                    t.busLine = hits.get(0).line();
+                }
+                for (com.saferoute.bus.BusLineStops.Hit h : hits.stream().limit(3).toList()) {
+                    parts.add(h.line().name() + "번(" + (h.via() == null ? h.line().summary()
+                            : Josa.eul(h.via().name()) + " 지나요, " + h.line().from() + " ↔ " + h.line().to()) + ")");
+                }
+            } else {
+                List<com.saferoute.bus.BusLine> found = busLines.endingAt(com.saferoute.place.BusLineQuery.stem(place));
+                total = found.size();
+                for (com.saferoute.bus.BusLine l : found.stream().limit(3).toList()) {
+                    parts.add(l.name() + "번(" + l.summary() + ")");
+                }
+            }
+            if (parts.isEmpty()) {
+                return null;
+            }
+            return Josa.ro(place) + " 가는 버스는 " + String.join(", ", parts) + (total > 3 ? " 등이 있어요." : "이 있어요.");
+        } catch (DataAccessException e) {
+            log.warn("비서 노선 조회 실패: {}", e.getMostSpecificCause().getMessage());
+            return "";
+        }
+    }
+
+    /**
+     * "03번이 서는 가장 가까운 정류장으로 안내할까요?"에 네 (11-13): 정류장 파일에서 그 노선이 서는 곳 중
+     * 지금 위치에서 가장 가까운 곳을 [여기로 가기] 자리로
+     */
+    AssistantReply.Spot findLineStop(Turn t, int lineId, String lineName) {
+        t.tools.add("find_nearby");
+        t.spotKindName = lineName + "번이 서는 정류장";
+        com.saferoute.bus.LineStop s = lineStops == null || !t.located() ? null
+                : lineStops.nearestStop(lineId, t.lat, t.lon);
+        if (s == null) {
+            t.spotMessage = lineName + "번이 서는 정류장 정보를 아직 못 불러왔어요.";
+            return null;
+        }
+        int m = (int) Math.round(com.saferoute.bus.BusLineStops.meters(t.lat, t.lon, s.lat(), s.lon()));
+        t.spot = new AssistantReply.Spot("bus_stop", com.saferoute.place.BusStopQuery.stopName(s.name()), s.lat(), s.lon(),
+                m, null);
+        return t.spot;
+    }
+
     /** 버스 정류장 표 (DB 없는 테스트에서는 안 넣음 → "지금은 못 찾아요") */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setBusStops(com.saferoute.bus.BusStopRepository busStops) {
@@ -774,11 +889,16 @@ public class AssistantTools {
      * 카카오 키워드 "버스"는 이름에 버스가 든 가게·먼 정류장을 섞어 줘서 쓰지 않는다
      */
     AssistantReply.Spot findBusStop(Turn t) {
+        return findBusStop(t, t.lat, t.lon);
+    }
+
+    /** lat·lon(지금 위치 또는 "광주역 근처"처럼 말한 곳)에서 가장 가까운 정류장 */
+    AssistantReply.Spot findBusStop(Turn t, double lat, double lon) {
         t.tools.add("find_nearby");
         t.spotKindName = "버스 정류장";
         List<com.saferoute.bus.BusStop> found;
         try {
-            found = busStops == null ? null : busStops.near(t.lat, t.lon, BUS_STOP_RADIUS_M, 1);
+            found = busStops == null ? null : busStops.near(lat, lon, BUS_STOP_RADIUS_M, 1);
         } catch (DataAccessException e) {
             log.warn("비서 정류장 검색 실패: {}", e.getMostSpecificCause().getMessage());
             found = null;

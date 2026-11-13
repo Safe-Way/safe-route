@@ -24,7 +24,7 @@ import com.saferoute.route.engine.graph.RoadGraph;
  * <ol>
  *   <li>지날 수 없는 길(휠체어의 계단 등)은 처음부터 뺀다. 최단 경로와 우회율도 "지날 수 있는 길 중에서" 잰다</li>
  *   <li>조건부 제외(노인 계단, 휠체어 비포장): 피할 길이 없는 경로가 우회 한도 안에 있으면 그 길을 뺀다. 없으면 허용한다</li>
- *   <li>행사·돌발상황 둘레, 신고된 길도 같은 방식으로 피한다. 계단·비포장 피하기를 먼저 지키고, 그 위에서 하나씩 차례로
+ *   <li>좁은 인도(휠체어), 행사·돌발상황 둘레, 신고된 길도 같은 방식으로 피한다. 계단·비포장 피하기를 먼저 지키고, 그 위에서 하나씩 차례로
  *       한도 안이면 뺀다 (하나를 못 피해도 나머지는 피한다)</li>
  *   <li>선호(밝은 길, 도움 시설 등): 길 비용 = 길이 + λ × 추가 비용. 우회 한도를 넘지 않는 가장 큰 λ(0~1)를 이분 탐색으로 찾는다.
  *       예전처럼 가중치를 반씩 줄이면 계단 회피까지 같이 약해져 계단 길이 다시 나왔다</li>
@@ -77,8 +77,18 @@ public final class RouteFinder {
     public static Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
             double maxDetour, Predicate<RoadEdge> passable, Predicate<RoadEdge> avoid,
             List<Predicate<RoadEdge>> asides) {
+        return find(graph, from, to, extra, maxDetour, passable, avoid, asides, RoadEdge::lengthM);
+    }
+
+    /**
+     * @param cost 길 기본 비용(m, 길이 이상). 보통 길이. 최단·피하기·안전 찾기 모두 이 비용으로 고르고, 우회 한도와 응답 거리는 실제 길이로 잰다.
+     *             휠체어가 인도 없는 골목을 넣어 다시 찾을 때 그 골목만 길이 × 배수 (2026-11-13)
+     */
+    public static Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
+            double maxDetour, Predicate<RoadEdge> passable, Predicate<RoadEdge> avoid,
+            List<Predicate<RoadEdge>> asides, ToDoubleFunction<RoadEdge> cost) {
         Graph<Long, RoadEdge> usable = mask(graph, passable);
-        RoadPath shortest = search(graph, usable, from, to, RoadEdge::lengthM);
+        RoadPath shortest = search(graph, usable, from, to, cost);
         if (shortest == null) {
             throw new RouteException(RouteError.NO_ROUTE);
         }
@@ -93,7 +103,7 @@ public final class RouteFinder {
             Predicate<RoadEdge> clear = passable.and(avoid.negate());
             Graph<Long, RoadEdge> without = mask(graph, clear);
             free = shortest.edges().stream().anyMatch(avoid)
-                    ? search(graph, without, from, to, RoadEdge::lengthM) : shortest;
+                    ? search(graph, without, from, to, cost) : shortest;
             if (free != null && free.lengthM() <= limit) {
                 pool = without;
                 allowed = clear;
@@ -104,7 +114,7 @@ public final class RouteFinder {
             Predicate<RoadEdge> clear = allowed.and(aside.negate());
             Graph<Long, RoadEdge> without = mask(graph, clear);
             RoadPath away = base.edges().stream().anyMatch(aside)
-                    ? search(graph, without, from, to, RoadEdge::lengthM) : base;
+                    ? search(graph, without, from, to, cost) : base;
             if (away != null && away.lengthM() <= limit) {
                 pool = without;
                 allowed = clear;
@@ -117,7 +127,7 @@ public final class RouteFinder {
 
         Graph<Long, RoadEdge> g = pool;
         DoubleFunction<RoadPath> at = lambda -> search(graph, g, from, to,
-                e -> e.lengthM() + lambda * extra.applyAsDouble(e));
+                e -> cost.applyAsDouble(e) + lambda * extra.applyAsDouble(e));
         RoadPath full = at.apply(1);
         if (full.lengthM() <= limit) {
             return new Found(shortest, full, false, free);
@@ -168,6 +178,16 @@ public final class RouteFinder {
      */
     public static boolean isAlley(RoadEdge e) {
         return e.highway() != null && ALLEY_ROADS.contains(e.highway()) && (e.sidewalk() == null || "no".equals(e.sidewalk()));
+    }
+
+    /** 좁은 인도 (국토지리정보원 보도 자료 폭이 narrow-sidewalk-m보다 좁음, 2026-11-13) */
+    public static boolean isNarrowSidewalk(RoadEdge e) {
+        return e.penalty().get(Penalty.NARROW_SIDEWALK) >= 1;
+    }
+
+    /** 인도가 없다고 확인된 골목길 (sidewalk = no). 인도 태그가 없는(모르는) 골목은 아니다. 휠체어는 뺀다 (2026-11-13) */
+    public static boolean isNoSidewalkAlley(RoadEdge e) {
+        return isAlley(e) && "no".equals(e.sidewalk());
     }
 
     /** A파트가 그린 지하 길 (역 출구 계단·엘리베이터, 대합실, 지하상가 통로, 2026-11-09) */
