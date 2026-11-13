@@ -660,6 +660,52 @@ public class AssistantTools {
         return t.spot;
     }
 
+    // ───────────────────────── 택시 타는 곳 (카카오 장소 검색) ─────────────────────────
+
+    /** 택시 승강장을 찾는 거리. 승강장이 드물어 다른 시설(1km)보다 넓게 */
+    static final int TAXI_RADIUS_M = 2000;
+
+    /**
+     * 가장 가까운 택시 승강장 (11-13). 우리 DB에는 택시 자료가 없어 카카오 장소 검색("교통,수송 > 택시")을 쓴다.
+     * 카카오에 등록된 곳만 나온다 (광주송정역 택시승강장·호출택시승차장 등). 못 찾으면 null, 까닭은 t.spotMessage
+     */
+    AssistantReply.Spot findTaxi(Turn t) {
+        t.tools.add("find_nearby");
+        t.spotKindName = "택시 승강장";
+        List<com.saferoute.place.Place> found = new ArrayList<>();
+        try {
+            for (String q : List.of("택시승강장", "택시")) {
+                for (com.saferoute.place.Place p : kakao.search(q, t.lat, t.lon)) {
+                    if (taxiStand(p.name()) && p.distanceM() != null && p.distanceM() <= TAXI_RADIUS_M
+                            && found.stream().noneMatch(x -> x.name().equals(p.name()))) {
+                        found.add(p);
+                    }
+                }
+                if (!found.isEmpty()) {
+                    break;
+                }
+            }
+        } catch (PlaceSearchException e) {
+            log.warn("비서 택시 승강장 검색 실패: {}", e.getMessage());
+            t.spotMessage = "지금은 장소 검색이 잘 안 돼요. 잠시 뒤에 다시 물어봐 주세요.";
+            return null;
+        }
+        if (found.isEmpty()) {
+            t.spotMessage = "2km 안에 등록된 택시 승강장을 찾지 못했어요. 큰길에서 택시를 잡으시거나 택시 앱으로 불러 주세요.";
+            return null;
+        }
+        found.sort(java.util.Comparator.comparingInt(com.saferoute.place.Place::distanceM));
+        com.saferoute.place.Place p = found.get(0);
+        t.spot = new AssistantReply.Spot("taxi", p.name(), p.lat(), p.lon(), p.distanceM(), null);
+        return t.spot;
+    }
+
+    /** "광주송정역 택시승강장", "광주송정역 호출택시승차장"처럼 택시 타는 곳 이름이면 true (택시 회사·정비소는 아님) */
+    static boolean taxiStand(String name) {
+        String f = name == null ? "" : name.replace(" ", "");
+        return f.contains("택시") && (f.contains("승강장") || f.contains("승차장") || f.contains("타는곳") || f.contains("정류장"));
+    }
+
     // ───────────────────────── get_my_info ─────────────────────────
 
     /** get_my_info: 내 정보 (없으면 null = 처음 쓰는 사람) */

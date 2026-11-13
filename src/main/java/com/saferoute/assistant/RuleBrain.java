@@ -75,6 +75,15 @@ class RuleBrain {
             tools.findNearby(t, "elevator");
             return Outcome.say(Sentences.spot(t));
         }
+        // "택시 타는 곳", "근처 택시 승강장": 카카오에 있는 택시 승강장 중 가장 가까운 곳 (11-13).
+        // "택시 불러 줘"는 부르기라 아래 못 하는 일 그대로 (점검 32번)
+        if (taxiStandAsked(f)) {
+            if (!t.located()) {
+                return Outcome.ask("지금 계신 곳을 알아야 찾을 수 있어요. 위치 켜기를 눌러 주세요.");
+            }
+            tools.findTaxi(t);
+            return Outcome.say(Sentences.spot(t));
+        }
         for (Map.Entry<String, String[]> e : NO_TOOL.entrySet()) {
             if (f.contains(e.getKey()) && !f.contains("112")) {
                 String[] v = e.getValue();
@@ -943,6 +952,14 @@ class RuleBrain {
             return "obstacle";
         }
         return null;
+    }
+
+    /** 택시 타는 곳을 묻는 말 (부르기·예약은 아님) */
+    static boolean taxiStandAsked(String flat) {
+        return flat.contains("택시")
+                && (flat.contains("승강장") || flat.contains("승차장") || flat.contains("타는곳") || flat.contains("탈수있는")
+                        || flat.contains("정류장") || NEAR_WORD.matcher(flat).find())
+                && !flat.contains("불러") && !flat.contains("호출") && !flat.contains("예약") && !flat.contains("대리");
     }
 
     /** 가까운 곳을 찾는 말 ("근처", "가까운", "어디") */
