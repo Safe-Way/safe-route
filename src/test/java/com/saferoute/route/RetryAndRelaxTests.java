@@ -186,11 +186,33 @@ class RetryAndRelaxTests {
         assertThat(adult.explanation().text()).doesNotContain("휠체어로 이어진 길");
     }
 
-    @Test
-    void wheelchairGivesNoRouteWhenReachableRoadIsMoreThan50mFurther() {
-        RouteService s = service(new InMemoryRoadGraphSource(pocket(70)));
+    /** S에서 계단 구역 안 D로 (건물 안 도착). reroute: 길안내 중 다시 찾기 */
+    static RouteRequest toward(double[] d, String mode, Boolean reroute) {
+        return new RouteRequest(new Place(S[1], S[0], null), new Place(d[1], d[0], null), "auto", mode, null,
+                null, null, null, reroute);
+    }
 
-        assertThatThrownBy(() -> s.route(toward(north(T, 70), "wheelchair")))
+    @Test
+    void wheelchairDestinationSnapsUpTo100mFurther() {
+        // 도착점도 100m까지 (운천역 → 유스퀘어 건물 안 도착, 2026-11-13)
+        RouteResult r = service(new InMemoryRoadGraphSource(pocket(80))).route(toward(north(T, 80), "wheelchair"));
+
+        assertThat(r.explanation().text()).endsWith("(주의: 도착점 근처 약 80m는 휠체어로 이어진 길이 확인되지 않았습니다)");
+    }
+
+    @Test
+    void wheelchairDestinationGivesNoRouteWhenReachableRoadIsMoreThan100mFurther() {
+        RouteService s = service(new InMemoryRoadGraphSource(pocket(130)));
+
+        assertThatThrownBy(() -> s.route(toward(north(T, 130), "wheelchair")))
+                .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
+    }
+
+    @Test
+    void wheelchairRerouteDestinationKeeps50m() {
+        RouteService s = service(new InMemoryRoadGraphSource(pocket(80)));
+
+        assertThatThrownBy(() -> s.route(toward(north(T, 80), "wheelchair", true)))
                 .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
     }
 
@@ -202,7 +224,7 @@ class RetryAndRelaxTests {
 
     @Test
     void wheelchairOriginSnapsUpTo100mFurther() {
-        // 출발점만 100m까지 (유스퀘어 건물 안 출발, 2026-11-13). 도착은 위처럼 50m
+        // 출발점도 100m까지 (유스퀘어 건물 안 출발, 2026-11-13)
         RouteResult r = service(new InMemoryRoadGraphSource(pocket(80))).route(from(north(T, 80), null));
 
         assertThat(r.explanation().text()).endsWith("(주의: 출발점 근처 약 80m는 휠체어로 이어진 길이 확인되지 않았습니다)");
