@@ -195,6 +195,13 @@ public class AssistantService {
                         .filter(x -> !(x.type().equals(b.type()) && "walk".equals(x.type())))
                         .map(x -> new Other(x.type(), x.summary(), x.minutes())).toList();
                 because = t.plan.scored().because();
+                if ("walk".equals(b.type()) && t.plan.why() != null && !because.contains(t.plan.why())) {
+                    // 엔진이 말한 이유("인도가 있는 길로 갑니다")를 맨 앞에 (11-13 원일님 부탁)
+                    List<String> withWhy = new ArrayList<>();
+                    withWhy.add(t.plan.why());
+                    withWhy.addAll(because);
+                    because = List.copyOf(withWhy.subList(0, Math.min(3, withWhy.size())));
+                }
                 for (RouteResult.Event e : b.events()) {
                     events.add(e.title());
                 }
@@ -242,6 +249,11 @@ public class AssistantService {
         others = others.stream().map(x -> new Other(x.type(), Sentences.polish(x.summary(), mode), x.minutes()))
                 .toList();
         Conversation next = t.convo.withTurn("user", t.text).withTurn("model", say);
+        if (pick != null) {
+            // 새 길을 골랐으면 그 길의 엔진 이유를 기억 ("왜 이 길이야?"에 그대로). 대중교통·들를 곳이면 지움
+            boolean walkPick = "walk".equals(pick.type()) && t.stopPlan == null && t.plan != null;
+            next = next.withWhy(walkPick ? t.plan.why() : null);
+        }
         List<String> called = called(t.tools);
         return new AssistantReply(say, pick, others, because, ask, o.choices(), t.spot,
                 codec.encode(next.withLastTools(called)), List.copyOf(called), o.ai(), situation, stops,
