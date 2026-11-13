@@ -92,6 +92,14 @@ class RuleBrain {
         // "택시 타는 곳", "근처 택시 승강장": 카카오에 있는 택시 승강장 중 가장 가까운 곳 (11-13).
         // "택시 불러 줘"는 부르기라 아래 못 하는 일 그대로 (점검 32번)
         // "근처 버스", "가까운 버스 정류장": DB 정류장 표에서 가장 가까운 곳 (11-13, 카카오는 '버스' 든 가게가 섞임)
+        // "03번 노선도 보여줘": 기점 → 주요 정류장 → 종점 (11-13)
+        String routeNo = com.saferoute.place.BusLineQuery.routeMap(Fillers.clean(t.text == null ? "" : t.text.strip()));
+        if (routeNo != null) {
+            String map = tools.busRouteMap(t, routeNo);
+            if (map != null) {
+                return Outcome.say(map);
+            }
+        }
         // "03번 버스 어디로 가?", "버스 03": 노선 기점↔종점·첫차·막차·배차 (11-13)
         String lineNo = com.saferoute.place.BusLineQuery.number(Fillers.clean(t.text == null ? "" : t.text.strip()));
         if (lineNo != null) {
