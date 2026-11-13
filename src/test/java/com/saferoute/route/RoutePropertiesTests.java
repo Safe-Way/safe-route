@@ -63,6 +63,7 @@ class RoutePropertiesTests {
         assertThat(p.countRadiusM().light()).isEqualTo(30);
         assertThat(p.searchMarginM()).isEqualTo(500);
         assertThat(p.passableSnapExtraM()).isEqualTo(50);
+        assertThat(p.passableSnapOriginExtraM()).isEqualTo(100);
         assertThat(p.darkStretch().mergeGapM()).isEqualTo(10);
         assertThat(p.darkStretch().minM()).isEqualTo(50);
         assertThat(p.turn().minAngle()).isEqualTo(45);

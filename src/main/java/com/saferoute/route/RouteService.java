@@ -214,12 +214,14 @@ public class RouteService {
         // 등산로 (2026-11-12): 등산로 없는 길이 넓힌 범위까지 어디에도 없을 때만 등산로를 지나고 알린다. 우회 한도 없음.
         // 출발·도착은 등산로 없는 길에 다시 붙여 보고(휠체어처럼 50m 더 멀어지는 데까지), 아니면 등산로에 붙인다 (attempt). 휠체어는 늘 뺀다(exclude)
         boolean avoidTrail = !Boolean.TRUE.equals(req.allowTrail()) && !profile.exclude().contains(Penalty.TRAIL);
+        // 길안내 중 다시 찾기면 휠체어 출발점도 50m까지만 다시 붙인다 (2026-11-13)
+        boolean reroute = Boolean.TRUE.equals(req.reroute());
         RoadGraph[] used = new RoadGraph[1]; // 경로를 찾은 도로망. 건너는 곳(SideChanges)을 이 도로망에서 찾는다
         java.util.function.Function<Boolean, Attempt> search = noTrail -> {
             used[0] = roads.load(BBox.around(points, props.searchMarginM()), underground);
             try {
                 return attempt(used[0], underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed,
-                        reports, noTrail);
+                        reports, noTrail, reroute);
             } catch (RouteException e) {
                 // 넓혀 다시 찾는 것은 길을 못 찾았을 때만 (이은 길이 빈 SAME_POINT 안전망은 넓혀도 같다)
                 if (e.error() != RouteError.NO_ROUTE || props.retryMarginM() <= props.searchMarginM()) {
@@ -228,7 +230,7 @@ public class RouteService {
                 // 강·철도·큰 도로를 범위 밖 다리로 돌아가야 하는 길. 넓혀 한 번 더 찾는다 (우회 한도 등 규칙은 같다)
                 used[0] = roads.load(BBox.around(points, props.retryMarginM()), underground);
                 return attempt(used[0], underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed,
-                        reports, noTrail);
+                        reports, noTrail, reroute);
             }
         };
         Attempt a;
@@ -352,12 +354,13 @@ public class RouteService {
      * 이 도로망에서 경로를 찾는다. 길에 붙이지 못하거나 이어지지 않으면 NO_ROUTE (들를 곳이 있으면 막힌 구간의 도착점 이름으로).
      * points: 출발, 들를 곳, 도착. 모든 점을 같은 도로망에 먼저 붙인 뒤 구간마다 찾는다: 붙일 때 길을 나눈 임시 노드가
      * 다른 구간과 겹치지 않게. underground: 지하 길을 넣은 도로망인지. noTrail: 등산로를 빼고 찾는지.
-     * 먼저 모드 기준(profile.passable)대로 붙여 찾고, 못 찾으면 등산로를 뺀 길로 이어진 곳에 다시 붙인다 (아래 휠체어와 같은 방법)
+     * 먼저 모드 기준(profile.passable)대로 붙여 찾고, 못 찾으면 등산로를 뺀 길로 이어진 곳에 다시 붙인다 (아래 휠체어와 같은 방법).
+     * reroute: 길안내 중 다시 찾기. 휠체어 출발점도 넓힌 한도(100m) 대신 50m로 다시 붙인다 (2026-11-13)
      */
     private Attempt attempt(RoadGraph graph, boolean underground, List<double[]> points, List<Place> stops,
             Conditions cond, RouteProperties.Profile profile, double wideDetour, RouteProperties.Phase phase,
             ZonedDateTime now, List<RoadEvent> avoided, List<RoadEvent> costed, List<RoadEvent> reports,
-            boolean noTrail) {
+            boolean noTrail, boolean reroute) {
         java.util.function.Predicate<RoadEdge> passable = noTrail ? e -> profile.passable(e) && !RouteFinder.isTrail(e)
                 : profile::passable;
         // 지하를 넣었으면 출발·도착은 지상 길(출구 포함)에만 붙인다 (2026-11-09). 요청 좌표는 위도·경도뿐이라 지상·지하를 모르는데,
@@ -401,10 +404,14 @@ public class RouteService {
         // 대부분의 요청은 위에서 찾으므로 연결 덩어리 계산은 못 찾았을 때만 한다.
         // 들를 곳이 있어도 모든 점을 함께 다시 붙이고 구간 전부를 다시 찾는다: 한 구간만 옮기면 앞 구간 끝 노드와 이어지지 않는다
         Set<Long> part = graph.mainPart(underground ? e -> passable.test(e) && !RouteFinder.isUnderground(e) : passable);
+        // 휠체어 출발점만 100m까지 (건물 안 출발, 2026-11-13): 이미 그 안에 있으면 휠체어로 들어온 길이 있다고 본다
+        boolean stairsExcluded = profile.exclude().contains(Penalty.STAIRS);
         List<Placed> placed = new ArrayList<>();
         for (int k = 0; k < points.size(); k++) {
+            double extraM = k == 0 && stairsExcluded && !reroute ? props.passableSnapOriginExtraM()
+                    : props.passableSnapExtraM();
             try {
-                placed.add(place(graph, points.get(k), snaps.get(k), part, passable));
+                placed.add(place(graph, points.get(k), snaps.get(k), part, passable, extraM));
             } catch (RouteException e) {
                 throw noRoute(stops, k);
             }
@@ -686,15 +693,16 @@ public class RouteService {
     /**
      * 지날 수 있는 길로 이어진 덩어리(part) 안에 다시 붙인다 (휠체어, 등산로를 피할 때).
      * 가장 가까운 길이 계단·등산로로만 드나드는 구역이면 옆 길에 붙는데, 모든 길 기준보다
-     * passable-snap-extra-m(50m) 넘게 멀어지면 붙이지 않는다 (2026-11-04)
+     * extraM(보통 passable-snap-extra-m 50m, 휠체어 출발점은 passable-snap-origin-extra-m 100m) 넘게 멀어지면
+     * 붙이지 않는다 (2026-11-04, 출발점 2026-11-13)
      */
     private Placed place(RoadGraph graph, double[] p, RoadGraph.Snap any, Set<Long> part,
-            java.util.function.Predicate<RoadEdge> passable) {
+            java.util.function.Predicate<RoadEdge> passable, double extraM) {
         if (part.contains(any.node())) {
             return new Placed(any, false);
         }
         RoadGraph.Snap s = graph.nearest(p[0], p[1], part, passable);
-        if (s == null || s.distanceM() - any.distanceM() > props.passableSnapExtraM()) {
+        if (s == null || s.distanceM() - any.distanceM() > extraM) {
             throw new RouteException(RouteError.NO_ROUTE);
         }
         return new Placed(s, true);
