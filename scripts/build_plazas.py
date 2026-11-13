@@ -14,7 +14,9 @@ load_road_network.py 는 면의 테두리만 걷는 길이 되는 것을 막으�
   4. 엔진이 지금 읽는 road_edge 가 아니라 road_edge_excluded(reason = 'plaza')에 넣는다. 넣는 순간 모든 길찾기가
      바뀌므로, 원일님이 시연 길을 비교한 뒤 엔진에서 읽게 한다. 휠체어는 높이 차이(계단·경사)를 확인하기 전까지
      쓰지 않게 tags.wheelchair = 'unknown' 으로 둔다.
-새 점은 만들지 않는다(입구는 모두 이미 road_node 에 있음).
+  5. 면 하나 안에서만 잇기 때문에, 붙어 있는 광장 면 사이를 넘어가는 길은 생기지 않는다. 그런 곳 중 확인한 곳은
+     MANUAL_LINKS 에 손으로 적어(입구 두 점 + 그 사이 꺾이는 점) 같은 표에 넣는다.
+새 점은 만들지 않는다(입구는 모두 이미 road_node 에 있음. 꺾이는 점은 선 모양일 뿐 길찾기 점이 아님).
 
 쓰는 법
   python3 scripts/build_plazas.py            # 받고, SQL 만들고, DB에 넣고, 시연 지역 거리 비교
@@ -47,6 +49,20 @@ CHECKS = [
     ("5·18민주광장", (35.14767, 126.92069), (35.14795, 126.91889), 265),
     ("문화전당 앞 큰 광장", (35.14760, 126.92055), (35.14607, 126.91905), 561),
 ]
+# 붙어 있는 광장 면 사이를 넘어가는 길 (손으로 확인, 5번). from·to 는 road_node 점, via 는 그 사이 꺾이는 점 (위도, 경도)
+MANUAL_LINKS = [
+    # 2026-11-13 원일 제안: 5·18민주광장(relation/19102230) 동쪽 끝 → 상무관 옆 북쪽 보행로 띠(way/1034349957) 가운데 →
+    # 하늘마당 동쪽 입구 면(way/1034349958) → 제봉로 보도. 띠 안에 도로망 점이 없어 면마다 잇는 방식으로는 선이 없었다.
+    # 띠 양 끝 가운데를 지나고 건물(OSM building)·찻길과 겹치지 않음을 확인. 163m.
+    # 단순 최단 거리: 문화전당역 → 장동교차로 719 → 701m, 4번 출구 → 장동교차로 734 → 708m
+    {"from": 7179003402, "to": 13052475511, "via": [(35.147759, 126.9206315), (35.148111, 126.921380)],
+     "osm": "way/1034349957", "name": None},
+]
+
+
+def path_m(pts):
+    """꺾인 선 길이 (m)"""
+    return sum(meters(a, b) for a, b in zip(pts, pts[1:]))
 
 
 def read_env():
@@ -326,6 +342,18 @@ def main():
             if osm in ACC:
                 acc_entries.append((name, osm, entries))
 
+        # 손으로 확인한 면 사이 길 (5번). 두 끝이 도로망 점인지 확인하고 넣는다
+        if MANUAL_LINKS:
+            ids = ",".join(str(int(x)) for m in MANUAL_LINKS for x in (m["from"], m["to"]))
+            known = {int(r[0]): (float(r[1]), float(r[2])) for r in query(cmd, f"""SELECT n.id, n.lat, n.lon FROM road_node n
+                WHERE n.id IN ({ids}) AND EXISTS (SELECT 1 FROM road_edge x WHERE x.from_node = n.id OR x.to_node = n.id)""")}
+            for k, m in enumerate(MANUAL_LINKS):
+                if m["from"] not in known or m["to"] not in known:
+                    sys.exit(f"MANUAL_LINKS {k}: 도로망에 없는 점 {m['from']}·{m['to']}")
+                edges.append({"way_id": -399001, "seq": k, "from": m["from"], "to": m["to"],
+                              "pts": [known[m["from"]], *m["via"], known[m["to"]]], "name": m["name"], "osm": m["osm"]})
+            print(f"손으로 확인한 면 사이 길 {len(MANUAL_LINKS)}개")
+
         with open(OUT, "w", encoding="utf-8") as f:
             f.write("-- scripts/build_plazas.py 가 만든 파일. 손으로 고치지 말고 스크립트를 다시 돌린다.\n")
             f.write("-- 보행자 광장(OSM 면)을 가로지르는 길. 엔진은 원일님이 확인한 뒤 읽는다 (reason plaza)\n")
@@ -336,11 +364,11 @@ def main():
                 f.write("INSERT INTO road_edge_excluded (way_id, seq, from_node, to_node, length_m, highway, name, footway,"
                         " steps, covered, bridge, surface, tags, geom, reason) VALUES\n")
                 f.write(",\n".join(
-                    f"({e['way_id']},{e['seq']},{e['from']},{e['to']},{meters(*e['pts']):.2f},'pedestrian',"
+                    f"({e['way_id']},{e['seq']},{e['from']},{e['to']},{path_m(e['pts']):.2f},'pedestrian',"
                     f"{q(e['name']) if e['name'] else 'NULL'},NULL,0,0,0,NULL,"
                     f"{q(json.dumps({'area': 'plaza', 'osm': e['osm'], 'wheelchair': 'unknown', 'source': 'manual'}, ensure_ascii=False))},"
-                    f"ST_GeomFromText('LINESTRING({e['pts'][0][1]:.7f} {e['pts'][0][0]:.7f},"
-                    f"{e['pts'][1][1]:.7f} {e['pts'][1][0]:.7f})', 0),{q(REASON)})" for e in chunk) + ";\n")
+                    "ST_GeomFromText('LINESTRING(" + ",".join(f"{p[1]:.7f} {p[0]:.7f}" for p in e["pts"])
+                    + f")', 0),{q(REASON)})" for e in chunk) + ";\n")
             f.write(f"""INSERT INTO data_source (type, source, title, api, license, total_count, loaded_count,
                     skipped_count, complete, loaded_at)
 VALUES ('road_edge_plaza', 'osm', {q('보행자 광장 가로지르기 (OSM 면 → 입구끼리 곧은 길, build_plazas.py)')},
@@ -378,7 +406,7 @@ def compare(cmd, edges, acc_entries):
         g.setdefault(b, []).append((a, l))
     g2 = {k: list(v) for k, v in g.items()}
     for ed in edges:
-        l = meters(*ed["pts"])
+        l = path_m(ed["pts"])
         g2.setdefault(ed["from"], []).append((ed["to"], l))
         g2.setdefault(ed["to"], []).append((ed["from"], l))
 
