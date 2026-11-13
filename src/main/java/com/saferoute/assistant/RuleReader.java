@@ -76,6 +76,18 @@ final class RuleReader {
                 }
             }
         }
+        // "집갈거야", "문화전당가자"처럼 마지막 낱말에 가는 말이 붙어 있으면 그 앞까지 (11-12 음성 시험 모음 21번)
+        String last = words[words.length - 1];
+        for (int k = 1; k < last.length() - 1; k++) {
+            String tail = last.substring(k);
+            for (String g : GO_WORDS) {
+                if (g.length() > 1 && !"가는".equals(g) && tail.startsWith(g)) {
+                    String head = last.substring(0, k);
+                    return words.length == 1 ? head
+                            : String.join(" ", java.util.Arrays.copyOfRange(words, 0, words.length - 1)) + " " + head;
+                }
+            }
+        }
         return null;
     }
 
@@ -105,7 +117,8 @@ final class RuleReader {
             return num.group(1);
         }
         for (String p : List.of("까지", "으로", "에")) {
-            if (w.endsWith(p) && w.length() > p.length() + 1) {
+            // 한 글자 이름도 뗀다 ("집까지" → 집, 시험 모음 16번)
+            if (w.endsWith(p) && w.length() > p.length()) {
                 return w.substring(0, w.length() - p.length());
             }
         }

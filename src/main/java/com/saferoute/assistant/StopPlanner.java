@@ -85,6 +85,9 @@ public class StopPlanner {
         }
     }
 
+    /** 들를 곳을 못 찾았을 때 failText 앞부분 (받아쓰기 다른 후보로 다시 볼지 정할 때 씀) */
+    static final String NOT_FOUND = "가는 길에 들를 '";
+
     public Plan plan(Ask a) {
         double midLat = (a.lat() + a.dest().lat()) / 2;
         double midLon = (a.lon() + a.dest().lon()) / 2;
@@ -106,7 +109,7 @@ public class StopPlanner {
                 return Plan.fail("지금은 장소 검색이 잘 안 돼요. 잠시 뒤에 다시 말씀해 주세요.");
             }
             if (c.isEmpty()) {
-                return Plan.fail("가는 길에 들를 '" + s.label() + "'을(를) 찾지 못했어요. 다른 이름으로 말씀해 주시겠어요?");
+                return Plan.fail(NOT_FOUND + s.label() + "'을(를) 찾지 못했어요. 다른 이름으로 말씀해 주시겠어요?");
             }
             cands.add(c);
         }

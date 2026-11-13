@@ -47,8 +47,32 @@ public class AssistantService {
     }
 
     public AssistantReply answer(AssistantRequest req) {
-        Turn t = turn(req == null ? AssistantRequest.empty() : req);
+        AssistantRequest asked = req == null ? AssistantRequest.empty() : req;
+        List<String> heard = Hearing.candidates(asked);
+        int first = Hearing.best(heard);
+        Turn t = turn(first == 0 ? asked : asked.withText(heard.get(first)));
         Outcome o = think(t);
+        // 말한 장소를 못 찾았으면 받아쓰기 다른 후보로 다시 ("남광주시정" → 후보 "남광주시장", 11-12 음성 인식 ②)
+        int used = first;
+        int tries = 0;
+        for (int i = 0; t.placeMissed && i < heard.size() && tries < Hearing.MAX_RETRIES; i++) {
+            if (i == first || Hearing.score(heard.get(i)) < Hearing.score(heard.get(first))) {
+                continue;
+            }
+            tries++;
+            Turn again = turn(asked.withText(heard.get(i)));
+            Outcome o2 = think(again);
+            if (!again.placeMissed) {
+                t = again;
+                o = o2;
+                used = i;
+                break;
+            }
+        }
+        if (heard.size() > 1) {
+            log.info("비서 받아쓰기 후보 {}개 중 {}번째 씀 (다시 본 후보 {}개)", heard.size(), used + 1, tries);
+        }
+        t.alternative = used > 0;
         AssistantReply r = reply(t, o);
         AssistantReply.Usage u = r.usage();
         // 말 원문·게스트 번호는 남기지 않는다 (R1)
@@ -75,6 +99,7 @@ public class AssistantService {
         tools.loadProfile(t);
         // ①-1 말로 할 때 끼는 "어.. 잠시만.. 아" 같은 말은 빼고 본다 (11-12 음성 시험)
         t.text = SpeechFix.fix(Fillers.clean(t.text)); // 받아쓰기 실수도 고침 ("갓다가", "서석동 삼 번지")
+        t.heard = t.text;
         // ①-2 "광주역에서 …"처럼 출발지를 말했으면 떼어 찾아 두고, 나머지 말로 이어 간다 (11-12)
         Outcome from = origin(t);
         if (from != null) {
@@ -202,6 +227,10 @@ public class AssistantService {
         if (pick != null && from != null && say != null && !say.contains(from.name())) {
             say = from.name() + "에서 출발해요. " + say.strip();
         }
+        if (t.alternative && say != null && t.heard != null && !t.heard.isEmpty()) {
+            // 첫 받아쓰기가 아닌 다른 후보로 알아들었으면 무엇으로 알아들었는지 먼저 말한다 (틀렸으면 다시 말할 수 있게)
+            say = "'" + t.heard + "'라고 알아들었어요. " + say.strip();
+        }
         if (ask != null && say != null && ask.strip().equals(say.strip())) {
             // 같은 문장을 두 번 보내지 않는다 (비서 점검 c10). 버튼(choices)은 그대로 간다
             ask = null;
@@ -216,7 +245,22 @@ public class AssistantService {
         List<String> called = called(t.tools);
         return new AssistantReply(say, pick, others, because, ask, o.choices(), t.spot,
                 codec.encode(next.withLastTools(called)), List.copyOf(called), o.ai(), situation, stops,
-                t.usage.snapshot(t.toolsSent, t.toolsRetried));
+                t.usage.snapshot(t.toolsSent, t.toolsRetried), heard(t, pick, stops));
+    }
+
+    /** 알아들은 말. 말이 없으면(오늘 제안) null */
+    private static AssistantReply.Heard heard(Turn t, Pick pick, List<AssistantReply.Stop> stops) {
+        if (t.heard == null || t.heard.isEmpty() || t.heard.startsWith("(")) {
+            return null;
+        }
+        String dest = null;
+        if (pick != null && pick.request() != null && pick.request().get("destination") instanceof java.util.Map<?, ?> d
+                && d.get("name") != null) {
+            dest = String.valueOf(d.get("name"));
+        }
+        Conversation.Place from = t.convo.origin();
+        return new AssistantReply.Heard(t.heard, t.alternative, from == null ? null : from.name(),
+                stops.stream().map(AssistantReply.Stop::name).toList(), dest);
     }
 
     /** 응답 tools: 부른 도구 이름. 같은 도구를 바로 이어 두 번 부르면 한 번으로 (점검 11번: 제미나이가 search_place 를 두 번 부름) */
