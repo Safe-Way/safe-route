@@ -36,6 +36,23 @@ public class BusLineRepository {
         return query("l.dir_up_name LIKE ? OR l.dir_down_name LIKE ?", "l.line_name", like, like);
     }
 
+    /** 모든 노선 번호 (정류장 순서를 받아 올 때) */
+    public List<Integer> allIds() {
+        return jdbc.queryForList("SELECT line_id FROM bus_line ORDER BY line_id", Integer.class);
+    }
+
+    /** 번호들의 노선, 넘긴 순서대로 (없는 번호는 빠짐) */
+    public List<BusLine> byIds(List<Integer> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        String marks = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        List<BusLine> found = query("l.line_id IN (" + marks + ")", "l.line_id", ids.toArray());
+        java.util.Map<Integer, BusLine> byId = new java.util.HashMap<>();
+        found.forEach(l -> byId.put(l.id(), l));
+        return ids.stream().map(byId::get).filter(java.util.Objects::nonNull).toList();
+    }
+
     private List<BusLine> query(String where, String order, Object... args) {
         String sql = "SELECT l.line_id, l.line_name, l.dir_up_name, l.dir_down_name, l.first_run, l.last_run,"
                 + " l.run_interval,"

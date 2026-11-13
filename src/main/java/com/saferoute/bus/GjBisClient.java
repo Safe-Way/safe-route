@@ -23,6 +23,7 @@ public class GjBisClient {
 
     static final String PATH = "/6290000/gj_bis/arriveInfo";
     static final String LOCATION_PATH = "/6290000/gj_bis/busLocationInfo";
+    static final String LINE_STOPS_PATH = "/6290000/gj_bis/lineStationInfo";
     private static final Duration TIMEOUT = Duration.ofSeconds(3);
 
     private final RestClient rest;
@@ -57,6 +58,33 @@ public class GjBisClient {
      */
     public List<BusOnLine> locations(int lineId) {
         return toLocations(call(LOCATION_PATH, "LINE_ID", lineId));
+    }
+
+    /**
+     * 한 노선이 지나는 정류장들, 순서대로 (11-13 "수완동 지나가는 버스"). 좌표 없는 정류장은 뺀다.
+     *
+     * @param lineId bus_line 표의 line_id
+     * @throws BusUnavailableException 키가 없거나 광주버스정보가 실패했을 때
+     */
+    public List<LineStop> lineStops(int lineId) {
+        return toLineStops(call(LINE_STOPS_PATH, "LINE_ID", lineId));
+    }
+
+    static List<LineStop> toLineStops(JsonNode res) {
+        JsonNode response = successOrThrow(res);
+        List<LineStop> out = new ArrayList<>();
+        for (JsonNode item : items(response.path("BUSSTOP_LIST"))) {
+            Integer stop = toNumber(item.path("BUSSTOP_ID"));
+            Integer seq = toNumber(item.path("BUSSTOP_NUM"));
+            JsonNode lat = item.path("LATITUDE");
+            JsonNode lon = item.path("LONGITUDE");
+            if (stop == null || !lat.isNumber() || !lon.isNumber()) {
+                continue;
+            }
+            out.add(new LineStop(seq == null ? out.size() + 1 : seq, stop, item.path("BUSSTOP_NAME").asString(""),
+                    lat.asDouble(), lon.asDouble()));
+        }
+        return out;
     }
 
     /** 키를 붙여 광주버스정보 한 곳을 부른다. 실패는 모두 BusUnavailableException으로 바꾼다 */

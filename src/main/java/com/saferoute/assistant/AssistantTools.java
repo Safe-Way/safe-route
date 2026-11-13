@@ -796,9 +796,17 @@ public class AssistantTools {
         }
     }
 
+    private com.saferoute.bus.BusLineStops lineStops;
+
+    /** 노선마다 지나는 정류장 (DB 없는 테스트에서는 안 넣음 → 기점·종점으로만) */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setLineStops(com.saferoute.bus.BusLineStops lineStops) {
+        this.lineStops = lineStops;
+    }
+
     /**
-     * "수완동으로 가는 버스" (11-13): 그쪽이 기점·종점인 노선. 없으면 null (표에는 지나는 정류장이 없어 처음·끝만 봄).
-     * 노선 표를 못 읽으면 빈 문자열
+     * "수완동으로 가는 버스" (11-13): 그곳을 지나는 노선(광주버스정보 노선별 정류장) + 그쪽이 기점·종점인 노선.
+     * 없으면 null. 노선 표를 못 읽으면 빈 문자열
      */
     String busLinesTo(Turn t, String place) {
         t.tools.add("find_nearby");
@@ -806,17 +814,28 @@ public class AssistantTools {
             return "";
         }
         try {
-            List<com.saferoute.bus.BusLine> found = busLines.endingAt(com.saferoute.place.BusLineQuery.stem(place));
-            if (found.isEmpty()) {
+            List<String> parts = new ArrayList<>();
+            int total;
+            if (lineStops != null) {
+                Place at = firstPlace(t, place);
+                List<com.saferoute.bus.BusLineStops.Hit> hits = lineStops.to(place, at == null ? null : at.lat(),
+                        at == null ? null : at.lon());
+                total = hits.size();
+                for (com.saferoute.bus.BusLineStops.Hit h : hits.stream().limit(3).toList()) {
+                    parts.add(h.line().name() + "번(" + (h.via() == null ? h.line().summary()
+                            : Josa.eul(h.via().name()) + " 지나요, " + h.line().from() + " ↔ " + h.line().to()) + ")");
+                }
+            } else {
+                List<com.saferoute.bus.BusLine> found = busLines.endingAt(com.saferoute.place.BusLineQuery.stem(place));
+                total = found.size();
+                for (com.saferoute.bus.BusLine l : found.stream().limit(3).toList()) {
+                    parts.add(l.name() + "번(" + l.summary() + ")");
+                }
+            }
+            if (parts.isEmpty()) {
                 return null;
             }
-            StringBuilder sb = new StringBuilder(Josa.ro(place)).append(" 가는 버스는 ");
-            List<String> parts = new ArrayList<>();
-            for (com.saferoute.bus.BusLine l : found.stream().limit(3).toList()) {
-                parts.add(l.name() + "번(" + l.summary() + ")");
-            }
-            sb.append(String.join(", ", parts)).append(found.size() > 3 ? " 등이 있어요." : "이 있어요.");
-            return sb.toString();
+            return Josa.ro(place) + " 가는 버스는 " + String.join(", ", parts) + (total > 3 ? " 등이 있어요." : "이 있어요.");
         } catch (DataAccessException e) {
             log.warn("비서 노선 조회 실패: {}", e.getMostSpecificCause().getMessage());
             return "";

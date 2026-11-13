@@ -100,7 +100,7 @@ class RuleBrain {
                 return Outcome.say(info);
             }
         }
-        // "수완동으로 가는 버스": 그쪽이 종점인 노선, 없으면 택시 권하기 (11-13)
+        // "수완동으로 가는 버스": 그곳을 지나거나 그쪽이 종점인 노선, 없으면 택시 권하기 (11-13)
         String busTo = com.saferoute.place.BusLineQuery.goingTo(Fillers.clean(t.text == null ? "" : t.text.strip()));
         if (busTo != null) {
             String lines = tools.busLinesTo(t, busTo);
@@ -114,7 +114,7 @@ class RuleBrain {
                     tools.findTaxi(t);
                     taxi = " 버스가 불편하시면 택시를 추천해요. " + Sentences.spot(t);
                 }
-                return Outcome.say(Josa.ro(busTo) + " 바로 가는(종점인) 버스는 찾지 못했어요." + go + taxi);
+                return Outcome.say(Josa.ro(busTo) + " 가는 버스는 찾지 못했어요." + go + taxi);
             }
         }
         // "광주역 근처 정류장": 광주역을 먼저 찾고 그 근처 (11-13)

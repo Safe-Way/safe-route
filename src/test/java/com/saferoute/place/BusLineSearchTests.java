@@ -63,4 +63,21 @@ class BusLineSearchTests {
         assertThat(ps).extracting(Place::name).containsExactly("03번 버스", "수완동");
         assertThat(ps.get(0).address()).isEqualTo("수완지구 ↔ 조선대 · 15분마다");
     }
+
+    @Test
+    void goingToShowsLinesPassingThere() {
+        com.saferoute.bus.BusLineStops passing = mock(com.saferoute.bus.BusLineStops.class);
+        controller.setLineStops(passing);
+        when(kakao.search("수완동", null, null)).thenReturn(List.of(
+                new Place("1", "수완동", "광주 광산구 수완동", 35.19, 126.82, null)));
+        when(kakao.search("수완동", 35.14, 126.93)).thenReturn(List.of(
+                new Place("1", "수완동", "광주 광산구 수완동", 35.19, 126.82, 12000)));
+        BusLine l = new BusLine(28, "03", "첨단공영차고지", "조선대", null, null, null, null, null);
+        when(passing.to("수완동", 35.19, 126.82)).thenReturn(List.of(new com.saferoute.bus.BusLineStops.Hit(l,
+                new com.saferoute.bus.LineStop(20, 501, "수완지구", 35.191, 126.821))));
+        List<Place> ps = ((PlacesResponse) controller.places("수완동으로 가는 버스", 35.14, 126.93).getBody()).places();
+        assertThat(ps).extracting(Place::name).containsExactly("03번 버스", "수완동");
+        assertThat(ps.get(0).address()).isEqualTo("수완지구 지나요 · 첨단공영차고지 ↔ 조선대");
+        assertThat(ps.get(0).lat()).isEqualTo(35.191); // 지나는 정류장 좌표 (기점 좌표는 몰라도 됨)
+    }
 }

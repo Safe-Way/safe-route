@@ -47,6 +47,14 @@ public class PlaceController {
         this.busLines = busLines;
     }
 
+    private com.saferoute.bus.BusLineStops lineStops;
+
+    /** 노선마다 지나는 정류장 (DB 없는 테스트에서는 안 넣음 → 기점·종점으로만) */
+    @Autowired(required = false)
+    void setLineStops(com.saferoute.bus.BusLineStops lineStops) {
+        this.lineStops = lineStops;
+    }
+
     public PlaceController(KakaoLocalClient kakao) {
         this(kakao, null);
     }
@@ -99,7 +107,7 @@ public class PlaceController {
             }
         }
         // "수완동으로 가는 버스", "수완동 가는 버스", "수완동행 버스": 장소만 찾는다 (11-13).
-        // 버스 번호는 그 장소를 [도착]으로 골라 대중교통 길찾기에서 나온다 (DB에는 노선의 처음·끝만 있어 지나는 곳을 모름)
+        // 그곳을 지나는 노선(광주버스정보 노선별 정류장)과 그쪽이 기점·종점인 노선을 맨 앞에, 그 아래 장소
         java.util.regex.Matcher to = GOING_BUS.matcher(q);
         List<Place> lineFirst = List.of();
         if (to.matches()) {
@@ -243,19 +251,37 @@ public class PlaceController {
         return w;
     }
 
-    /** place 쪽이 기점·종점인 노선을 검색 결과 모양으로. 기점 좌표를 모르는 노선은 뺌 */
+    /** place 를 지나거나 그쪽이 기점·종점인 노선을 검색 결과 모양으로. 좌표는 지나는 정류장(없으면 기점), 모르면 뺌 */
     private List<Place> linesEndingAt(String place, Double lat, Double lon) {
         if (busLines == null) {
             return List.of();
         }
         try {
-            return busLines.endingAt(BusLineQuery.stem(place)).stream().filter(l -> l.lat() != null)
-                    .map(l -> new Place("line:" + l.id(), l.name() + "번 버스", l.summary(), l.lat(), l.lon(),
-                            lat == null ? null : meters(lat, lon, l.lat(), l.lon())))
+            if (lineStops != null) {
+                Place at = gwangjuPlace(place);
+                return lineStops.to(place, at == null ? null : at.lat(), at == null ? null : at.lon()).stream()
+                        .map(h -> lineAsPlace(h.line(), h.via(), lat, lon)).filter(java.util.Objects::nonNull)
+                        .limit(5).toList();
+            }
+            return busLines.endingAt(BusLineQuery.stem(place)).stream()
+                    .map(l -> lineAsPlace(l, null, lat, lon)).filter(java.util.Objects::nonNull)
                     .limit(5).toList();
         } catch (DataAccessException e) {
             log.warn("노선 검색 DB 실패: {}", e.getMostSpecificCause().getMessage());
             return List.of();
         }
+    }
+
+    /** "03번 버스" · "수완지구 지나요 · 첨단 ↔ 조선대 · 첫차…". 좌표는 지나는 정류장, 없으면 기점 (둘 다 없으면 null) */
+    private static Place lineAsPlace(com.saferoute.bus.BusLine l, com.saferoute.bus.LineStop via, Double lat,
+                                     Double lon) {
+        Double y = via != null ? Double.valueOf(via.lat()) : l.lat();
+        Double x = via != null ? Double.valueOf(via.lon()) : l.lon();
+        if (y == null || x == null) {
+            return null;
+        }
+        String address = via == null ? l.summary() : via.name() + " 지나요 · " + l.summary();
+        return new Place("line:" + l.id(), l.name() + "번 버스", address, y, x,
+                lat == null ? null : meters(lat, lon, y, x));
     }
 }
