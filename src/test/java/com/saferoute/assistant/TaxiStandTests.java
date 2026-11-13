@@ -104,7 +104,20 @@ class TaxiStandTests {
                 new Place(null, "광주 서구 무진대로 904", "광주 서구 무진대로 904", 35.1605, 126.8795, null)));
         AssistantReply r = service.answer(new AssistantRequest(A, "근처 택시 승강장", 35.1590, 126.8800,
                 null, null, null, null, null, "senior"));
-        assertThat(r.say()).contains("유스퀘어 택시승강장");
+        assertThat(r.say()).contains("유스퀘어(광주종합버스터미널) 택시승강장");
         assertThat(r.place().lat()).isEqualTo(35.1605);
+    }
+
+    @Test
+    void gwangjuStationIsFoundByExactName() {
+        when(kakao.search(eq("택시승강장"), anyDouble(), anyDouble())).thenReturn(List.of());
+        when(kakao.search(eq("택시"), anyDouble(), anyDouble())).thenReturn(List.of());
+        when(kakao.search("광주역", null, null)).thenReturn(List.of(
+                new Place("7", "남광주역", "광주 동구", 35.1388, 126.9235, null),
+                new Place("8", "광주역", "광주 북구 무등로 235", 35.1652, 126.9094, null)));
+        AssistantReply r = service.answer(new AssistantRequest(A, "택시 타는 곳", 35.1640, 126.9100,
+                null, null, null, null, null, "senior"));
+        assertThat(r.say()).contains("광주역 택시승강장");
+        assertThat(r.place().lat()).isEqualTo(35.1652);
     }
 }

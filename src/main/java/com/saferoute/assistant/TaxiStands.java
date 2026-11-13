@@ -24,7 +24,8 @@ final class TaxiStands {
     }
 
     static final List<Stand> GWANGJU = List.of(
-            new Stand("유스퀘어 택시승강장", "광주 서구 무진대로 904", true));
+            new Stand("유스퀘어(광주종합버스터미널) 택시승강장", "광주 서구 무진대로 904", true),
+            new Stand("광주역 택시승강장", "광주역", false));
 
     private static final Logger log = LoggerFactory.getLogger(TaxiStands.class);
 
@@ -56,7 +57,10 @@ final class TaxiStands {
                 log.warn("택시 승강장 손 목록 좌표 못 찾음: {}", s.name());
                 return null;
             }
-            at = new double[] {found.get(0).lat(), found.get(0).lon()};
+            // 장소 이름이면 이름이 똑같은 곳 먼저 ("광주역"을 찾았는데 "남광주역"이 앞에 오는 경우)
+            Place p = found.stream().filter(f -> f.name().replace(" ", "").equals(s.where().replace(" ", "")))
+                    .findFirst().orElse(found.get(0));
+            at = new double[] {p.lat(), p.lon()};
             spots.put(s.name(), at);
             return at;
         } catch (PlaceSearchException e) {

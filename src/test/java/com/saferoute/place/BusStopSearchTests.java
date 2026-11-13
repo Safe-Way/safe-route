@@ -49,8 +49,8 @@ class BusStopSearchTests {
         ResponseEntity<?> res = controller.places("근처 버스", LAT, LON);
 
         List<Place> places = ((PlacesResponse) res.getBody()).places();
-        assertThat(places).extracting(Place::name).containsExactly("조선대해오름관 정류장", "조선대병원 정류장");
-        assertThat(places.get(0).address()).isEqualTo("조선대병원 방면");
+        assertThat(places).extracting(Place::name).containsExactly("조선대해오름관", "조선대병원");
+        assertThat(places.get(0).address()).isEqualTo("버스 정류장 · 조선대병원 방면");
         assertThat(places.get(0).distanceM()).isEqualTo(60);
         assertThat(places.get(0).id()).isEqualTo("bus:4001");
         verifyNoInteractions(kakao);
