@@ -100,12 +100,17 @@ class RuleBrain {
                 return Outcome.say(info);
             }
         }
-        // "수완동으로 가는 버스": 그쪽이 종점인 노선, 없으면 택시 권하기 (11-13)
+        // "수완동으로 가는 버스": 그곳을 지나거나 그쪽이 종점인 노선, 없으면 택시 권하기 (11-13)
         String busTo = com.saferoute.place.BusLineQuery.goingTo(Fillers.clean(t.text == null ? "" : t.text.strip()));
         if (busTo != null) {
             String lines = tools.busLinesTo(t, busTo);
             String go = " 지금 계신 곳에서 타는 곳과 갈아타는 길은 '" + busTo + " 가자'라고 말씀하시면 찾아 드려요.";
             if (lines != null && !lines.isEmpty()) {
+                if (t.busLine != null && t.located()) {
+                    // "03번이 서는 가장 가까운 정류장으로 안내할까요?" → [네]/[아니요] (11-13)
+                    t.convo = t.convo.asked(BUS_LINE_ASK + t.busLine.id() + ":" + t.busLine.name());
+                    return Outcome.ask(lines + " " + t.busLine.name() + "번이 서는 가장 가까운 정류장으로 안내할까요?", YES_NO);
+                }
                 return Outcome.say(lines + go);
             }
             if (lines == null) {
@@ -114,7 +119,9 @@ class RuleBrain {
                     tools.findTaxi(t);
                     taxi = " 버스가 불편하시면 택시를 추천해요. " + Sentences.spot(t);
                 }
-                return Outcome.say(Josa.ro(busTo) + " 바로 가는(종점인) 버스는 찾지 못했어요." + go + taxi);
+                String none = tools.passingKnown() ? Josa.ro(busTo) + " 가는 버스는 찾지 못했어요."
+                        : Josa.iGa(busTo) + " 처음이나 끝 정류장인 버스는 없어요. 중간에 지나가는 버스 정보는 아직 준비 중이에요.";
+                return Outcome.say(none + go + taxi);
             }
         }
         // "광주역 근처 정류장": 광주역을 먼저 찾고 그 근처 (11-13)
@@ -374,8 +381,32 @@ class RuleBrain {
             case "place" -> place(t);
             case "go_near" -> goNear(t);
             case "food" -> foodKind(t);
-            default -> null;
+            default -> asked.startsWith(BUS_LINE_ASK) ? busLineStop(t, asked.substring(BUS_LINE_ASK.length())) : null;
         };
+    }
+
+    static final String BUS_LINE_ASK = "bus_line:";
+
+    /** "03번이 서는 가장 가까운 정류장으로 안내할까요?"에 대한 답. idName = "28:03" */
+    Outcome busLineStop(Turn t, String idName) {
+        Boolean yes = yesNo(t.text, t.req.choice());
+        t.convo = t.convo.asked(null);
+        if (yes == null) {
+            return null;
+        }
+        int colon = idName.indexOf(':');
+        String name = idName.substring(colon + 1);
+        if (!yes) {
+            return Outcome.say("알겠어요. " + name + "번 타는 곳이 필요하면 다시 말씀해 주세요.");
+        }
+        int id;
+        try {
+            id = Integer.parseInt(idName.substring(0, colon));
+        } catch (RuntimeException e) {
+            return null;
+        }
+        tools.findLineStop(t, id, name);
+        return Outcome.say(Sentences.spot(t));
     }
 
     /** 오늘 제안 (사용자가 말하지 않고 앱이 먼저 물어봄) */

@@ -23,8 +23,9 @@ public class BusLineRepository {
      * 기점 좌표는 정류장 표에서 이름이 같은 첫 정류장 (없으면 null)
      */
     public List<BusLine> find(String number) {
-        return query("l.line_name = ? OR l.line_name LIKE ?", "(l.line_name = ?) DESC, l.line_name",
-                number, "%" + number, number);
+        // "1003"은 "03"이 아님: 앞이 숫자가 아닐 때만 같은 번호로 본다 (급행03·수완03은 맞음, 11-13 터미널 확인)
+        return query("l.line_name = ? OR (l.line_name LIKE ? AND l.line_name NOT REGEXP ?)",
+                "(l.line_name = ?) DESC, l.line_name", number, "%" + number, "[0-9]" + number + "$", number);
     }
 
     /**
@@ -34,6 +35,23 @@ public class BusLineRepository {
     public List<BusLine> endingAt(String place) {
         String like = "%" + place + "%";
         return query("l.dir_up_name LIKE ? OR l.dir_down_name LIKE ?", "l.line_name", like, like);
+    }
+
+    /** 모든 노선 번호 (정류장 순서를 받아 올 때) */
+    public List<Integer> allIds() {
+        return jdbc.queryForList("SELECT line_id FROM bus_line ORDER BY line_id", Integer.class);
+    }
+
+    /** 번호들의 노선, 넘긴 순서대로 (없는 번호는 빠짐) */
+    public List<BusLine> byIds(List<Integer> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        String marks = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        List<BusLine> found = query("l.line_id IN (" + marks + ")", "l.line_id", ids.toArray());
+        java.util.Map<Integer, BusLine> byId = new java.util.HashMap<>();
+        found.forEach(l -> byId.put(l.id(), l));
+        return ids.stream().map(byId::get).filter(java.util.Objects::nonNull).toList();
     }
 
     private List<BusLine> query(String where, String order, Object... args) {
