@@ -79,7 +79,7 @@ class RouteLiveCheck {
         JdbcTemplate db = new JdbcTemplate(new SingleConnectionDataSource(env.get("DB_URL"), env.get("DB_USERNAME"),
                 env.get("DB_PASSWORD"), true));
         RouteProperties props = TestRoutes.props();
-        MysqlRoadGraphSource roads = new MysqlRoadGraphSource(db);
+        MysqlRoadGraphSource roads = new MysqlRoadGraphSource(db, props);
         MysqlPoiSource pois = new MysqlPoiSource(db);
         RouteScorer scorer = new RouteScorer(props);
         RouteResultAssembler assembler = new RouteResultAssembler(new FacilityCounter(props), props);

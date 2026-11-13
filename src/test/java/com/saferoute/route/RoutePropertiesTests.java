@@ -47,7 +47,7 @@ class RoutePropertiesTests {
         RouteProperties.Profile wheel = p.profile("wheelchair");
         assertThat(wheel.maxDetour()).isEqualTo(1.2);
         assertThat(wheel.exclude()).containsExactly(Penalty.STAIRS, Penalty.CURB, Penalty.FOOTBRIDGE, Penalty.TRAIL, Penalty.FORD,
-                Penalty.PLAZA);
+                Penalty.PLAZA, Penalty.NO_SIDEWALK_ALLEY);
         assertThat(wheel.avoidUnpaved()).isTrue();
         assertThat(p.profile("senior").avoidUnpaved()).isFalse();
         // 골목길 기준 (2026-11-12): 낮은 큰 길만, 밤은 밝기 > 도움 시설 > CCTV > 골목길
@@ -64,6 +64,12 @@ class RoutePropertiesTests {
         assertThat(p.searchMarginM()).isEqualTo(500);
         assertThat(p.passableSnapExtraM()).isEqualTo(50);
         assertThat(p.passableSnapOriginExtraM()).isEqualTo(100);
+        assertThat(p.endAlleyM()).isEqualTo(200);
+        assertThat(p.noSidewalkAlleyFallbackFactor()).isEqualTo(10);
+        assertThat(p.sidewalkDataMinEdgeM()).isEqualTo(20);
+        assertThat(p.narrowSidewalkM()).isEqualTo(1.5);
+        assertThat(p.profile("wheelchair").avoidNarrowSidewalk()).isTrue();
+        assertThat(p.profile("senior").avoidNarrowSidewalk()).isFalse();
         assertThat(p.darkStretch().mergeGapM()).isEqualTo(10);
         assertThat(p.darkStretch().minM()).isEqualTo(50);
         assertThat(p.turn().minAngle()).isEqualTo(45);

@@ -107,7 +107,7 @@ class RouteRandomCheck {
         String overrides = System.getProperty("overrides", "");
         RouteProperties props = TestRoutes.props(overrides.isBlank() ? new String[0] : overrides.split(";"));
         String[] modes = System.getProperty("modes", String.join(",", MODES)).split(",");
-        MysqlRoadGraphSource roads = new MysqlRoadGraphSource(db);
+        MysqlRoadGraphSource roads = new MysqlRoadGraphSource(db, props);
         MysqlPoiSource pois = new MysqlPoiSource(db);
         RouteScorer scorer = new RouteScorer(props);
         RouteResultAssembler assembler = new RouteResultAssembler(new FacilityCounter(props), props);

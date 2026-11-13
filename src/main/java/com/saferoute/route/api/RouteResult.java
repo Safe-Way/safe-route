@@ -55,13 +55,25 @@ public record RouteResult(
      * @param surfaceUnknownM 지나는 재질 모르는 산길 길이(m)
      * @param stops    요청한 들를 곳을 거치는 순서대로 (2026-11-10). 들를 곳이 없으면 빈 목록
      * @param crossAt  큰 길을 건너는 곳과 그 횡단보도 자리 (2026-11-12, specs/014). 경로 순서. 없으면 빈 목록
-     * @param alleys   골목길(인도 없는 골목급 차도) 구간. 경로 순서. 없으면 빈 목록 (2026-11-12, 카카오맵 현장 비교)
+     * @param alleys   골목길(인도가 없거나 모르는 골목급 차도) 구간. 경로 순서. 없으면 빈 목록 (2026-11-12, 카카오맵 현장 비교)
      * @param alleyM   골목길 길이 합(m) = alleys lengthM의 합
+     * @param narrows  좁은 인도(보도 자료 폭이 narrow-sidewalk-m보다 좁음) 구간. 경로 순서. 모든 모드에 준다. 없으면 빈 목록 (2026-11-13)
+     * @param narrowM  좁은 인도 길이 합(m) = narrows lengthM의 합
      */
     public record Route(String kind, int distanceM, int durationMin, List<double[]> geometry,
             Map<String, Integer> counts, Map<String, Integer> covered, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
             List<Stretch> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM,
-            List<StopMark> stops, List<CrossAt> crossAt, List<Alley> alleys, int alleyM) {
+            List<StopMark> stops, List<CrossAt> crossAt, List<Alley> alleys, int alleyM, List<Narrow> narrows,
+            int narrowM) {
+
+        /** 좁은 인도 없이 */
+        public Route(String kind, int distanceM, int durationMin, List<double[]> geometry, Map<String, Integer> counts,
+                Map<String, Integer> covered, List<Sidewalk> sidewalks, List<Stretch> dark, List<Turn> turns,
+                List<Stretch> crossings, List<Stair> stairs, List<Event> events, int unpavedM, int surfaceUnknownM,
+                List<StopMark> stops, List<CrossAt> crossAt, List<Alley> alleys, int alleyM) {
+            this(kind, distanceM, durationMin, geometry, counts, covered, sidewalks, dark, turns, crossings, stairs,
+                    events, unpavedM, surfaceUnknownM, stops, crossAt, alleys, alleyM, List.of(), 0);
+        }
 
         /** 골목길 없이 */
         public Route(String kind, int distanceM, int durationMin, List<double[]> geometry, Map<String, Integer> counts,
@@ -120,13 +132,25 @@ public record RouteResult(
     }
 
     /**
-     * 골목길 구간 하나 (2026-11-12). 인도 태그가 없는 골목급 차도(service·residential·unclassified·living_street)라
-     * 차와 사람이 같이 쓴다. 이어진 골목길은 한 구간이다. 앱이 "골목길로 64m 이동해요"를 만든다.
+     * 골목길 구간 하나 (2026-11-12). 인도가 없거나(no) 모르는 골목급 차도(service·residential·unclassified·living_street)라
+     * 차와 사람이 같이 쓴다. 인도 쪽은 OSM 태그, 없으면 국토지리정보원 보도 자료로 정한다 (2026-11-13).
+     * 이어진 골목길은 한 구간이다. 앱이 "골목길로 64m 이동해요"를 만든다.
      *
      * @param from, to geometry 점 번호. sidewalks의 from·to와 같은 기준
      * @param lengthM  구간 길이(m)
      */
     public record Alley(int from, int to, int lengthM) {
+    }
+
+    /**
+     * 좁은 인도 구간 하나 (2026-11-13). 국토지리정보원 보도 자료로 정한 인도의 폭이 route.yml narrow-sidewalk-m(1.5m)보다 좁다.
+     * 이어진 좁은 인도는 한 구간이다. 앱이 "좁은 인도 ○m"를 만든다.
+     *
+     * @param from, to geometry 점 번호. sidewalks의 from·to와 같은 기준
+     * @param lengthM  구간 길이(m)
+     * @param widthM   구간에서 가장 좁은 인도 폭(m). 모르면 null
+     */
+    public record Narrow(int from, int to, int lengthM, Double widthM) {
     }
 
     /**
@@ -162,7 +186,8 @@ public record RouteResult(
      * 아래 값이 하나라도 바뀌면 구간을 나눈다.
      *
      * @param from, to geometry 점 번호. from번 점부터 to번 점까지의 선
-     * @param side     걷는 방향 기준 left, right, both(양쪽), no(인도 없음), unknown(태그 없음).
+     * @param side     걷는 방향 기준 left, right, both(양쪽), no(인도 없음), unknown(모름). OSM 태그가 먼저이고, 없으면
+     *                 국토지리정보원 보도 자료로 정한다(20m보다 짧은 길은 안 씀, 2026-11-13).
      *                 sidewalk 태그가 없고 oneway가 true면 차가 가는 방향 오른쪽, 양방향(또는 모름) primary·secondary·tertiary면
      *                 both로 본다(대개 양쪽에 인도가 있음, w15). both면 앱이 내 위치 쪽으로 옮긴다
      * @param highway  길 종류 (OSM highway: primary, secondary, residential 등)
@@ -171,9 +196,16 @@ public record RouteResult(
      * @param widthM   차도 폭(m). 태그가 없으면 null
      * @param offsetM  선(차도 가운데)에서 인도 가운데까지(m, 소수 1자리). 차도 반폭 + 1.5.
      *                 반폭은 widthM/2, 없으면 차로 수 × 3.25/2, 차로 수도 없으면 길 종류·일방 기본 차로 수(oneway가 null이면 양방 값)로 계산해 늘 값이 있다
+     * @param sidewalkWidthM 인도 폭(m, 국토지리정보원 보도 자료). 인도 쪽을 그 자료로 정했고 no가 아닐 때만, 아니면 null (2026-11-13)
      */
     public record Sidewalk(int from, int to, String side, String highway, Integer lanes, Boolean oneway, Double widthM,
-            double offsetM) {
+            double offsetM, Double sidewalkWidthM) {
+
+        /** 인도 폭 없이 */
+        public Sidewalk(int from, int to, String side, String highway, Integer lanes, Boolean oneway, Double widthM,
+                double offsetM) {
+            this(from, to, side, highway, lanes, oneway, widthM, offsetM, null);
+        }
     }
 
     /**
@@ -223,7 +255,9 @@ public record RouteResult(
      * @param kind  stairs(노인이 계단을 지남), event(행사·돌발), unpaved(휠체어 비포장), surface(재질 모르는 산길),
      *              snap(휠체어 출발·도착을 옆 길에 붙임), underground(비 오는 날 지하로 지남, 2026-11-09),
      *              crossing(안전 경로가 횡단보도 없는 곳에서 큰 길을 건넘, 2026-11-12 진행표 w20),
-     *              alley(휠체어·노인·어린이가 골목길을 30m 이상 지남, 2026-11-12)
+     *              alley(휠체어·노인·어린이가 골목길을 30m 이상 지남, 2026-11-12),
+     *              narrow(휠체어가 좁은 인도를 피하지 못하고 지남, 2026-11-13),
+     *              no_sidewalk_alley(휠체어가 인도 없는 골목 말고는 길이 없어 지남, 2026-11-13)
      * @param text  괄호·머리말 없는 문장
      */
     public record Note(String level, String kind, String text) {

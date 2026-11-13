@@ -149,6 +149,88 @@ class RetryAndRelaxTests {
         assertThat(r.explanation().text()).contains("비포장길 약 364m를 지납니다").containsPattern("비포장을 피하면 \\d+m\\(\\d+분\\) 더 걸립니다");
     }
 
+    /** 폭 1.0m 좁은 인도(보도 자료)가 양쪽에 있는 골목급 차도 S–T와, 북쪽 northM으로 돌아가는 보통 길 S–N–T (2026-11-13) */
+    static RoadGraph narrowOrAround(double northM) {
+        double[] n = north(new double[] {126.932, LAT}, northM);
+        List<double[]> line = List.of(S, T);
+        RoadEdge narrow = new RoadEdge(1, 1, 2, Geo.length(line), "residential", line,
+                new EdgePenalty(Map.of(Penalty.NARROW_SIDEWALK, 1.0)), "both", null, null, null, null, 1.0);
+        return new RoadGraph(Map.of(1L, S, 2L, T, 3L, n), List.of(narrow,
+                edge(2, 1, 3, S, n, EdgePenalty.NONE), edge(3, 3, 2, n, T, EdgePenalty.NONE)));
+    }
+
+    @Test
+    void wheelchairAvoidsNarrowSidewalkWithinLimit() {
+        // 돌아가는 길 약 1.1배 ≤ 1.2 → 좁은 인도를 뺀 길, 주의 없음. 최단 경로 응답에는 좁은 인도 구간이 그대로 온다
+        RouteResult r = service(new InMemoryRoadGraphSource(narrowOrAround(80))).route(request("wheelchair"));
+
+        assertThat(r.routes()).extracting(RouteResult.Route::kind).containsExactly("shortest", "safe");
+        assertThat(r.routes().get(1).narrows()).isEmpty();
+        assertThat(r.routes().get(0).narrowM()).isBetween(360, 370);
+        assertThat(r.explanation().text()).isEqualTo("33m(1분) 더 돌지만 좁은 인도를 피하는 길로 갑니다");
+    }
+
+    @Test
+    void wheelchairGoesThroughNarrowSidewalkWithNoteWhenWayAroundIsTooLong() {
+        // 돌아가는 길 약 1.9배 > 1.2 → 좁은 인도로 가고 알린다
+        RouteResult r = service(new InMemoryRoadGraphSource(narrowOrAround(300))).route(request("wheelchair"));
+
+        assertThat(r.routes()).hasSize(1);
+        assertThat(r.explanation().notes()).anySatisfy(n -> {
+            assertThat(n.kind()).isEqualTo("narrow");
+            assertThat(n.text()).isEqualTo("폭 1.5m 안 되는 좁은 인도 약 364m를 지납니다");
+        });
+    }
+
+    @Test
+    void wheelchairAvoidsNarrowEvenWhenUnpavedCannotBeAvoided() {
+        // S–M 비포장 100m(피하면 북쪽 400m로 +700m), M–T 좁은 인도 100m(피하면 북쪽 40m로 +28m).
+        // 둘을 따로 피한다: 좁은 인도는 1.2배 안이라 피하고, 비포장은 못 피해 알린다. "비포장을 피하면"은 비포장만 피한 길로 잰다
+        double[] m = {126.9311, LAT};
+        double[] t = {126.9322, LAT};
+        double[] u = north(new double[] {126.93055, LAT}, 400);
+        double[] n = north(new double[] {126.93165, LAT}, 40);
+        List<double[]> mt = List.of(m, t);
+        RoadEdge narrow = new RoadEdge(2, 2, 3, Geo.length(mt), "residential", mt,
+                new EdgePenalty(Map.of(Penalty.NARROW_SIDEWALK, 1.0)), "both", null, null, null, null, 1.0);
+        RoadGraph g = new RoadGraph(Map.of(1L, S, 2L, m, 3L, t, 4L, u, 5L, n), List.of(
+                edge(1, 1, 2, S, m, new EdgePenalty(Map.of(Penalty.UNPAVED, 1.0))), narrow,
+                edge(3, 1, 4, S, u, EdgePenalty.NONE), edge(4, 4, 2, u, m, EdgePenalty.NONE),
+                edge(5, 2, 5, m, n, EdgePenalty.NONE), edge(6, 5, 3, n, t, EdgePenalty.NONE)));
+
+        RouteResult r = service(new InMemoryRoadGraphSource(g)).route(new RouteRequest(new Place(LAT, S[0], null),
+                new Place(LAT, t[0], null), "auto", "wheelchair"));
+
+        RouteResult.Route safe = r.routes().get(r.routes().size() - 1);
+        assertThat(safe.narrows()).isEmpty();
+        assertThat(safe.unpavedM()).isBetween(95, 105);
+        assertThat(r.explanation().summary()).contains("좁은 인도를 피하는 길로 갑니다");
+        // 비포장만 피한 길(S–U–M–T 약 906m) − 안내 경로(약 228m) ≈ 678m. 좁은 인도까지 피하는 길(약 934m)로 재면 706m
+        assertThat(r.explanation().text()).contains("비포장길 약 100m를 지납니다").containsPattern("비포장을 피하면 6[67]\\dm");
+        assertThat(r.explanation().notes()).noneMatch(x -> x.kind().equals("narrow"));
+    }
+
+    @Test
+    void narrowsAndSidewalkWidthAreInEveryModesResult() {
+        // 응답 칸 (앱 "좁은 인도 ○m"): 피하지 않는 어른도 받는다. 인도 폭은 sidewalks에, 차도 폭 widthM과 따로
+        RouteResult.Route rt = service(new InMemoryRoadGraphSource(narrowOrAround(80))).route(request("adult"))
+                .routes().get(0);
+
+        assertThat(rt.narrows()).singleElement().satisfies(n -> {
+            assertThat(n.from()).isZero();
+            assertThat(n.to()).isEqualTo(1);
+            assertThat(n.lengthM()).isBetween(360, 370);
+            assertThat(n.widthM()).isEqualTo(1.0);
+        });
+        assertThat(rt.narrowM()).isEqualTo(rt.narrows().get(0).lengthM());
+        assertThat(rt.sidewalks()).singleElement().satisfies(s -> {
+            assertThat(s.sidewalkWidthM()).isEqualTo(1.0);
+            assertThat(s.widthM()).isNull();
+        });
+        assertThat(service(new InMemoryRoadGraphSource(narrowOrAround(80))).route(request("adult")).explanation()
+                .notes()).noneMatch(n -> n.kind().equals("narrow"));
+    }
+
     @Test
     void otherModesIgnoreUnpaved() {
         RouteResult r = service(new InMemoryRoadGraphSource(unpavedOrAround(80))).route(request("adult"));
