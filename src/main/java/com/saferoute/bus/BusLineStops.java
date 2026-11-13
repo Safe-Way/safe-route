@@ -1,11 +1,19 @@
 package com.saferoute.bus;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,8 +28,8 @@ import org.springframework.stereotype.Component;
 /**
  * 노선마다 지나는 정류장 (11-13 "수완동으로 가는 버스"). bus_line 표에는 기점·종점만 있어서,
  * 광주버스정보 lineStationInfo를 노선마다(127개) 한 번씩 불러 기억해 둔다.
- * 서버가 켜지면 뒤에서 한 번, 그 뒤로 매일 새벽 4시 10분(한국 시각)에 다시 받는다. DB에는 저장하지 않는다.
- * 다 받기 전이나 받기에 실패하면 지나는 버스는 비어 있고, 기점·종점으로만 찾는다.
+ * 서버가 켜지면 뒤에서 한 번(8개씩 같이 받아 10초 안팎), 그 뒤로 매일 새벽 4시 10분(한국 시각)에 다시 받는다.
+ * DB에는 저장하지 않는다. 처음 받는 중에 물으면 8초까지 기다리고, 받기에 실패하면 기점·종점으로만 찾는다.
  */
 @Component
 @EnableScheduling
@@ -38,7 +46,13 @@ public class BusLineStops {
     private final BusLineRepository lines;
     private final boolean loadOnStart;
 
+    /** 한꺼번에 받는 노선 수 */
+    static final int THREADS = 8;
+    /** 처음 받는 중일 때 묻는 사람이 기다리는 최대 시간 */
+    static final Duration WAIT = Duration.ofSeconds(8);
+
     private volatile Map<Integer, List<LineStop>> stops = Map.of();
+    private volatile CompletableFuture<Void> loading;
 
     public BusLineStops(GjBisClient bis, BusLineRepository lines,
                         @Value("${bus.line-stops.load:true}") boolean loadOnStart) {
@@ -54,7 +68,15 @@ public class BusLineStops {
     @EventListener(ApplicationReadyEvent.class)
     public void loadInBackground() {
         if (loadOnStart) {
-            Thread t = new Thread(this::reload, "bus-line-stops");
+            CompletableFuture<Void> f = new CompletableFuture<>();
+            loading = f; // 처음 받는 동안 묻는 사람은 잠깐 기다리게
+            Thread t = new Thread(() -> {
+                try {
+                    load();
+                } finally {
+                    f.complete(null);
+                }
+            }, "bus-line-stops");
             t.setDaemon(true);
             t.start();
         }
@@ -62,27 +84,77 @@ public class BusLineStops {
 
     @Scheduled(cron = "${bus.line-stops.cron:0 10 4 * * *}", zone = "Asia/Seoul")
     public void reload() {
+        load();
+    }
+
+    private void load() {
+        List<Integer> ids;
         try {
-            List<Integer> ids = lines.allIds();
-            Map<Integer, List<LineStop>> fresh = new HashMap<>();
-            int failed = 0;
-            for (int id : ids) {
-                try {
-                    fresh.put(id, List.copyOf(bis.lineStops(id)));
-                } catch (BusUnavailableException e) {
-                    failed++;
-                    if (failed == 3 && fresh.isEmpty()) {
-                        log.warn("노선 정류장 받기 멈춤 (처음 3개 모두 실패): {}", e.getMessage());
-                        return; // 키가 없거나 서비스가 막힘 → 옛 기억 그대로
-                    }
-                }
-            }
-            if (!fresh.isEmpty()) {
-                stops = Map.copyOf(fresh);
-            }
-            log.info("노선 정류장 받음: 노선 {}개 중 {}개 (실패 {})", ids.size(), fresh.size(), failed);
+            ids = lines.allIds();
         } catch (DataAccessException e) {
             log.warn("노선 정류장 받기 실패 (노선 표): {}", e.getMostSpecificCause().getMessage());
+            return;
+        }
+        Map<Integer, List<LineStop>> fresh = new ConcurrentHashMap<>();
+        // 처음 몇 개는 하나씩: 키가 없거나 서비스가 막혔으면 127번 다 부르지 않고 멈춘다
+        int i = 0;
+        int failed = 0;
+        while (i < ids.size() && fresh.isEmpty()) {
+            if (!fetch(ids.get(i++), fresh)) {
+                if (++failed == 3) {
+                    log.warn("노선 정류장 받기 멈춤 (처음 3개 모두 실패)");
+                    return; // 옛 기억 그대로
+                }
+            }
+        }
+        // 나머지는 한꺼번에 THREADS개씩 (하나씩 하면 1~2분, 같이 하면 10초 안팎)
+        List<Integer> rest = ids.subList(i, ids.size());
+        ExecutorService pool = Executors.newFixedThreadPool(THREADS, r -> {
+            Thread t = new Thread(r, "bus-line-stops-fetch");
+            t.setDaemon(true);
+            return t;
+        });
+        try {
+            List<CompletableFuture<Boolean>> jobs = rest.stream()
+                    .map(id -> CompletableFuture.supplyAsync(() -> fetch(id, fresh), pool)).toList();
+            for (CompletableFuture<Boolean> j : jobs) {
+                if (!j.join()) {
+                    failed++;
+                }
+            }
+        } finally {
+            pool.shutdown();
+        }
+        if (!fresh.isEmpty()) {
+            stops = Map.copyOf(fresh);
+        }
+        log.info("노선 정류장 받음: 노선 {}개 중 {}개 (실패 {})", ids.size(), fresh.size(), failed);
+    }
+
+    /** 노선 하나 받기. 실패하면 false (한 번 더 해 본다) */
+    private boolean fetch(int id, Map<Integer, List<LineStop>> into) {
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                into.put(id, List.copyOf(bis.lineStops(id)));
+                return true;
+            } catch (BusUnavailableException e) {
+                // 한 번 더
+            }
+        }
+        return false;
+    }
+
+    /** 처음 받는 중이면 WAIT 만큼만 기다린다 (서버가 막 켜졌을 때 "수완동 가는 버스"가 종점만 보이지 않게) */
+    private void waitIfLoading() {
+        CompletableFuture<Void> l = loading;
+        if (stops.isEmpty() && l != null && !l.isDone()) {
+            try {
+                l.get(WAIT.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (TimeoutException | ExecutionException e) {
+                // 다 못 받았으면 받은 데까지 없이 기점·종점으로
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -105,6 +177,7 @@ public class BusLineStops {
      * @throws DataAccessException 노선 표를 못 읽을 때
      */
     public List<Hit> to(String place, Double lat, Double lon) {
+        waitIfLoading();
         String stem = com.saferoute.place.BusLineQuery.stem(place);
         Map<Integer, LineStop> via = new LinkedHashMap<>();
         Map<Integer, Double> dist = new HashMap<>();

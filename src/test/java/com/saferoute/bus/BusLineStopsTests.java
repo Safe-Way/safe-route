@@ -59,7 +59,7 @@ class BusLineStopsTests {
         when(repo.allIds()).thenReturn(List.of(1, 2, 3, 4, 5));
         when(bis.lineStops(anyInt())).thenThrow(new BusUnavailableException("키 없음", null));
         stops.reload();
-        verify(bis, times(3)).lineStops(anyInt());
+        verify(bis, times(6)).lineStops(anyInt()); // 처음 3개만, 하나마다 한 번 더 해 봄
         assertThat(stops.loaded()).isZero();
     }
 
@@ -71,5 +71,15 @@ class BusLineStopsTests {
         stops.reload();
         assertThat(stops.loaded()).isEqualTo(1);
         when(repo.byIds(anyList())).thenReturn(List.of());
+    }
+
+    @Test
+    void loadsManyLinesTogether() {
+        List<Integer> ids = java.util.stream.IntStream.rangeClosed(1, 40).boxed().toList();
+        when(repo.allIds()).thenReturn(ids);
+        when(bis.lineStops(anyInt())).thenAnswer(a -> List.of(new LineStop(1, a.getArgument(0, Integer.class),
+                "정류장", 35.1, 126.9)));
+        stops.reload();
+        assertThat(stops.loaded()).isEqualTo(40);
     }
 }
