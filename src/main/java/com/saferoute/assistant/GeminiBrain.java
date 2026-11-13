@@ -595,9 +595,9 @@ class GeminiBrain {
                     Map.of(), List.of()),
             tool("find_nearby", "지금 위치에서 가까운 시설을 찾는다 (지금 열린 곳 먼저). 모드는 서버가 지금 모드로 넣는다.",
                     Map.of("kind", Map.of("type", "string", "enum",
-                            List.of("toilet", "shelter", "police", "store", "bell", "subway", "guard_house"),
+                            List.of("toilet", "shelter", "police", "store", "bell", "subway", "guard_house", "elevator"),
                             "description", "toilet 화장실, shelter 쉴 곳·쉼터, police 경찰, store 편의점, bell 비상벨, "
-                                    + "subway 지하철역, guard_house 아동안전지킴이집")),
+                                    + "subway 지하철역, guard_house 아동안전지킴이집, elevator 엘리베이터(육교·지하철 출구)")),
                     List.of("kind")),
             tool("get_my_info", "내 정보(평소 모드, 지금 모드, 이동 보조, 계단, 잠깐 바뀐 모드와 기간, 처음 설정 여부)를 본다.",
                     Map.of(), List.of()),

@@ -67,6 +67,14 @@ class RuleBrain {
         if (elevatorAmbiguous(f)) {
             return askElevator(t);
         }
+        // "근처 엘리베이터", "엘리베이터 어디야": 되묻지 않고 엘리베이터 육교·출구 중 가장 가까운 곳 (11-13)
+        if ("elevator".equals(nearbyKind(f))) {
+            if (!t.located()) {
+                return Outcome.ask("지금 계신 곳을 알아야 찾을 수 있어요. 위치 켜기를 눌러 주세요.");
+            }
+            tools.findNearby(t, "elevator");
+            return Outcome.say(Sentences.spot(t));
+        }
         for (Map.Entry<String, String[]> e : NO_TOOL.entrySet()) {
             if (f.contains(e.getKey()) && !f.contains("112")) {
                 String[] v = e.getValue();
@@ -869,7 +877,7 @@ class RuleBrain {
 
     /** "엘베 있는 데로 가자"처럼 어느 엘리베이터인지 모르는 말. 육교·역을 말했으면 아님 */
     static boolean elevatorAmbiguous(String flat) {
-        return (flat.contains("엘베") || flat.contains("엘리베이터"))
+        return (flat.contains("엘베") || flat.contains("엘리베이터")) && !NEAR_WORD.matcher(flat).find()
                 && (flat.contains("가자") || flat.contains("가줘") || flat.contains("데로") || flat.contains("곳으로"))
                 && !flat.contains("육교") && !flat.contains("역") && !flat.contains("지하철");
     }
@@ -937,7 +945,16 @@ class RuleBrain {
         return null;
     }
 
+    /** 가까운 곳을 찾는 말 ("근처", "가까운", "어디") */
+    private static final java.util.regex.Pattern NEAR_WORD = java.util.regex.Pattern.compile(
+            "근처|가까운|가까이|주변|어디|어딨|찾아");
+
     static String nearbyKind(String flat) {
+        // 엘리베이터 (고장 신고, 지도에 보여 달라는 말은 빼고)
+        if ((flat.contains("엘베") || flat.contains("엘리베이터")) && NEAR_WORD.matcher(flat).find()
+                && !flat.contains("고장") && !flat.contains("지도") && !flat.contains("보여") && !flat.contains("표시")) {
+            return "elevator";
+        }
         if (flat.contains("화장실")) {
             return "toilet";
         }

@@ -90,4 +90,28 @@ class FacilityRepositoryTests {
         assertThat(station.wheelchair()).isFalse();
         assertThat(repo.within(w, s, e, n, Set.of("cctv"), 10).get(0).count()).isEqualTo(1);
     }
+
+    @Test
+    void elevatorMeansElevatorFootbridgesAndElevatorExits() {
+        // 엘리베이터 육교(약 110m), 그냥 육교(약 220m), 엘리베이터 출구(약 330m), 엘리베이터 없는 출구(약 440m)
+        place("footbridge", "승강기", "시험 엘리베이터 육교", 0.001, null);
+        place("footbridge", "계단", "시험 그냥 육교", 0.002, null);
+        place("subway_entrance", null, "시험역 1번 출구", 0.003, 1);
+        place("subway_entrance", null, "시험역 2번 출구", 0.004, 0);
+
+        assertThat(repo.near(LAT, LON, FacilityRepository.ELEVATOR, false, 1000)).extracting(Facility::name)
+                .containsExactly("시험 엘리베이터 육교", "시험역 1번 출구");
+        double w = LON - 0.01, e = LON + 0.01, s = LAT - 0.01, n = LAT + 0.01;
+        assertThat(repo.within(w, s, e, n, Set.of(FacilityRepository.ELEVATOR), 10)).extracting(Facility::name)
+                .containsExactlyInAnyOrder("시험 엘리베이터 육교", "시험역 1번 출구");
+        assertThat(repo.within(w, s, e, n, Set.of(FacilityRepository.ELEVATOR, "cctv"), 10)).extracting(Facility::name)
+                .containsExactlyInAnyOrder("시험 엘리베이터 육교", "시험역 1번 출구", "시험 CCTV");
+    }
+
+    private void place(String kind, String sub, String name, double dLat, Integer wc) {
+        double lat = LAT + dLat;
+        jdbc.update("INSERT INTO poi (kind, sub, name, lon, lat, geom, wheelchair, modes, detail, sources, built_at)"
+                + " VALUES (?, ?, ?, ?, ?, ST_SRID(POINT(?, ?), 0), ?, 'wheelchair', ?, '[]', NOW())",
+                kind, sub, name, LON, lat, LON, lat, wc, name);
+    }
 }

@@ -53,6 +53,7 @@ public class AssistantTools {
         NEARBY.put("bell", "비상벨");
         NEARBY.put("subway", "지하철역");
         NEARBY.put("guard_house", "아동안전지킴이집");
+        NEARBY.put("elevator", "엘리베이터"); // 엘리베이터 육교 + 엘리베이터 있는 지하철 출구 (11-13)
     }
     static final Set<String> REPORT_TYPES = Set.of("steep", "construction", "curb", "broken", "obstacle",
             "accident", "other");
