@@ -24,6 +24,14 @@ public class FacilityRepository {
     private static final String COLUMNS = "id, kind, sub, name, address, lat, lon, cnt, wheelchair, modes, detail,"
             + " now_status, now_note";
 
+    /**
+     * 엘리베이터: 따로 있는 시설 종류가 아니라 엘리베이터 육교 + 엘리베이터 있는 지하철 출구 (11-13).
+     * map_layer 표의 footbridge:elevator, subway_entrance:elevator 와 같은 조건
+     */
+    public static final String ELEVATOR = "elevator";
+    static final String ELEVATOR_WHERE = "((kind = 'footbridge' AND sub LIKE '%승강기%')"
+            + " OR (kind = 'subway_entrance' AND wheelchair = 1))";
+
     private final JdbcTemplate jdbc;
 
     public FacilityRepository(JdbcTemplate jdbc) {
@@ -39,12 +47,14 @@ public class FacilityRepository {
         double dLat = radiusM / M_PER_DEG;
         double dLon = radiusM / (M_PER_DEG * Math.cos(Math.toRadians(lat)));
         String box = polygon(lon - dLon, lat - dLat, lon + dLon, lat + dLat);
+        boolean elevator = ELEVATOR.equals(kind);
         String sql = "SELECT " + COLUMNS + ", ST_Distance_Sphere(geom, ST_SRID(POINT(?, ?), 0)) AS dist"
-                + " FROM poi_status WHERE MBRContains(ST_GeomFromText(?, 0), geom) AND kind = ?"
+                + " FROM poi_status WHERE MBRContains(ST_GeomFromText(?, 0), geom) AND "
+                + (elevator ? ELEVATOR_WHERE : "kind = ?")
                 + (wheelchairOnly ? " AND wheelchair = 1" : "")
                 + " HAVING dist <= ? ORDER BY dist LIMIT 200";
-        return jdbc.query(sql, (rs, n) -> row(rs, (int) Math.round(rs.getDouble("dist"))),
-                lon, lat, box, kind, radiusM);
+        Object[] args = elevator ? new Object[] {lon, lat, box, radiusM} : new Object[] {lon, lat, box, kind, radiusM};
+        return jdbc.query(sql, (rs, n) -> row(rs, (int) Math.round(rs.getDouble("dist"))), args);
     }
 
     /** 지도 범위 안의 여러 종류 시설. 가운데에 가까운 순으로 limit개까지 */
@@ -53,15 +63,23 @@ public class FacilityRepository {
         if (kinds.isEmpty()) {
             return List.of();
         }
-        String in = String.join(",", Collections.nCopies(kinds.size(), "?"));
+        List<String> plain = kinds.stream().filter(k -> !ELEVATOR.equals(k)).toList();
+        boolean elevator = plain.size() < kinds.size();
+        List<String> where = new ArrayList<>();
+        if (!plain.isEmpty()) {
+            where.add("kind IN (" + String.join(",", Collections.nCopies(plain.size(), "?")) + ")");
+        }
+        if (elevator) {
+            where.add(ELEVATOR_WHERE);
+        }
         List<Object> args = new ArrayList<>();
         args.add(polygon(west, south, east, north));
-        args.addAll(kinds);
+        args.addAll(plain);
         args.add((west + east) / 2);
         args.add((south + north) / 2);
         args.add(limit);
         String sql = "SELECT " + COLUMNS + " FROM poi_status WHERE MBRContains(ST_GeomFromText(?, 0), geom)"
-                + " AND kind IN (" + in + ")"
+                + " AND (" + String.join(" OR ", where) + ")"
                 + " ORDER BY ST_Distance_Sphere(geom, ST_SRID(POINT(?, ?), 0)) LIMIT ?";
         return jdbc.query(sql, (rs, n) -> row(rs, null), args.toArray());
     }

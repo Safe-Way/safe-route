@@ -395,12 +395,12 @@ final class Sentences {
         if (t.spot == null) {
             return t.spotMessage == null ? "가까운 곳을 찾지 못했어요." : t.spotMessage;
         }
-        StringBuilder sb = new StringBuilder("가장 가까운 ").append(Josa.eun(t.spotKindName)).append(" ")
-                .append(t.spot.name());
+        StringBuilder sb = new StringBuilder("가장 가까운 ").append(Josa.eun(t.spotKindName)).append(" ");
         if (t.spot.distanceM() != null) {
-            sb.append("으로 ").append(t.spot.distanceM()).append("m예요.");
+            // "○○ 5번 출구로 180m예요" (받침 따라 로·으로, 11-13)
+            sb.append(Josa.ro(t.spot.name())).append(" ").append(t.spot.distanceM()).append("m예요.");
         } else {
-            sb.append("이에요.");
+            sb.append(t.spot.name()).append("이에요.");
         }
         if ("이용 가능".equals(t.spot.status())) {
             sb.append(" 지금 열려 있어요.");
