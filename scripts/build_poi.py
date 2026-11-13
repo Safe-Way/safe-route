@@ -307,11 +307,18 @@ def build():
                        open_hours=hours, open_from=frm, open_to=to, open_days=days, phone=first(g, "phone"), modes="senior,wheelchair" if dis else "senior",
                        detail=" · ".join(parts)))
 
-    for g in cluster(rows("footbridge", ["t.kind", "t.name", "t.address", "t.wheelchair_ok"]), MERGE_R):
+    for g in cluster(rows("footbridge", ["t.kind", "t.name", "t.address", "t.wheelchair_ok",
+                                         "t.attrs ->> '$.etcFcltyType' AS etc"]), MERGE_R):
         p = max(g, key=lambda x: int(x.get("wheelchair_ok") or 0))
         ok = int(p.get("wheelchair_ok") or 0)
-        way = p.get("kind") if p.get("kind") not in (None, "없음") else "계단만 있음"
-        out.append(poi("footbridge", g, p.get("name") or "육교", sub=p.get("kind"), wheelchair=ok,
+        # 엘리베이터를 '장애인 편의시설'(kind) 대신 '기타 시설'(etcFcltyType)에 적은 육교가 있다
+        # (광산구 아름1·아름2·수완·솔빛: kind 없음, 기타 시설 엘리베이터 2대). wheelchair_ok는 두 칸을 다 보므로
+        # 종류도 두 칸을 다 보고, 엘리베이터는 남구 원본 말과 같은 '승강기'로 적는다 (2026-11-13, 민수 앱 #166)
+        kind = p.get("kind") if p.get("kind") not in (None, "없음") else None
+        if not kind and re.search(r"엘리베이터|승강기|E/V", p.get("etc") or ""):
+            kind = "승강기"
+        way = {None: "계단만 있음", "승강기": "엘리베이터"}.get(kind, kind)
+        out.append(poi("footbridge", g, p.get("name") or "육교", sub=kind or p.get("kind"), wheelchair=ok,
                        modes="wheelchair", detail=f"육교 · {way} · " + ("휠체어 통과 가능" if ok else "휠체어 통과 못 함")))
 
     for g in cluster(rows("crosswalk", ["t.address", "t.curb_lowered", "t.sound_signal", "t.traffic_light"]), MERGE_R):
