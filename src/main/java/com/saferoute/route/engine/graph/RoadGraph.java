@@ -277,12 +277,12 @@ public final class RoadGraph {
         nodes.put(node, at);
         graph.addVertex(node);
         graph.removeEdge(e);
-        // 저장된 길이를 선 길이 비율로 나눈다 (성질·인도 쪽·이름·차로·일방·폭은 그대로)
+        // 저장된 길이를 선 길이 비율로 나눈다 (성질·인도 쪽·이름·차로·일방·폭·인도 폭은 그대로)
         double share = total == 0 ? 0.5 : headM / total;
         graph.addEdge(e.from(), node, new RoadEdge(nextVirtual--, e.from(), node, e.lengthM() * share, e.highway(),
-                head, e.penalty(), e.sidewalk(), e.name(), e.lanes(), e.oneway(), e.widthM()));
+                head, e.penalty(), e.sidewalk(), e.name(), e.lanes(), e.oneway(), e.widthM(), e.sidewalkWidthM()));
         graph.addEdge(node, e.to(), new RoadEdge(nextVirtual--, node, e.to(), e.lengthM() * (1 - share), e.highway(),
-                tail, e.penalty(), e.sidewalk(), e.name(), e.lanes(), e.oneway(), e.widthM()));
+                tail, e.penalty(), e.sidewalk(), e.name(), e.lanes(), e.oneway(), e.widthM(), e.sidewalkWidthM()));
         return node;
     }
 

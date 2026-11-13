@@ -103,7 +103,7 @@ public final class UndergroundLinks {
         return best;
     }
 
-    /** 길 e의 조각: a(선분 fromSeg 위) → 원래 선의 점 fromSeg..toSeg-1 → b(선분 toSeg 위). 성질·인도 쪽·이름·차로·일방·폭은 그대로 */
+    /** 길 e의 조각: a(선분 fromSeg 위) → 원래 선의 점 fromSeg..toSeg-1 → b(선분 toSeg 위). 성질·인도 쪽·이름·차로·일방·폭·인도 폭은 그대로 */
     private static RoadEdge piece(long id, RoadEdge e, long from, long to, double[] a, int fromSeg, int toSeg, double[] b,
             double share) {
         List<double[]> line = new ArrayList<>();
@@ -111,6 +111,6 @@ public final class UndergroundLinks {
         line.addAll(e.geometry().subList(fromSeg, toSeg));
         line.add(b);
         return new RoadEdge(id, from, to, e.lengthM() * share, e.highway(), line, e.penalty(), e.sidewalk(), e.name(),
-                e.lanes(), e.oneway(), e.widthM());
+                e.lanes(), e.oneway(), e.widthM(), e.sidewalkWidthM());
     }
 }

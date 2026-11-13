@@ -217,11 +217,13 @@ public class RouteService {
         // 길안내 중 다시 찾기면 휠체어 출발점도 50m까지만 다시 붙인다 (2026-11-13)
         boolean reroute = Boolean.TRUE.equals(req.reroute());
         RoadGraph[] used = new RoadGraph[1]; // 경로를 찾은 도로망. 건너는 곳(SideChanges)을 이 도로망에서 찾는다
-        java.util.function.Function<Boolean, Attempt> search = noTrail -> {
+        // 휠체어 인도 없는 골목 (2026-11-13): 늘 빼되, 빼면 넓힌 범위·다시 붙이기까지 해도 길이 없을 때만 넣고 알린다
+        boolean alleyFallback = profile.exclude().contains(Penalty.NO_SIDEWALK_ALLEY);
+        java.util.function.BiFunction<Boolean, Boolean, Attempt> search = (noTrail, alleysOk) -> {
             used[0] = roads.load(BBox.around(points, props.searchMarginM()), underground);
             try {
                 return attempt(used[0], underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed,
-                        reports, noTrail, reroute);
+                        reports, noTrail, alleysOk, reroute);
             } catch (RouteException e) {
                 // 넓혀 다시 찾는 것은 길을 못 찾았을 때만 (이은 길이 빈 SAME_POINT 안전망은 넓혀도 같다)
                 if (e.error() != RouteError.NO_ROUTE || props.retryMarginM() <= props.searchMarginM()) {
@@ -230,19 +232,22 @@ public class RouteService {
                 // 강·철도·큰 도로를 범위 밖 다리로 돌아가야 하는 길. 넓혀 한 번 더 찾는다 (우회 한도 등 규칙은 같다)
                 used[0] = roads.load(BBox.around(points, props.retryMarginM()), underground);
                 return attempt(used[0], underground, points, stops, cond, profile, wideDetour, phase, now, avoided, costed,
-                        reports, noTrail, reroute);
+                        reports, noTrail, alleysOk, reroute);
             }
         };
         Attempt a;
+        boolean usedAlleys = false;
         try {
-            a = search.apply(avoidTrail);
+            a = search.apply(avoidTrail, false);
         } catch (RouteException e) {
-            if (!avoidTrail || e.error() != RouteError.NO_ROUTE) {
+            if (!avoidTrail && !alleyFallback || e.error() != RouteError.NO_ROUTE) {
                 throw e;
             }
-            // 붙일 때 길을 나눠 도로망이 바뀌므로 새로 읽는다 (메모리에서 잘라 오는 것이라 DB를 다시 읽지 않음)
+            // 붙일 때 길을 나눠 도로망이 바뀌므로 새로 읽는다 (메모리에서 잘라 오는 것이라 DB를 다시 읽지 않음).
+            // 등산로를 피하던 모드는 등산로를, 휠체어는 인도 없는 골목을 넣는다 (휠체어는 등산로를 늘 빼서 둘이 겹치지 않음)
             // shortcut: 다시 찾을 때는 모든 등산로를 비용 없이 쓴다, 필요한 만큼만 쓰게 하려면 등산로에 비용을 더하기
-            a = search.apply(false);
+            a = search.apply(false, alleyFallback);
+            usedAlleys = alleyFallback;
         }
         java.util.Map<RoadEvent, Long> reportEdges = a.reportEdges();
         RouteResult result = withStops(assembler.assemble(cond, profile, phase, a.found(), start, end, a.snapM(),
@@ -251,6 +256,17 @@ public class RouteService {
                 a, start, stops);
         if (profile.avoidUnpaved()) {
             result = withNotes(result, surfaceNotes(a.found(), profile));
+        }
+        // 좁은 인도를 피하지 못하면 알린다 (휠체어, 2026-11-13)
+        double narrowM = profile.avoidNarrowSidewalk() ? a.found().safe().lengthM(RouteFinder::isNarrowSidewalk) : 0;
+        if (narrowM > 0) {
+            result = withNotes(result, List.of(RouteResult.Note.warn("narrow", String.format(java.util.Locale.ROOT,
+                    "폭 %.1fm 안 되는 좁은 인도 약 %dm를 지납니다", props.narrowSidewalkM(), Math.round(narrowM)))));
+        }
+        double noSidewalkM = usedAlleys ? a.found().safe().lengthM(RouteFinder::isNoSidewalkAlley) : 0;
+        if (noSidewalkM > 0) {
+            result = withNotes(result, List.of(RouteResult.Note.warn("no_sidewalk_alley",
+                    "인도 없는 골목 약 %dm를 지납니다".formatted(Math.round(noSidewalkM)))));
         }
         double trailM = avoidTrail ? a.found().safe().lengthM(RouteFinder::isTrail) : 0;
         if (trailM > 0) {
@@ -311,8 +327,12 @@ public class RouteService {
      * 신고를 행사 둘레와 한 묶음으로 두면 하나라도 못 피할 때 전부 안 피한다
      */
     private static List<java.util.function.Predicate<RoadEdge>> asides(RoadGraph graph, List<RoadEvent> events,
-            java.util.Map<RoadEvent, Long> reportEdges) {
+            java.util.Map<RoadEvent, Long> reportEdges, RouteProperties.Profile profile) {
         List<java.util.function.Predicate<RoadEdge>> out = new ArrayList<>();
+        // 좁은 인도 (휠체어, 2026-11-13): 비포장과 따로 피한다. 비포장을 못 피해도 좁은 인도만이라도 한도 안이면 피한다
+        if (profile.avoidNarrowSidewalk()) {
+            out.add(RouteFinder::isNarrowSidewalk);
+        }
         Set<Long> zone = RoadEvents.zone(graph, events.stream().filter(e -> !RoadReport.KIND.equals(e.kind())).toList());
         if (!zone.isEmpty()) {
             out.add(e -> zone.contains(e.id()));
@@ -353,16 +373,14 @@ public class RouteService {
     /**
      * 이 도로망에서 경로를 찾는다. 길에 붙이지 못하거나 이어지지 않으면 NO_ROUTE (들를 곳이 있으면 막힌 구간의 도착점 이름으로).
      * points: 출발, 들를 곳, 도착. 모든 점을 같은 도로망에 먼저 붙인 뒤 구간마다 찾는다: 붙일 때 길을 나눈 임시 노드가
-     * 다른 구간과 겹치지 않게. underground: 지하 길을 넣은 도로망인지. noTrail: 등산로를 빼고 찾는지.
+     * 다른 구간과 겹치지 않게. underground: 지하 길을 넣은 도로망인지. noTrail: 등산로를 빼고 찾는지. alleysOk: 휠체어도 인도 없는 골목을 지나는지 (빼고는 길이 없을 때).
      * 먼저 모드 기준(profile.passable)대로 붙여 찾고, 못 찾으면 등산로를 뺀 길로 이어진 곳에 다시 붙인다 (아래 휠체어와 같은 방법).
      * reroute: 길안내 중 다시 찾기. 휠체어 출발·도착점도 넓힌 한도(100m) 대신 50m로 다시 붙인다 (2026-11-13)
      */
     private Attempt attempt(RoadGraph graph, boolean underground, List<double[]> points, List<Place> stops,
             Conditions cond, RouteProperties.Profile profile, double wideDetour, RouteProperties.Phase phase,
             ZonedDateTime now, List<RoadEvent> avoided, List<RoadEvent> costed, List<RoadEvent> reports,
-            boolean noTrail, boolean reroute) {
-        java.util.function.Predicate<RoadEdge> passable = noTrail ? e -> profile.passable(e) && !RouteFinder.isTrail(e)
-                : profile::passable;
+            boolean noTrail, boolean alleysOk, boolean reroute) {
         // 지하를 넣었으면 출발·도착은 지상 길(출구 포함)에만 붙인다 (2026-11-09). 요청 좌표는 위도·경도뿐이라 지상·지하를 모르는데,
         // 앱 사용자는 대개 지상(GPS)에 있고, 지하 점에 붙이면 내려가는 출구(계단·엘리베이터)가 경로에서 빠진다
         // (휠체어가 계단 출구로 내려가게 될 수 있음). 출구 점은 연결 길로 지상과 이어져 있어 출구에서 출발·도착하면 그대로 출구에 붙는다.
@@ -382,6 +400,14 @@ public class RouteService {
                 throw noRoute(stops, k);
             }
         }
+        // 휠체어 출발·도착·들를 곳이 인도 없는 골목 안이면 거기서 나가는 그 골목만 지난다 (2026-11-13). 다른 그런 골목은 계속 뺀다
+        Set<Long> endAlleys = endAlleys(graph, snaps, profile, props.endAlleyM());
+        java.util.function.Predicate<RoadEdge> base = e -> profile.passable(e, alleysOk) && !(noTrail && RouteFinder.isTrail(e));
+        java.util.function.Predicate<RoadEdge> passable = e -> base.test(e) || endAlleys.contains(e.id());
+        // 인도 없는 골목을 넣어 다시 찾을 때는 꼭 필요한 만큼만 지나게 그 골목 1m를 다른 길 factor m로 본다 (2026-11-13)
+        double factor = props.noSidewalkAlleyFallbackFactor();
+        ToDoubleFunction<RoadEdge> cost = alleysOk
+                ? e -> RouteFinder.isNoSidewalkAlley(e) ? e.lengthM() * factor : e.lengthM() : RoadEdge::lengthM;
         Nearby nearby = nearby(graph, phase, now);
         // 커버율은 한 번만 계산해 경로 고르기와 어두운 구간 안내(FR-31)에 같이 쓴다
         Coverage cov = scorer.coverage(graph, phase, cond.night(), nearby);
@@ -392,7 +418,8 @@ public class RouteService {
         ToDoubleFunction<RoadEdge> extra = withReports(score, reachable(graph, costed, snaps), edges, profile);
         RouteException failed;
         try {
-            return joined(legs(graph, snaps, extra, score, profile, passable, wideDetour, asides(graph, av, edges), cov, stops), snaps,
+            return joined(legs(graph, snaps, extra, score, profile, passable, cost, wideDetour, asides(graph, av, edges, profile), cov,
+                    stops), snaps,
                     nearby, List.of(), cov, av, edges, profile.avoid());
         } catch (RouteException e) {
             if (profile.exclude().isEmpty() && !noTrail) {
@@ -412,7 +439,8 @@ public class RouteService {
             double extraM = end && stairsExcluded && !reroute ? props.passableSnapOriginExtraM()
                     : props.passableSnapExtraM();
             try {
-                placed.add(place(graph, points.get(k), snaps.get(k), part, passable, extraM));
+                // 연 골목에는 다시 붙이지 않는다: 붙이며 길을 나누면 새 번호라 endAlleys에서 빠진다
+                placed.add(place(graph, points.get(k), snaps.get(k), part, base, extraM));
             } catch (RouteException e) {
                 throw noRoute(stops, k);
             }
@@ -433,7 +461,7 @@ public class RouteService {
             placeNote(which, placed.get(k), way).ifPresent(notes::add);
         }
         return joined(legs(graph, moved, withReports(score, reachable(graph, costed, moved), movedEdges, profile), score,
-                profile, passable, wideDetour, asides(graph, movedAv, movedEdges), cov, stops), moved,
+                profile, passable, cost, wideDetour, asides(graph, movedAv, movedEdges, profile), cov, stops), moved,
                 nearby, notes, cov, movedAv, movedEdges, profile.avoid());
     }
 
@@ -448,11 +476,12 @@ public class RouteService {
     /** 붙인 점 사이 구간마다 최단·안전 경로를 찾는다. 우회 한도는 구간마다 따로 지킨다 */
     private List<RouteFinder.Found> legs(RoadGraph graph, List<RoadGraph.Snap> at, ToDoubleFunction<RoadEdge> extra,
             ToDoubleFunction<RoadEdge> score, RouteProperties.Profile profile, java.util.function.Predicate<RoadEdge> passable,
-            double wideDetour, List<java.util.function.Predicate<RoadEdge>> asides, Coverage cov, List<Place> stops) {
+            ToDoubleFunction<RoadEdge> cost, double wideDetour, List<java.util.function.Predicate<RoadEdge>> asides, Coverage cov,
+            List<Place> stops) {
         List<RouteFinder.Found> out = new ArrayList<>();
         for (int k = 1; k < at.size(); k++) {
             try {
-                out.add(find(graph, at.get(k - 1).node(), at.get(k).node(), extra, score, profile, passable, wideDetour,
+                out.add(find(graph, at.get(k - 1).node(), at.get(k).node(), extra, score, profile, passable, cost, wideDetour,
                         props.rain().walkMore(), asides, cov));
             } catch (RouteException e) {
                 throw noRoute(stops, k);
@@ -520,7 +549,8 @@ public class RouteService {
             }
             return new RouteResult.Route(rt.kind(), rt.distanceM(), rt.durationMin(), rt.geometry(), rt.counts(),
                     rt.covered(), rt.sidewalks(), rt.dark(), rt.turns(), rt.crossings(), rt.stairs(), rt.events(),
-                    rt.unpavedM(), rt.surfaceUnknownM(), marks, rt.crossAt(), rt.alleys(), rt.alleyM());
+                    rt.unpavedM(), rt.surfaceUnknownM(), marks, rt.crossAt(), rt.alleys(), rt.alleyM(), rt.narrows(),
+                    rt.narrowM());
         }).toList();
         return new RouteResult(r.conditions(), routes, r.explanation(), r.facilities(), r.dataQuality());
     }
@@ -532,14 +562,15 @@ public class RouteService {
      */
     private static RouteFinder.Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
             ToDoubleFunction<RoadEdge> score, RouteProperties.Profile profile, java.util.function.Predicate<RoadEdge> passable,
-            double wideDetour, double walkMore, List<java.util.function.Predicate<RoadEdge>> asides, Coverage cov) {
-        RouteFinder.Found narrow = findOnce(graph, from, to, extra, score, profile.maxDetour(), profile, passable, asides);
+            ToDoubleFunction<RoadEdge> cost, double wideDetour, double walkMore,
+            List<java.util.function.Predicate<RoadEdge>> asides, Coverage cov) {
+        RouteFinder.Found narrow = findOnce(graph, from, to, extra, score, profile.maxDetour(), profile, passable, cost, asides);
         // 범위에 지붕 길이 하나도 없으면 지붕 이득도 없어 결과가 같다. 광주는 걷는 지붕 길이 2.8km뿐이라 대부분의 비 요청이 여기서 끝난다
         if (wideDetour <= profile.maxDetour() || graph.graph().edgeSet().stream()
                 .noneMatch(e -> e.penalty().get(Penalty.COVERED) >= 1 || RouteFinder.isUnderground(e))) {
             return narrow;
         }
-        RouteFinder.Found wide = findOnce(graph, from, to, extra, score, wideDetour, profile, passable, asides);
+        RouteFinder.Found wide = findOnce(graph, from, to, extra, score, wideDetour, profile, passable, cost, asides);
         // 비 오는 날 지붕 없는 1m = 지붕 아래 (1 + r)m (F1과 같은 교환비). 더 걷는 거리만큼의 젖는 부담을 지붕 이득이 갚을 때만
         // 넓힌 한도를 쓴다: r × 지붕 이득 ≥ (1 + r) × 더 걷는 길이. 예전 1m 조건은 지붕 10m 때문에 비를 맞으며 380m를 더 걷는 길도 골랐다
         double gain = roofM(wide.safe(), cov) - roofM(narrow.safe(), cov);
@@ -555,11 +586,12 @@ public class RouteService {
      */
     private static RouteFinder.Found findOnce(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
             ToDoubleFunction<RoadEdge> score, double maxDetour, RouteProperties.Profile profile,
-            java.util.function.Predicate<RoadEdge> passable, List<java.util.function.Predicate<RoadEdge>> asides) {
-        RouteFinder.Found f = RouteFinder.find(graph, from, to, extra, maxDetour, passable, profile.avoid(), asides);
+            java.util.function.Predicate<RoadEdge> passable, ToDoubleFunction<RoadEdge> cost,
+            List<java.util.function.Predicate<RoadEdge>> asides) {
+        RouteFinder.Found f = RouteFinder.find(graph, from, to, extra, maxDetour, passable, profile.avoid(), asides, cost);
         // withReports는 비용만 신고가 없으면 score를 그대로 돌려준다
         return f.detourCapped() && extra != score
-                ? RouteFinder.find(graph, from, to, score, maxDetour, passable, profile.avoid(), asides) : f;
+                ? RouteFinder.find(graph, from, to, score, maxDetour, passable, profile.avoid(), asides, cost) : f;
     }
 
     /** 경로가 지붕 아래(지하 포함)를 걷는 길이(m) */
@@ -683,12 +715,56 @@ public class RouteService {
 
     /** 가장 가까운 길 노드. 너무 멀면 길 위가 아니라고 본다. surface가 있으면(지하를 넣은 도로망) 그 안 지상 길에만 붙인다 */
     private RoadGraph.Snap snap(RoadGraph graph, double[] p, RouteProperties.Profile profile, Set<Long> surface) {
-        RoadGraph.Snap s = surface == null ? graph.nearest(p[0], p[1], profile::passable)
-                : graph.nearest(p[0], p[1], surface, e -> profile.passable(e) && !RouteFinder.isUnderground(e));
+        // 인도 없는 골목에도 붙인다: 그 골목 안에서 출발·도착하면 골목을 따라 나간다 (endAlleys, 2026-11-13)
+        RoadGraph.Snap s = surface == null ? graph.nearest(p[0], p[1], e -> profile.passable(e, true))
+                : graph.nearest(p[0], p[1], surface, e -> profile.passable(e, true) && !RouteFinder.isUnderground(e));
         if (s == null || s.distanceM() > props.snapMaxM()) {
             throw new RouteException(RouteError.NO_ROUTE);
         }
+        // 붙인 곳이 인도 없는 골목뿐이면, 지날 수 있는 길이 그보다 passable-snap-extra-m(50m) 안으로만 멀면 그 길에 붙인다 (place와 같은 방법).
+        // 4번 출구처럼 골목과 큰 길이 비슷하게 가까우면 골목에 붙어 크게 돌았다 (2026-11-13)
+        Set<RoadEdge> at = graph.graph().edgesOf(s.node());
+        if (at.stream().anyMatch(RouteFinder::isNoSidewalkAlley) && at.stream().noneMatch(profile::passable)) {
+            java.util.function.Predicate<RoadEdge> base = e -> profile.passable(e)
+                    && !(surface != null && RouteFinder.isUnderground(e));
+            RoadGraph.Snap b = graph.nearest(p[0], p[1], graph.mainPart(base), base);
+            if (b != null && b.distanceM() - s.distanceM() <= props.passableSnapExtraM()) {
+                return b;
+            }
+        }
         return s;
+    }
+
+    /**
+     * 붙인 점이 휠체어가 빼는 인도 없는 골목 위면(그 노드에 지날 수 있는 길이 없으면), 거기서 그런 골목만 따라 maxM 안의 길 번호.
+     * 지날 수 있는 길에 닿은 노드(골목을 나가는 곳)에서는 더 가지 않는다. 다른 모드는 그런 골목이 없어 빈 집합
+     */
+    private static Set<Long> endAlleys(RoadGraph graph, List<RoadGraph.Snap> snaps, RouteProperties.Profile profile, double maxM) {
+        Set<Long> open = new java.util.HashSet<>();
+        for (RoadGraph.Snap s : snaps) {
+            java.util.Map<Long, Double> dist = new java.util.HashMap<>(java.util.Map.of(s.node(), 0.0));
+            java.util.Deque<Long> todo = new java.util.ArrayDeque<>(List.of(s.node()));
+            while (!todo.isEmpty()) {
+                long v = todo.poll();
+                Set<RoadEdge> around = graph.graph().edgesOf(v);
+                if (around.stream().anyMatch(profile::passable)) {
+                    continue;
+                }
+                for (RoadEdge e : around) {
+                    double d = dist.get(v) + e.lengthM();
+                    if (d > maxM || !profile.passable(e, true)) {
+                        continue;
+                    }
+                    open.add(e.id());
+                    long w = org.jgrapht.Graphs.getOppositeVertex(graph.graph(), e, v);
+                    if (d < dist.getOrDefault(w, Double.MAX_VALUE)) {
+                        dist.put(w, d);
+                        todo.add(w);
+                    }
+                }
+            }
+        }
+        return open;
     }
 
     /**

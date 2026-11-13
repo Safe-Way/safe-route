@@ -34,5 +34,15 @@ public enum Penalty {
      * 다른 모드는 보통 평지 보도로 보고, 휠체어는 쓰지 않는다(route.yml wheelchair exclude). 높낮이를 모르는 선이라
      * 높낮이가 다른 광장에서는 계단 양 끝을 곧게 잇는 선이 있다 (광주 44줄, 문화전당 광장 포함)
      */
-    PLAZA
+    PLAZA,
+    /**
+     * 인도가 없다고 확인된 골목: 골목급 차도(RouteFinder.ALLEY_ROADS)인데 sidewalk = no. 값으로 저장하지 않고 길 종류·인도 태그로 판단한다
+     * ({@link com.saferoute.route.engine.search.RouteFinder#isNoSidewalkAlley}). 휠체어 exclude (2026-11-13)
+     */
+    NO_SIDEWALK_ALLEY,
+    /**
+     * 좁은 인도: 국토지리정보원 보도 자료의 인도 폭(edge_sidewalk.width_m)이 route.yml narrow-sidewalk-m보다 좁으면 1.
+     * 휠체어 조건부 제외, 응답 narrows (2026-11-13)
+     */
+    NARROW_SIDEWALK
 }

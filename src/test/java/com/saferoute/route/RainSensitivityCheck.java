@@ -67,7 +67,7 @@ class RainSensitivityCheck {
         Map<String, String> env = TestSupport.readEnv();
         JdbcTemplate db = new JdbcTemplate(new SingleConnectionDataSource(env.get("DB_URL"), env.get("DB_USERNAME"),
                 env.get("DB_PASSWORD"), true));
-        MysqlRoadGraphSource roads = new MysqlRoadGraphSource(db);
+        MysqlRoadGraphSource roads = new MysqlRoadGraphSource(db, TestRoutes.props());
         MysqlPoiSource pois = new MysqlPoiSource(db);
         List<Pair> pairs = pairs(db, seed);
 

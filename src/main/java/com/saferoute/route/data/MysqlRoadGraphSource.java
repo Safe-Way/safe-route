@@ -29,11 +29,14 @@ import com.saferoute.route.engine.graph.UndergroundLinks;
  *   <li>육교: edge_stat.footbridge_ok = 0이면 휠체어로 못 지나는 육교. 모르면 지나갈 수 있다고 본다</li>
  *   <li>징검다리: tags.ford가 있으면(stepping_stones 등, no 제외) 휠체어로 못 건넌다 (2026-11-04)</li>
  *   <li>바닥 ({@link #classify}, 2026-11-04 결정): 재질(surface)이 있으면 그것으로, 없으면 길 종류로 정한다.
+ *       인도가 있는 차도는 인도 재질(tags sidewalk:surface, 없으면 보도 자료 material)이 걷는 바닥이다 (2026-11-13).
  *       비포장 값은 {@link #UNPAVED_SURFACES}. 다진 흙(compacted)은 휠체어로 대개 지날 수 있어 넣지 않는다.
  *       재질을 모르면 인도·골목·차도·일반 길은 포장, 농로는 tracktype grade1만 포장(grade2~5·없음은 비포장),
  *       산길은 등산 난이도(sac_scale)가 있으면 산행 길(휠체어 제외), 없으면 포장으로 보되 "확인 안 됨"</li>
  *   <li>인도 쪽 ({@link #sidewalk}): tags.sidewalk(both·left·right·no), 없으면 sidewalk:both·left·right.
- *       경로 응답의 안내용이고 비용에는 쓰지 않는다</li>
+ *       태그가 없으면 국토지리정보원 보도 자료(edge_sidewalk.side, A파트 적재)로 정한다. 단, route.yml sidewalk-data-min-edge-m(20m)보다
+ *       짧은 길은 그 자료를 통째로 쓰지 않는다(교차로 조각에 옆 길 인도가 잡힘). 인도 쪽으로 골목길(isAlley)·휠체어 인도 없는 골목 제외가 정해진다
+ *       (2026-11-13). 그 자료로 정한 인도의 폭(width_m)이 narrow-sidewalk-m보다 좁으면 좁은 인도({@link Penalty#NARROW_SIDEWALK})</li>
  *   <li>차로 수·일방통행·폭 ({@link #lanes}, {@link #oneway}, {@link #widthM}, 2026-11-11): tags.lanes·oneway·width.
  *       앱이 경로 선을 인도 쪽으로 옮겨 그리는 거리 계산용이고 비용에는 쓰지 않는다</li>
  *   <li>지붕: road_edge.covered = 1이면 지붕 있는 길 (비 오는 날 기준, 2026-11-09)</li>
@@ -62,6 +65,7 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(MysqlRoadGraphSource.class);
 
     private final JdbcTemplate jdbc;
+    private final com.saferoute.route.RouteProperties props;
     /** 광주 전체 길. 처음 쓸 때 한 번 읽는다 (2026-11-09, 요청마다 DB에서 2만 개씩 읽던 것을 바꿈) */
     private volatile Network network;
 
@@ -78,8 +82,9 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             List<double[]> crosswalks) {
     }
 
-    public MysqlRoadGraphSource(JdbcTemplate jdbc) {
+    public MysqlRoadGraphSource(JdbcTemplate jdbc, com.saferoute.route.RouteProperties props) {
         this.jdbc = jdbc;
+        this.props = props;
     }
 
     /** 도로망을 넣은 지역(길 전체를 감싼 사각형) 안인지 */
@@ -152,11 +157,15 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     private Network read() {
         // 지하 길·광장 길 표에는 wheelchair_ramp(계단은 휠체어로 못 지남)·edge_stat(턱·육교 모름)이 없어 NULL로 읽는다.
         // 광장 길(plaza)은 지하 표시 0이라 늘 요청 도로망에 들어간다 (2026-11-10)
-        String sql = select("e", "e.id", "e.wheelchair_ramp", "0", "0", "s.curb", "s.footbridge_ok")
-                + " FROM road_edge e LEFT JOIN edge_stat s ON s.edge_id = e.id"
+        // 보도 자료(edge_sidewalk)는 road_edge에만 있다 (2026-11-13)
+        String sql = select("e", "e.id", "e.wheelchair_ramp", "0", "0", "s.curb", "s.footbridge_ok", "w")
+                + " FROM road_edge e LEFT JOIN edge_stat s ON s.edge_id = e.id LEFT JOIN edge_sidewalk w ON w.edge_id = e.id"
                 + " UNION ALL "
-                + select("x", "-(1000000000 + x.id)", "NULL", "x.reason = 'underground'", "x.reason = 'plaza'", "NULL", "NULL")
+                + select("x", "-(1000000000 + x.id)", "NULL", "x.reason = 'underground'", "x.reason = 'plaza'", "NULL", "NULL",
+                        null)
                 + " FROM road_edge_excluded x WHERE x.reason IN ('underground', 'plaza')";
+        double minEdgeM = props.sidewalkDataMinEdgeM();
+        double narrowM = props.narrowSidewalkM();
         List<RoadEdge> edges = jdbc.query(sql, (rs, i) -> {
             Map<Penalty, Double> values = new EnumMap<>(Penalty.class);
             if (rs.getInt("steps") == 1) {
@@ -183,8 +192,20 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             if ("crossing".equals(rs.getString("footway"))) {
                 values.put(Penalty.CROSSWALK, 1.0);
             }
+            // 짧은 길(교차로 조각)은 보도 자료를 통째로 쓰지 않는다. 인도 쪽은 태그가 먼저
+            boolean data = rs.getDouble("length_m") >= minEdgeM;
+            String tagged = sidewalk(rs.getString("sw"), rs.getString("sw_both"), rs.getString("sw_left"),
+                    rs.getString("sw_right"));
+            String fromData = tagged == null && data ? sidewalk(rs.getString("w_side"), null, null, null) : null;
+            String side = tagged != null ? tagged : fromData;
+            Double swWidth = fromData != null && !"no".equals(fromData) && rs.getObject("w_width") != null
+                    ? rs.getDouble("w_width") : null;
+            if (swWidth != null && swWidth < narrowM) {
+                values.put(Penalty.NARROW_SIDEWALK, 1.0);
+            }
+            String swSurface = rs.getString("sw_surface") != null ? rs.getString("sw_surface") : rs.getString("sw_both_surface");
             switch (classify(rs.getString("surface"), rs.getString("highway"), rs.getString("tracktype"),
-                    rs.getString("sac_scale"))) {
+                    rs.getString("sac_scale"), side, swSurface, data ? rs.getString("w_material") : null)) {
                 case UNPAVED -> values.put(Penalty.UNPAVED, 1.0);
                 case TRAIL -> values.put(Penalty.TRAIL, 1.0);
                 case UNCONFIRMED -> values.put(Penalty.SURFACE_UNKNOWN, 1.0);
@@ -194,9 +215,8 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
                     rs.getDouble("length_m"), rs.getString("highway"), parseLineString(rs.getString("wkt")),
                     new EdgePenalty(values,
                             rs.getObject("wheelchair_ramp") == null ? null : rs.getInt("wheelchair_ramp") == 1),
-                    sidewalk(rs.getString("sw"), rs.getString("sw_both"), rs.getString("sw_left"),
-                            rs.getString("sw_right")), rs.getString("name"), lanes(rs.getString("lanes")),
-                    oneway(rs.getString("oneway")), widthM(rs.getString("width")));
+                    side, rs.getString("name"), lanes(rs.getString("lanes")),
+                    oneway(rs.getString("oneway")), widthM(rs.getString("width")), swWidth);
         });
         List<UndergroundLinks.Exit> exits = jdbc.query("SELECT id, lon, lat,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(tags, '$.attach_edge')) AS attach_edge FROM road_node_excluded"
@@ -233,9 +253,9 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
                 crosswalks);
     }
 
-    /** 지상(road_edge)·지하(road_edge_excluded) 두 표에서 같은 칸을 같은 이름으로 읽는 SELECT 부분. t는 표 별칭 */
+    /** 지상(road_edge)·지하(road_edge_excluded) 두 표에서 같은 칸을 같은 이름으로 읽는 SELECT 부분. t는 표 별칭, w는 보도 자료 별칭(없으면 null) */
     private static String select(String t, String id, String ramp, String underground, String plaza, String curb,
-            String footbridge) {
+            String footbridge, String w) {
         return "SELECT " + id + " AS id, " + t + ".from_node, " + t + ".to_node, " + t + ".length_m, " + t + ".highway, "
                 + t + ".footway, " + t + ".steps, " + ramp + " AS wheelchair_ramp, " + t + ".surface, " + t + ".covered, "
                 + t + ".name, " + underground + " AS underground, " + plaza + " AS plaza,"
@@ -249,6 +269,10 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
                 + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.lanes')) AS lanes,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.oneway')) AS oneway,"
                 + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.width')) AS width,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.\"sidewalk:surface\"')) AS sw_surface,"
+                + " JSON_UNQUOTE(JSON_EXTRACT(" + t + ".tags, '$.\"sidewalk:both:surface\"')) AS sw_both_surface,"
+                + (w == null ? " NULL AS w_side, NULL AS w_width, NULL AS w_material,"
+                        : " " + w + ".side AS w_side, " + w + ".width_m AS w_width, " + w + ".material AS w_material,")
                 + " ST_AsText(" + t + ".geom) AS wkt, " + curb + " AS curb, " + footbridge + " AS footbridge_ok";
     }
 
@@ -266,14 +290,28 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
 
     /**
      * 바닥 구분. 산길·계단의 등산 난이도가 가장 먼저, 그다음 재질, 재질이 없으면 길 종류로 정한다.
+     * 인도가 있는(left·right·both) 차도는 사람이 인도로 걸어 인도 재질이 바닥이다: sidewalk:surface 태그, 없으면 보도 자료 재질
+     * (unpaved면 비포장, 그 밖 값은 포장). 둘 다 없으면 차도 재질로 (2026-11-13)
      *
      * @param tracktype 농로 단단함 (OSM tracktype: grade1 포장 ~ grade5 흙)
      * @param sacScale  산길 등산 난이도 (OSM sac_scale)
+     * @param side      정한 인도 쪽 (태그, 없으면 보도 자료). 모르면 null
+     * @param sidewalkSurface tags sidewalk:surface (없으면 sidewalk:both:surface). 없으면 null
+     * @param material  보도 자료 재질 (edge_sidewalk.material: block·asphalt·concrete·unpaved 등). 없으면 null
      */
-    static Surface classify(String surface, String highway, String tracktype, String sacScale) {
+    static Surface classify(String surface, String highway, String tracktype, String sacScale, String side,
+            String sidewalkSurface, String material) {
         // 등산로 위 계단도 등산로 (2026-11-12, 광주 14개 818m)
         if (("path".equals(highway) || "steps".equals(highway)) && sacScale != null && !sacScale.isBlank()) {
             return Surface.TRAIL;
+        }
+        boolean onSidewalk = side != null && !"no".equals(side) && highway != null
+                && !com.saferoute.route.engine.explain.Sidewalks.WALKWAYS.contains(highway);
+        if (onSidewalk && sidewalkSurface != null && !sidewalkSurface.isBlank()) {
+            return isUnpaved(sidewalkSurface) ? Surface.UNPAVED : Surface.PAVED;
+        }
+        if (onSidewalk && material != null && !material.isBlank()) {
+            return "unpaved".equals(material.trim()) ? Surface.UNPAVED : Surface.PAVED;
         }
         if (surface != null && !surface.isBlank()) {
             return isUnpaved(surface) ? Surface.UNPAVED : Surface.PAVED;

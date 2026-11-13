@@ -14,10 +14,17 @@ import java.util.Map;
  * @param lanes    차로 수 (tags.lanes). 모르면 null
  * @param oneway   차가 다니는 방향 (tags.oneway): 1 그린 방향, -1 반대 방향, 0 양방, 태그 없으면 null. 사람은 어느 쪽으로든 걷는다
  * @param widthM   차도 폭(m, tags.width). 모르면 null
+ * @param sidewalkWidthM 인도 폭(m, 국토지리정보원 보도 자료 edge_sidewalk.width_m). 인도 쪽을 그 자료로 정했고 no가 아닐 때만, 아니면 null (2026-11-13)
  */
 public record RoadEdge(long id, long from, long to, double lengthM, String highway,
         List<double[]> geometry, EdgePenalty penalty, String sidewalk, String name, Integer lanes, Integer oneway,
-        Double widthM) {
+        Double widthM, Double sidewalkWidthM) {
+
+    public RoadEdge(long id, long from, long to, double lengthM, String highway,
+            List<double[]> geometry, EdgePenalty penalty, String sidewalk, String name, Integer lanes, Integer oneway,
+            Double widthM) {
+        this(id, from, to, lengthM, highway, geometry, penalty, sidewalk, name, lanes, oneway, widthM, null);
+    }
 
     public RoadEdge(long id, long from, long to, double lengthM, String highway,
             List<double[]> geometry, EdgePenalty penalty, String sidewalk, String name) {

@@ -38,11 +38,13 @@ route:
   # mode 이름은 adult·child·senior·wheelchair로 통일한다 (2026-11-03 결정. 앱·요구사항 문서도 이 이름으로 맞춘다)
   #   max-detour     안전 경로가 최단 경로의 몇 배까지 돌 수 있는지. 0이면 한도 없음
   #   night-lead-min 일몰 몇 분 전부터 밤으로 볼지
-  #   exclude        이 성질이 확인된 길은 아예 뺀다 (stairs 경사로가 확인되지 않은 계단, curb 확인된 턱, footbridge 못 지나는 육교, trail 등산로, ford 징검다리)
+  #   exclude        이 성질이 확인된 길은 아예 뺀다 (stairs 경사로가 확인되지 않은 계단, curb 확인된 턱, footbridge 못 지나는 육교, trail 등산로, ford 징검다리,
+  #                  no-sidewalk-alley 인도가 없다고 확인된(sidewalk = no) 골목. 인도 태그가 없는 골목은 빼지 않고 골목길 기준 alley로 줄인다)
   #   등산로(trail, 등산 난이도 sac_scale이 붙은 산길·계단): exclude에 없는 모드(어른·어린이·노인)도 등산로 없는 길이 있으면 몇 배를 돌아도 그 길로 간다.
   #                  없을 때만 등산로로 가고 알린다. 요청 allowTrail = true면 피하지 않는다 (2026-11-12, 코드에 있음: RouteService)
   #   avoid-stairs   계단 조건부 제외: 계단 없는 길이 우회 한도 안에 있으면 계단 길을 뺀다
   #   avoid-unpaved  비포장 조건부 제외: 비포장 없는 길이 우회 한도 안에 있으면 비포장 길을 뺀다
+  #   avoid-narrow-sidewalk 좁은 인도(아래 narrow-sidewalk-m) 조건부 제외. 비포장과 따로, 비포장 피하기 다음에 (2026-11-13)
   #   avoid-events   둘레를 조건부로 피할 행사·돌발 종류 (road_event.kind). 계단·비포장 피하기 다음으로 지킨다.
   #                  목록에 없는 종류는 지날 때 알리기만 한다 (아래 events)
   #   day / night    그때의 기준. weights가 비면 가장 짧은 길
@@ -85,13 +87,17 @@ route:
       night:
         weights: { light: 5, help: 2, cctv: 1, alley: 0.5 }   # 공중화장실은 경로 계산에 넣지 않는다. 골목길은 CCTV 다음 (2026-11-12)
         help-m: 120
-    wheelchair:            # 휠체어: 계단·확인된 턱·못 지나는 육교를 뺀 길 중에서 고른다
+    wheelchair:            # 휠체어: 계단·확인된 턱·못 지나는 육교·인도 없는 골목을 뺀 길 중에서 고른다
       max-detour: 1.2      # 지날 수 있는 길 중 최단의 1.2배까지 (2026-11-04 결정. 이동이 힘들어 노인과 같은 값)
       walk-speed-m-per-min: 50
       night-lead-min: 0
-      exclude: [stairs, curb, footbridge, trail, ford, plaza]   # trail 등산로(allowTrail이어도 뺌), ford 징검다리 (2026-11-04)
+      exclude: [stairs, curb, footbridge, trail, ford, plaza, no-sidewalk-alley]   # trail 등산로(allowTrail이어도 뺌), ford 징검다리 (2026-11-04)
+      # no-sidewalk-alley 인도가 없다고 확인된 골목: 몇 배를 돌아도 안 쓴다(1.2배 넘으면 골목으로 가던 것도). 빼면 길이 아예 없을 때만 넣고 주의를 붙인다.
+      # 출발·도착·들를 곳이 그 골목 안이면
+      # 거기서 나가는 골목만 end-alley-m까지 지난다. 국토지리정보원 보도 자료를 넣으면 보도 없는 골목이 no가 된다 (2026-11-13)
       # plaza 보행자 광장 가로지르기 길(A파트가 입구끼리 그은 곧은 선): 높낮이를 몰라 계단을 건너뛰는 선이 있어 휠체어는 안 씀 (2026-11-10)
       avoid-unpaved: true  # 비포장 조건부 제외: 비포장 없는 길이 1.2배 안이면 그 길로, 아니면 비포장 길 + 알림 (2026-11-04)
+      avoid-narrow-sidewalk: true  # 좁은 인도도 같은 방법: 1.2배 안에 없으면 지나고 "좁은 인도 약 ○m" 주의 (2026-11-13)
       avoid-events: [통제, 사고, 재난, 공사, 행사]
       day:                 # 낮: 큰 길을 먼저(골목길 기준만). 비포장을 피해 다른 길을 고르면 그 이유를 note로 말한다
         weights: { alley: 0.5 }                   # 골목길(인도 없는 골목급 차도)을 피해 큰 길로, 1.2배 안에서만. 0.1~5 시험해 0.5 (2026-11-12, docs 2장)
@@ -124,6 +130,15 @@ route:
   # 휠체어 출발·도착점만 이 값까지 붙인다. 건물 안에서 출발·도착하면(유스퀘어: 가장 가까운 길은 계단 2m, 이어진 길은 84m) 50m로는 못 찾는다.
   # 이미 그 안에 있거나 갈 곳이면 휠체어로 드나드는 길이 있다고 본다. 들를 곳·등산로 피하기와 길안내 중 다시 찾기(reroute)는 50m (2026-11-13)
   passable-snap-origin-extra-m: 100
+  # 휠체어 출발·도착·들를 곳이 인도 없는 골목(위 no-sidewalk-alley) 안이면, 그 골목을 따라 이 길이까지는 지나 큰 길로 나간다 (2026-11-13)
+  end-alley-m: 200
+  # 길이 없을 때만 지나는 인도 없는 골목은 꼭 필요한 만큼만: 그때 그 골목 1m를 다른 길 10m로 본다 (2026-11-13)
+  # 10·20·50·100 비교해 10 (60쌍 중 막힌 6쌍: 골목 대부분 줄고 최대 최단의 1.36배. 50·100은 같고 1.43배까지 돎)
+  no-sidewalk-alley-fallback-factor: 10
+  # 국토지리정보원 보도 자료(edge_sidewalk, A파트 적재): OSM 인도 태그가 없는 길의 인도 쪽·폭·재질. 이보다 짧은 길은 교차로 조각이라 안 쓴다 (2026-11-13)
+  sidewalk-data-min-edge-m: 20
+  # 보도 자료 인도 폭이 이보다 좁으면 좁은 인도. 데이터 폭은 인도 전체 폭이라 법 유효폭 1.2m보다 넉넉히 (2026-11-13)
+  narrow-sidewalk-m: 1.5
   # 출발·도착이 이보다 가까우면 SAME_POINT, 직선거리가 이보다 멀면 TOO_FAR (8.3)
   same-point-m: 50
   too-far-m: 5000

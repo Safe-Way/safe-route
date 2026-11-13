@@ -23,6 +23,10 @@ import com.saferoute.route.engine.search.RouteFinder;
  * @param retryMarginM  그 범위에서 경로를 못 찾으면 이만큼 넓혀 한 번 더 찾는다 (강·철도·큰 도로를 돌아가는 길)
  * @param passableSnapExtraM 휠체어가 지날 수 있는 길에 붙일 때, 모든 길 기준보다 이만큼 넘게 멀어지면 붙이지 않는다
  * @param passableSnapOriginExtraM 휠체어 출발·도착점만 쓰는 위 한도 (건물 안 출발·도착). 길안내 중 다시 찾기(reroute)는 위 값 (2026-11-13)
+ * @param noSidewalkAlleyFallbackFactor 휠체어가 인도 없는 골목을 넣어 다시 찾을 때 그 골목 1m를 다른 길 몇 m로 볼지 (2026-11-13)
+ * @param sidewalkDataMinEdgeM 이보다 짧은 길은 국토지리정보원 보도 자료(edge_sidewalk)를 쓰지 않는다. 교차로 조각은 옆 길 인도가 잡힌다 (2026-11-13)
+ * @param narrowSidewalkM 인도 폭(보도 자료)이 이보다 좁으면 좁은 인도. 휠체어 조건부 제외, 응답 narrows (2026-11-13)
+ * @param endAlleyM 휠체어 출발·도착·들를 곳이 인도 없는 골목(휠체어 제외) 안이면, 거기서 그 골목을 따라 이 길이까지는 지난다 (2026-11-13)
  * @param darkStretch 걷는 동안 "앞으로 ○m는 조명이 적습니다" 안내에 쓸 어두운 구간 기준 (FR-31)
  * @param turn        걷는 동안 "80m 앞 왼쪽" 안내에 쓸 꺾는 곳 기준 (FR-34)
  * @param events      길 위의 행사·돌발상황을 다루는 기준 (2026-11-06)
@@ -40,6 +44,10 @@ public record RouteProperties(
         double snapMaxM,
         double passableSnapExtraM,
         double passableSnapOriginExtraM,
+        double endAlleyM,
+        double noSidewalkAlleyFallbackFactor,
+        double sidewalkDataMinEdgeM,
+        double narrowSidewalkM,
         double samePointM,
         double tooFarM,
         DarkStretch darkStretch,
@@ -204,14 +212,16 @@ public record RouteProperties(
      *
      * @param maxDetour    안전 경로가 최단 경로(지날 수 있는 길 중)의 몇 배까지 돌 수 있는지. 0이면 한도 없음
      * @param nightLeadMin 일몰 몇 분 전부터 밤으로 볼지 (어린이 60)
-     * @param exclude      이 성질이 1(확실히 못 지남)인 길은 아예 뺀다 (휠체어: 계단, 확인된 턱, 못 지나는 육교)
+     * @param exclude      이 성질이 1(확실히 못 지남)인 길은 아예 뺀다 (휠체어: 계단, 확인된 턱, 못 지나는 육교, 인도 없는 골목)
      * @param avoidStairs  계단 조건부 제외: 계단 없는 길이 우회 한도 안에 있으면 계단 길을 뺀다 (노인)
      * @param avoidUnpaved 비포장 조건부 제외: 비포장 없는 길이 우회 한도 안에 있으면 비포장 길을 뺀다 (휠체어, 2026-11-04)
+     * @param avoidNarrowSidewalk 좁은 인도 조건부 제외: 비포장과 같은 방법이되 따로, 비포장 피하기 다음에 (휠체어, 2026-11-13)
      * @param avoidEvents  둘레를 조건부로 피할 행사·돌발 종류 (road_event.kind). 피하는 길이 우회 한도 안에 있을 때만 피한다.
      *                     계단·비포장 피하기를 먼저 지킨다 (2026-11-06)
      */
     public record Profile(double maxDetour, double walkSpeedMPerMin, int nightLeadMin, List<Penalty> exclude,
-            boolean avoidStairs, boolean avoidUnpaved, List<String> avoidEvents, Phase day, Phase night) {
+            boolean avoidStairs, boolean avoidUnpaved, boolean avoidNarrowSidewalk, List<String> avoidEvents, Phase day,
+            Phase night) {
 
         public Profile {
             exclude = exclude == null ? List.of() : List.copyOf(exclude);
@@ -229,8 +239,19 @@ public record RouteProperties(
          * 휠체어 경사로가 있다고 확인된 계단은 지난다 (경사로 없음·모름은 못 지남).
          */
         public boolean passable(RoadEdge e) {
+            return passable(e, false);
+        }
+
+        /** endAlley: 인도 없는 골목도 지나는지 (출발·도착·들를 곳이 그 골목 안일 때, RouteService.endAlleys) */
+        public boolean passable(RoadEdge e, boolean endAlley) {
             for (Penalty p : exclude) {
                 if (p == Penalty.STAIRS && e.penalty().hasRamp()) {
+                    continue;
+                }
+                if (p == Penalty.NO_SIDEWALK_ALLEY) {
+                    if (!endAlley && RouteFinder.isNoSidewalkAlley(e)) {
+                        return false;
+                    }
                     continue;
                 }
                 if (e.penalty().get(p) >= 1.0) {
@@ -240,7 +261,7 @@ public record RouteProperties(
             return true;
         }
 
-        /** 조건부 제외할 길 (노인 계단, 휠체어 비포장). 없으면 null */
+        /** 조건부 제외할 길 (노인 계단, 휠체어 비포장). 없으면 null. 좁은 인도는 따로 그다음에 피한다 (RouteService.asides) */
         public java.util.function.Predicate<RoadEdge> avoid() {
             if (avoidStairs && avoidUnpaved) {
                 return e -> RouteFinder.isStairs(e) || RouteFinder.isUnpaved(e);
@@ -283,7 +304,7 @@ public record RouteProperties(
                     }
                 }
             }
-            return new Profile(detour, walkSpeedMPerMin, nightLeadMin, ex, stairs, avoidUnpaved, avoidEvents,
+            return new Profile(detour, walkSpeedMPerMin, nightLeadMin, ex, stairs, avoidUnpaved, avoidNarrowSidewalk, avoidEvents,
                     day.withRestM(p.restEveryM()), night.withRestM(p.restEveryM()));
         }
 
@@ -295,7 +316,8 @@ public record RouteProperties(
             if (r == null || r.walkMore() <= 0) {
                 return this;
             }
-            return new Profile(maxDetour, walkSpeedMPerMin, nightLeadMin, exclude, avoidStairs, avoidUnpaved, avoidEvents,
+            return new Profile(maxDetour, walkSpeedMPerMin, nightLeadMin, exclude, avoidStairs, avoidUnpaved, avoidNarrowSidewalk,
+                    avoidEvents,
                     day.withRoof(r), night.withRoof(r));
         }
 

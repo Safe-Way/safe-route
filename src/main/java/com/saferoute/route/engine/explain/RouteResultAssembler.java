@@ -113,7 +113,8 @@ public class RouteResultAssembler {
                     dark(cond, found.shortest(), start, cov), turns(found.shortest(), start),
                     crossings(found.shortest(), start),
                     SideChanges.along(found.shortest(), found.shortest().startOffset(start), graph, crosswalks),
-                    stairs(found.shortest(), start), shortEvents, found.shortest(), shortAlleys));
+                    stairs(found.shortest(), start), shortEvents, found.shortest(), shortAlleys,
+                    Sidewalks.narrows(found.shortest(), found.shortest().startOffset(start))));
         }
         SideChanges.Found safeCross = SideChanges.find(found.safe(), found.safe().startOffset(start), graph, crosswalks);
         routes.add(route("safe", safeM, profile.minutes(safeM), safeLine, safeCounts,
@@ -122,7 +123,8 @@ public class RouteResultAssembler {
                 dark(cond, found.safe(), start, cov), turns(found.safe(), start),
                 crossings(found.safe(), start),
                 safeCross.crossAt(),
-                stairs(found.safe(), start), safeEvents, found.safe(), safeAlleys));
+                stairs(found.safe(), start), safeEvents, found.safe(), safeAlleys,
+                Sidewalks.narrows(found.safe(), found.safe().startOffset(start))));
 
         int extraM = same ? 0 : safeM - shortM;
         // 반올림을 따로 하면 "22분 / 24분"인데 "(1분) 더"가 나올 수 있어, 두 경로 시간의 차로 구한다
@@ -132,7 +134,8 @@ public class RouteResultAssembler {
                 profile.avoidStairs() ? stairs(found.shortest(), start).size() : 0,
                 profile.avoidStairs() ? stairs(found.safe(), start).size() : 0,
                 profile.avoidUnpaved() && avoids(found, RouteFinder::isUnpaved),
-                !ExplanationBuilder.avoided(shortEvents, safeEvents).isEmpty());
+                !ExplanationBuilder.avoided(shortEvents, safeEvents).isEmpty(),
+                profile.avoidNarrowSidewalk() && avoids(found, RouteFinder::isNarrowSidewalk));
         int roofGainM = same ? 0 : safeCovered.getOrDefault("roof", 0) - shortCovered.getOrDefault("roof", 0);
         int alleyCutM = same ? 0 : alleyM(shortAlleys) - alleyM(safeAlleys);
         String summary = ExplanationBuilder.text(cond, profile, phase, same, found.detourCapped(), extraM, extraMin,
@@ -165,11 +168,12 @@ public class RouteResultAssembler {
     private RouteResult.Route route(String kind, int meters, int minutes, List<double[]> line, Counts counts,
             Map<String, Integer> covered, List<RouteResult.Sidewalk> sidewalks, List<RouteResult.Stretch> dark, List<RouteResult.Turn> turns,
             List<RouteResult.Stretch> crossings, List<RouteResult.CrossAt> crossAt, List<RouteResult.Stair> stairs,
-            List<RouteResult.Event> events, RoadPath path, List<RouteResult.Alley> alleys) {
+            List<RouteResult.Event> events, RoadPath path, List<RouteResult.Alley> alleys, List<RouteResult.Narrow> narrows) {
         return new RouteResult.Route(kind, meters, minutes, line, FacilityGroup.keyed(counts.byGroup()), covered,
                 sidewalks,
                 dark, turns, crossings, stairs, events, (int) Math.round(path.lengthM(RouteFinder::isUnpaved)),
-                (int) Math.round(path.lengthM(RouteFinder::isSurfaceUnknown)), List.of(), crossAt, alleys, alleyM(alleys));
+                (int) Math.round(path.lengthM(RouteFinder::isSurfaceUnknown)), List.of(), crossAt, alleys, alleyM(alleys),
+                narrows, narrows.stream().mapToInt(RouteResult.Narrow::lengthM).sum());
     }
 
     private static int alleyM(List<RouteResult.Alley> alleys) {

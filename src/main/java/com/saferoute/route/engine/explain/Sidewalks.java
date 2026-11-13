@@ -19,15 +19,15 @@ import com.saferoute.route.engine.search.RouteFinder;
  * OSM sidewalk 태그의 left·right는 길을 그린 방향 기준이라, 거꾸로 걸으면 바꿔 준다. 태그가 없는 일방통행 길은
  * 차가 가는 방향 오른쪽 바깥에 인도가 있다고 보고(방향별로 두 줄 그린 큰길, 2026-11-11), 태그가 없는 양방향 큰 길은
  * 양쪽(both)으로 본다. 둘 다 trunk·primary·secondary·tertiary와 그 연결로만이고 골목급은 모름 (w15).
- * 인도·보행로·계단처럼 사람이 걷는 길 자체는 넣지 않는다. 인도 쪽·길 종류·차로·일방·폭이 모두 같은 길만 한 구간으로 묶는다.
+ * 인도·보행로·계단처럼 사람이 걷는 길 자체는 넣지 않는다. 인도 쪽·길 종류·차로·일방·폭·인도 폭이 모두 같은 길만 한 구간으로 묶는다.
  * <p>
  * 큰 길 both 구간 바로 뒤(없으면 앞)에 따로 그린 인도가 붙어 있으면 그 인도가 있는 쪽(left·right)으로 보낸다. 앱이 내 위치 쪽으로
  * 옮긴 선이 반대쪽 인도로 이어지며 횡단보도 없는 곳에서 차도를 건너는 것처럼 보였다 (서남동 행정복지센터 앞, 2026-11-12 진행표 w20).
  */
 public final class Sidewalks {
 
-    /** 차도가 아닌 걷는 길 (highway 값) */
-    static final Set<String> WALKWAYS = Set.of("footway", "path", "pedestrian", "steps", "cycleway",
+    /** 차도가 아닌 걷는 길 (highway 값). 도로망을 읽을 때 인도 재질을 쓸 차도인지도 이것으로 본다 (MysqlRoadGraphSource) */
+    public static final Set<String> WALKWAYS = Set.of("footway", "path", "pedestrian", "steps", "cycleway",
             "corridor", "bridleway");
 
     /**
@@ -74,26 +74,47 @@ public final class Sidewalks {
      * @param offset path.line()의 첫 점이 응답 geometry에서 몇 번째인지 ({@link RoadPath#startOffset})
      */
     public static List<RouteResult.Alley> alleys(RoadPath path, int offset) {
-        List<RouteResult.Alley> out = new ArrayList<>();
+        return runs(path, offset, RouteFinder::isAlley).stream()
+                .map(r -> new RouteResult.Alley(r.from(), r.to(), r.lengthM())).toList();
+    }
+
+    /** 좁은 인도 구간 ({@link RouteFinder#isNarrowSidewalk}, 2026-11-13). 폭은 그 구간에서 가장 좁은 값. from·to는 {@link #along}과 같은 기준 */
+    public static List<RouteResult.Narrow> narrows(RoadPath path, int offset) {
+        return runs(path, offset, RouteFinder::isNarrowSidewalk).stream()
+                .map(r -> new RouteResult.Narrow(r.from(), r.to(), r.lengthM(),
+                        r.edges().stream().map(RoadEdge::sidewalkWidthM).filter(java.util.Objects::nonNull)
+                                .min(Double::compare).orElse(null)))
+                .toList();
+    }
+
+    /** 이어진 which 길 한 구간. from·to는 geometry 점 번호 */
+    private record Run(int from, int to, int lengthM, List<RoadEdge> edges) {
+    }
+
+    private static List<Run> runs(RoadPath path, int offset, java.util.function.Predicate<RoadEdge> which) {
+        List<Run> out = new ArrayList<>();
         int at = offset;
         int from = -1;
-        double m = 0;
+        List<RoadEdge> run = new ArrayList<>();
         for (RoadEdge e : path.edges()) {
-            int to = at + e.geometry().size() - 1;
-            if (RouteFinder.isAlley(e)) {
+            if (which.test(e)) {
                 from = from < 0 ? at : from;
-                m += e.lengthM();
+                run.add(e);
             } else if (from >= 0) {
-                out.add(new RouteResult.Alley(from, at, (int) Math.round(m)));
+                out.add(run(from, at, run));
                 from = -1;
-                m = 0;
+                run = new ArrayList<>();
             }
-            at = to;
+            at += e.geometry().size() - 1;
         }
         if (from >= 0) {
-            out.add(new RouteResult.Alley(from, at, (int) Math.round(m)));
+            out.add(run(from, at, run));
         }
         return out;
+    }
+
+    private static Run run(int from, int to, List<RoadEdge> edges) {
+        return new Run(from, to, (int) Math.round(edges.stream().mapToDouble(RoadEdge::lengthM).sum()), edges);
     }
 
     static List<Stretch> stretches(RoadPath path, int offset) {
@@ -108,7 +129,7 @@ public final class Sidewalks {
             if (!WALKWAYS.contains(e.highway()) && !RouteFinder.isUnderground(e)) {
                 Boolean oneway = e.oneway() == null ? null : e.oneway() != 0;
                 RouteResult.Sidewalk s = new RouteResult.Sidewalk(at, to, side(drawnSide(e), forward[i]), e.highway(),
-                        e.lanes(), oneway, e.widthM(), offsetM(e.highway(), e.lanes(), oneway, e.widthM()));
+                        e.lanes(), oneway, e.widthM(), offsetM(e.highway(), e.lanes(), oneway, e.widthM()), e.sidewalkWidthM());
                 Stretch last = out.isEmpty() ? null : out.get(out.size() - 1);
                 RouteResult.Sidewalk l = last == null ? null : last.sidewalk();
                 if (l != null && l.to() == at && l.equals(span(s, l.from(), at))) {
@@ -130,7 +151,7 @@ public final class Sidewalks {
             String after = walkwaySide(path, forward, t.last() + 1, 1, line);
             String side = after != null ? after : before != null ? before : "both";
             out.set(k, new Stretch(new RouteResult.Sidewalk(s.from(), s.to(), side, s.highway(), s.lanes(), s.oneway(),
-                    s.widthM(), s.offsetM()), t.first(), t.last(), before, after));
+                    s.widthM(), s.offsetM(), s.sidewalkWidthM()), t.first(), t.last(), before, after));
         }
         return out;
     }
@@ -231,6 +252,7 @@ public final class Sidewalks {
     }
 
     private static RouteResult.Sidewalk span(RouteResult.Sidewalk s, int from, int to) {
-        return new RouteResult.Sidewalk(from, to, s.side(), s.highway(), s.lanes(), s.oneway(), s.widthM(), s.offsetM());
+        return new RouteResult.Sidewalk(from, to, s.side(), s.highway(), s.lanes(), s.oneway(), s.widthM(), s.offsetM(),
+                s.sidewalkWidthM());
     }
 }

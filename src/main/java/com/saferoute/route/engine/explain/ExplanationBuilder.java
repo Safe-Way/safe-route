@@ -53,10 +53,15 @@ public final class ExplanationBuilder {
      * @param stairs      안전 경로에 남은 계단 곳 수
      * @param unpaved     비포장 (비포장을 피하는 모드)
      * @param events      행사·돌발상황 둘레
+     * @param narrow      좁은 인도 (좁은 인도를 피하는 모드, 2026-11-13)
      */
-    public record Avoided(int shortStairs, int stairs, boolean unpaved, boolean events) {
+    public record Avoided(int shortStairs, int stairs, boolean unpaved, boolean events, boolean narrow) {
 
         public static final Avoided NONE = new Avoided(0, 0, false, false);
+
+        public Avoided(int shortStairs, int stairs, boolean unpaved, boolean events) {
+            this(shortStairs, stairs, unpaved, events, false);
+        }
     }
 
     /** 문장에 넣는 시설 차이 개수 */
@@ -108,7 +113,7 @@ public final class ExplanationBuilder {
     public static String text(Conditions cond, RouteProperties.Profile profile, RouteProperties.Phase phase,
             boolean same, boolean capped, int extraM, int extraMin, Map<FacilityGroup, Integer> diff,
             Avoided avoided, int roofGainM, int alleyCutM) {
-        boolean rules = phase.hasWeights() || profile.avoidStairs() || profile.avoidUnpaved();
+        boolean rules = phase.hasWeights() || profile.avoidStairs() || profile.avoidUnpaved() || profile.avoidNarrowSidewalk();
         // 골목길 기준(2026-11-12)은 길 고르는 기준이지만, 그것만 있으면(휠체어 낮) 문장은 예전 휠체어 낮(기준 없음)과 같게
         Set<Criterion> rated = EnumSet.noneOf(Criterion.class);
         rated.addAll(phase.weights().keySet());
@@ -155,8 +160,12 @@ public final class ExplanationBuilder {
                 : "계단 %d곳 중 %d곳".formatted(avoided.shortStairs(), cut);
         String what = stairs != null && avoided.unpaved() ? stairs + (avoided.stairs() == 0 ? "·" : "과 ") + "비포장"
                 : stairs != null ? stairs : avoided.unpaved() ? "비포장" : null;
+        if (avoided.narrow()) {
+            what = what == null ? "좁은 인도" : what + "·좁은 인도";
+        }
         if (what != null) {
-            return detour + " " + (gains.isEmpty() ? what + "을 피하는 길로 갑니다" : what + "을 피하고 " + gains);
+            String eul = avoided.narrow() ? "를" : "을";
+            return detour + " " + (gains.isEmpty() ? what + eul + " 피하는 길로 갑니다" : what + eul + " 피하고 " + gains);
         }
         if (!gains.isEmpty()) {
             return detour + " " + gains;
