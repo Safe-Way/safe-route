@@ -706,6 +706,45 @@ public class AssistantTools {
         return f.contains("택시") && (f.contains("승강장") || f.contains("승차장") || f.contains("타는곳") || f.contains("정류장"));
     }
 
+    /** 버스 정류장 찾는 반경 (앱 /api/bus/nearby 500m보다 넓게: 말로 묻는 사람은 조금 멀어도 알려 줌) */
+    static final int BUS_STOP_RADIUS_M = 1000;
+
+    private com.saferoute.bus.BusStopRepository busStops;
+
+    /** 버스 정류장 표 (DB 없는 테스트에서는 안 넣음 → "지금은 못 찾아요") */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setBusStops(com.saferoute.bus.BusStopRepository busStops) {
+        this.busStops = busStops;
+    }
+
+    /**
+     * "근처 버스", "가까운 버스 정류장" (11-13): 카카오가 아니라 DB 정류장 표에서 가장 가까운 곳.
+     * 카카오 키워드 "버스"는 이름에 버스가 든 가게·먼 정류장을 섞어 줘서 쓰지 않는다
+     */
+    AssistantReply.Spot findBusStop(Turn t) {
+        t.tools.add("find_nearby");
+        t.spotKindName = "버스 정류장";
+        List<com.saferoute.bus.BusStop> found;
+        try {
+            found = busStops == null ? null : busStops.near(t.lat, t.lon, BUS_STOP_RADIUS_M, 1);
+        } catch (DataAccessException e) {
+            log.warn("비서 정류장 검색 실패: {}", e.getMostSpecificCause().getMessage());
+            found = null;
+        }
+        if (found == null) {
+            t.spotMessage = "지금은 정류장 정보를 불러오지 못했어요. 잠시 뒤에 다시 물어봐 주세요.";
+            return null;
+        }
+        if (found.isEmpty()) {
+            t.spotMessage = "1km 안에 버스 정류장이 없어요.";
+            return null;
+        }
+        com.saferoute.bus.BusStop s = found.get(0);
+        t.spot = new AssistantReply.Spot("bus_stop", com.saferoute.place.BusStopQuery.stopName(s.name()), s.lat(), s.lon(),
+                s.distanceM(), null);
+        return t.spot;
+    }
+
     // ───────────────────────── get_my_info ─────────────────────────
 
     /** get_my_info: 내 정보 (없으면 null = 처음 쓰는 사람) */

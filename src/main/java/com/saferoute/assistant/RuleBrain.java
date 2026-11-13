@@ -77,6 +77,14 @@ class RuleBrain {
         }
         // "택시 타는 곳", "근처 택시 승강장": 카카오에 있는 택시 승강장 중 가장 가까운 곳 (11-13).
         // "택시 불러 줘"는 부르기라 아래 못 하는 일 그대로 (점검 32번)
+        // "근처 버스", "가까운 버스 정류장": DB 정류장 표에서 가장 가까운 곳 (11-13, 카카오는 '버스' 든 가게가 섞임)
+        if (com.saferoute.place.BusStopQuery.asks(f)) {
+            if (!t.located()) {
+                return Outcome.ask("지금 계신 곳을 알아야 찾을 수 있어요. 위치 켜기를 눌러 주세요.");
+            }
+            tools.findBusStop(t);
+            return Outcome.say(Sentences.spot(t));
+        }
         if (taxiStandAsked(f)) {
             if (!t.located()) {
                 return Outcome.ask("지금 계신 곳을 알아야 찾을 수 있어요. 위치 켜기를 눌러 주세요.");
