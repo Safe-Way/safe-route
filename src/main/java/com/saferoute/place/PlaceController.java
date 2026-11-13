@@ -3,6 +3,8 @@ package com.saferoute.place;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.saferoute.bus.BusLine;
+import com.saferoute.bus.BusLineRepository;
 import com.saferoute.bus.BusStop;
 import com.saferoute.bus.BusStopRepository;
 import com.saferoute.common.ErrorResponse;
@@ -29,12 +31,21 @@ import org.springframework.web.bind.annotation.RestController;
 public class PlaceController {
 
     static final int BUS_RADIUS_M = 1000;
+    private static final java.util.regex.Pattern GOING_BUS = java.util.regex.Pattern.compile(
+            "^(.+?)\\s*(가는|행|방면)\\s*(버스|지하철|차)(.*)$");
     static final int MAX_PLACES = 10;
 
     private static final Logger log = LoggerFactory.getLogger(PlaceController.class);
 
     private final KakaoLocalClient kakao;
     private final BusStopRepository busStops;
+    private BusLineRepository busLines;
+
+    /** 노선 표 (DB 없는 시험에서는 안 넣음) */
+    @Autowired(required = false)
+    void setBusLines(BusLineRepository busLines) {
+        this.busLines = busLines;
+    }
 
     public PlaceController(KakaoLocalClient kakao) {
         this(kakao, null);
@@ -72,6 +83,43 @@ public class PlaceController {
                         .body(new ErrorResponse("SEARCH_UNAVAILABLE", "지금은 주소를 찾을 수 없어요"));
             }
         }
+        // "버스 03", "03번 버스": 노선 정보 (기점↔종점, 첫차·막차, 배차). 누르면 기점 정류장으로 (11-13)
+        String line = busLines == null ? null : BusLineQuery.number(q);
+        if (line != null) {
+            try {
+                List<Place> lines = busLines.find(line).stream().filter(l -> l.lat() != null)
+                        .map(l -> new Place("line:" + l.id(), l.name() + "번 버스", l.summary(), l.lat(), l.lon(),
+                                lat == null ? null : meters(lat, lon, l.lat(), l.lon())))
+                        .toList();
+                if (!lines.isEmpty()) {
+                    return ResponseEntity.ok(new PlacesResponse(lines));
+                }
+            } catch (DataAccessException e) {
+                log.warn("노선 검색 DB 실패, 카카오로: {}", e.getMostSpecificCause().getMessage());
+            }
+        }
+        // "수완동으로 가는 버스", "수완동 가는 버스", "수완동행 버스": 장소만 찾는다 (11-13).
+        // 버스 번호는 그 장소를 [도착]으로 골라 대중교통 길찾기에서 나온다 (DB에는 노선의 처음·끝만 있어 지나는 곳을 모름)
+        java.util.regex.Matcher to = GOING_BUS.matcher(q);
+        List<Place> lineFirst = List.of();
+        if (to.matches()) {
+            String place = dropParticle(to.group(1).strip());
+            if (place.length() >= 2) {
+                q = place;
+                lineFirst = linesEndingAt(place, lat, lon);
+            }
+        }
+        // "광주역 근처 정류장": 광주역을 먼저 찾고 그 근처 정류장 (11-13, 통째로 카카오에 넘기면 경기 광주가 나옴)
+        String at = busStops == null ? null : BusStopQuery.anchor(q);
+        if (at != null) {
+            Place anchor = gwangjuPlace(at);
+            if (anchor != null) {
+                List<Place> stops = nearStops(anchor.lat(), anchor.lon());
+                if (!stops.isEmpty()) {
+                    return ResponseEntity.ok(new PlacesResponse(stops));
+                }
+            }
+        }
         if (lat != null && busStops != null && BusStopQuery.asks(q)) {
             List<Place> stops = nearStops(lat, lon);
             if (!stops.isEmpty()) {
@@ -92,6 +140,16 @@ public class PlaceController {
                         break;
                     }
                 }
+            }
+            // 광주 안 결과가 있으면 광주 밖(경기 광주 등)은 뺀다. 시연·서비스는 광주만
+            if (found.stream().anyMatch(PlaceController::inGwangju)) {
+                found = found.stream().filter(PlaceController::inGwangju).toList();
+            }
+            // "○○로 가는 버스": 그쪽이 종점인 노선 먼저, 그다음 장소 (장소를 [도착]으로 고르면 갈아타는 길까지 나옴)
+            if (!lineFirst.isEmpty()) {
+                List<Place> out = new ArrayList<>(lineFirst);
+                out.addAll(found);
+                found = out.subList(0, Math.min(MAX_PLACES, out.size()));
             }
             return ResponseEntity.ok(new PlacesResponse(found));
         } catch (PlaceSearchException e) {
@@ -146,5 +204,58 @@ public class PlaceController {
         double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1))
                 * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         return (int) Math.round(2 * r * Math.asin(Math.sqrt(a)));
+    }
+
+    /** 광주 네모 범위 (비서 AssistantTools.GWANGJU와 같은 값) */
+    static boolean inGwangju(Place p) {
+        return p.lon() >= 126.64 && p.lat() >= 35.04 && p.lon() <= 127.03 && p.lat() <= 35.27;
+    }
+
+    /** 이름으로 광주 안 장소 하나: 이름이 똑같은 곳 먼저, 없으면 광주 안 첫 곳. 못 찾으면 null */
+    private Place gwangjuPlace(String spoken) {
+        String name = PlaceAlias.of(spoken);
+        try {
+            List<Place> in = kakao.search(name, null, null).stream().filter(PlaceController::inGwangju).toList();
+            return in.stream().filter(p -> PlaceAlias.same(p.name(), name)).findFirst()
+                    .orElse(in.isEmpty() ? null : in.get(0));
+        } catch (PlaceSearchException e) {
+            log.warn("정류장 기준 장소 찾기 실패: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** "수완동으로"→수완동, "충장로로"→충장로, "광주역까지"→광주역. "충장로"처럼 이름 끝 '로'는 그대로 (받침 ㅇ 뒤 '로'는 조사가 아님) */
+    static String dropParticle(String w) {
+        for (String p : new String[] {"으로", "까지", "에"}) {
+            if (w.endsWith(p) && w.length() > p.length() + 1) {
+                return w.substring(0, w.length() - p.length());
+            }
+        }
+        if (w.endsWith("로") && w.length() >= 3) {
+            char before = w.charAt(w.length() - 2);
+            if (before >= '가' && before <= '힣') {
+                int jong = (before - '가') % 28;
+                if (jong == 0 || jong == 8) { // 받침 없음 또는 ㄹ
+                    return w.substring(0, w.length() - 1);
+                }
+            }
+        }
+        return w;
+    }
+
+    /** place 쪽이 기점·종점인 노선을 검색 결과 모양으로. 기점 좌표를 모르는 노선은 뺌 */
+    private List<Place> linesEndingAt(String place, Double lat, Double lon) {
+        if (busLines == null) {
+            return List.of();
+        }
+        try {
+            return busLines.endingAt(BusLineQuery.stem(place)).stream().filter(l -> l.lat() != null)
+                    .map(l -> new Place("line:" + l.id(), l.name() + "번 버스", l.summary(), l.lat(), l.lon(),
+                            lat == null ? null : meters(lat, lon, l.lat(), l.lon())))
+                    .limit(5).toList();
+        } catch (DataAccessException e) {
+            log.warn("노선 검색 DB 실패: {}", e.getMostSpecificCause().getMessage());
+            return List.of();
+        }
     }
 }

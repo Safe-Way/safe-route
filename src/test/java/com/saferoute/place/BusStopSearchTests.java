@@ -79,4 +79,47 @@ class BusStopSearchTests {
         controller.places("버스 정류장", null, null);
         verifyNoInteractions(stops);
     }
+
+    @Test
+    void stopsNearANamedPlaceInGwangju() {
+        // 11-13: "광주역 근처 정류장"을 통째로 카카오에 넘기면 경기 광주(경기광주역)가 나왔음
+        assertThat(BusStopQuery.anchor("광주역 근처 정류장")).isEqualTo("광주역");
+        assertThat(BusStopQuery.anchor("송정역 근처 버스 정류장 어디야")).isEqualTo("송정역");
+        assertThat(BusStopQuery.anchor("문화전당 앞 버스")).isEqualTo("문화전당");
+        assertThat(BusStopQuery.anchor("근처 정류장")).isNull();
+        assertThat(BusStopQuery.anchor("내 근처 정류장")).isNull();
+        assertThat(BusStopQuery.anchor("광주역 근처 정류장 가는 길 알려줘 버스타고")).isNull();
+        when(kakao.search("광주역", null, null)).thenReturn(List.of(
+                new Place("1", "경기광주역", "경기 광주시 역동", 37.40, 127.25, null),
+                new Place("2", "광주역", "광주 북구 무등로 235", 35.1652, 126.9094, null)));
+        when(stops.near(35.1652, 126.9094, 1000, 10)).thenReturn(List.of(
+                new BusStop(5001, "광주역", "신안사거리", 35.1648, 126.9090, 50)));
+        List<Place> places = ((PlacesResponse) controller.places("광주역 근처 정류장", LAT, LON).getBody()).places();
+        assertThat(places).extracting(Place::name).containsExactly("광주역");
+        assertThat(places.get(0).address()).isEqualTo("버스 정류장 · 신안사거리 방면");
+    }
+
+    @Test
+    void outsideGwangjuIsDroppedWhenGwangjuHasResults() {
+        when(kakao.search("송정역 맛집", LAT, LON)).thenReturn(List.of(
+                new Place("1", "세븐일레븐 강서송정역점", "서울 강서구", 37.56, 126.81, 290000),
+                new Place("2", "송정떡갈비", "광주 광산구", 35.138, 126.793, 13000)));
+        List<Place> places = ((PlacesResponse) controller.places("송정역 맛집", LAT, LON).getBody()).places();
+        assertThat(places).extracting(Place::name).containsExactly("송정떡갈비");
+    }
+
+    @Test
+    void goingBusSearchesThePlace() {
+        // 11-13 "수완동으로 가는 버스" → 아무것도 안 나옴. 수완동을 찾아 주고, 버스 번호는 대중교통 길찾기에서
+        when(kakao.search("수완동", LAT, LON)).thenReturn(List.of(
+                new Place("1", "수완동", "광주 광산구 수완동", 35.19, 126.82, 12000)));
+        for (String q : List.of("수완동으로 가는 버스", "수완동 가는 버스", "수완동행 버스")) {
+            List<Place> ps = ((PlacesResponse) controller.places(q, LAT, LON).getBody()).places();
+            assertThat(ps).as(q).extracting(Place::name).containsExactly("수완동");
+        }
+        assertThat(PlaceController.dropParticle("충장로")).isEqualTo("충장로");
+        assertThat(PlaceController.dropParticle("충장로로")).isEqualTo("충장로");
+        assertThat(PlaceController.dropParticle("광주역까지")).isEqualTo("광주역");
+        assertThat(PlaceController.dropParticle("금남로")).isEqualTo("금남로");
+    }
 }
