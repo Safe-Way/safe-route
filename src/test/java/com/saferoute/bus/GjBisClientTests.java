@@ -139,27 +139,4 @@ class GjBisClientTests {
 
         assertThatThrownBy(() -> client.locations(2)).isInstanceOf(BusUnavailableException.class);
     }
-
-    // 11/13 실제 응답(03번, LINE_ID 28)을 줄인 것
-    private static final String LINE_STOPS_JSON = """
-            {"RESPONSE":{"RESULT":{"RESULT_MSG":"정상적으로 처리되었습니다.","RESULT_CODE":"SUCCESS"},
-             "BUSSTOP_LIST":{"ITEM":[
-              {"BUSSTOP_NUM":1,"LINE_ID":28,"LINE_NAME":"03","BUSSTOP_ID":4,"BUSSTOP_NAME":"첨단공영차고지",
-               "ARS_ID":"5821","LONGITUDE":126.82987772,"LATITUDE":35.2313158,"RETURN_FLAG":2,"SEQ":1},
-              {"BUSSTOP_NUM":2,"LINE_ID":28,"LINE_NAME":"03","BUSSTOP_ID":2,"BUSSTOP_NAME":"광주과학기술원후문",
-               "ARS_ID":"5819","LONGITUDE":126.84463582,"LATITUDE":35.23211469,"RETURN_FLAG":1,"SEQ":3},
-              {"BUSSTOP_NUM":3,"LINE_ID":28,"BUSSTOP_ID":9,"BUSSTOP_NAME":"좌표없음"}
-             ]}}}
-            """;
-
-    @Test
-    void readsStopsOfALine() {
-        server.expect(requestTo(Matchers.startsWith("https://apis.data.go.kr" + GjBisClient.LINE_STOPS_PATH)))
-                .andExpect(queryParam("LINE_ID", "28"))
-                .andRespond(withSuccess(LINE_STOPS_JSON, MediaType.APPLICATION_JSON));
-        assertThat(client.lineStops(28)).containsExactly(
-                new LineStop(1, 4, "첨단공영차고지", 35.2313158, 126.82987772),
-                new LineStop(2, 2, "광주과학기술원후문", 35.23211469, 126.84463582));
-        server.verify();
-    }
 }

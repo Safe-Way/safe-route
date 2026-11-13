@@ -224,6 +224,10 @@ public class PlaceController {
         String name = PlaceAlias.of(spoken);
         try {
             List<Place> in = kakao.search(name, null, null).stream().filter(PlaceController::inGwangju).toList();
+            if (in.isEmpty() && !name.startsWith("광주")) {
+                // 전국에서 찾으면 경기 고양·성남 같은 곳이 앞을 채울 때가 있어 "광주 "를 붙여 한 번 더 (11-13 터미널 확인)
+                in = kakao.search("광주 " + name, null, null).stream().filter(PlaceController::inGwangju).toList();
+            }
             return in.stream().filter(p -> PlaceAlias.same(p.name(), name)).findFirst()
                     .orElse(in.isEmpty() ? null : in.get(0));
         } catch (PlaceSearchException e) {
@@ -258,7 +262,7 @@ public class PlaceController {
         }
         try {
             if (lineStops != null) {
-                Place at = gwangjuPlace(place);
+                Place at = gwangjuPlace(BusLineQuery.anchor(place));
                 return lineStops.to(place, at == null ? null : at.lat(), at == null ? null : at.lon()).stream()
                         .map(h -> lineAsPlace(h.line(), h.via(), lat, lon)).filter(java.util.Objects::nonNull)
                         .limit(5).toList();

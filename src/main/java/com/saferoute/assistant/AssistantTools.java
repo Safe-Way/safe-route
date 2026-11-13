@@ -358,6 +358,15 @@ public class AssistantTools {
                     return c;
                 }
             }
+            if (!n.startsWith("광주")) {
+                // 광주 안 결과가 하나도 없으면 "광주 "를 붙여 한 번 더 (경기 고양·성남 같은 곳이 앞을 채울 때, 11-13)
+                for (com.saferoute.place.Place p : kakao.search("광주 " + n, t.lat, t.lon)) {
+                    Place c = new Place(p.name(), p.address(), p.lat(), p.lon());
+                    if (inGwangju(c)) {
+                        return c;
+                    }
+                }
+            }
         } catch (PlaceSearchException e) {
             log.warn("비서 기준점 찾기 실패: {}", e.getMessage());
         }
@@ -817,7 +826,7 @@ public class AssistantTools {
             List<String> parts = new ArrayList<>();
             int total;
             if (lineStops != null) {
-                Place at = firstPlace(t, place);
+                Place at = firstPlace(t, com.saferoute.place.BusLineQuery.anchor(place));
                 List<com.saferoute.bus.BusLineStops.Hit> hits = lineStops.to(place, at == null ? null : at.lat(),
                         at == null ? null : at.lon());
                 total = hits.size();

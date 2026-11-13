@@ -25,6 +25,30 @@ public final class BusLineQuery {
         return m.matches() ? m.group(1) : null;
     }
 
+    /**
+     * 버스를 찾을 때 기준으로 삼을 곳 (11-13). 충장로처럼 긴 거리는 카카오가 길 한가운데 한 점만 줘서 근처 정류장이 빠지니,
+     * 그 거리의 중심 건물로 바꿔 찾는다. 없으면 말한 그대로
+     */
+    public static String anchor(String place) {
+        String p = place == null ? "" : place.replaceAll("\\s+", "");
+        if (p.startsWith("충장로") || p.equals("구도청") || p.equals("옛도청") || p.equals("구전남도청") || p.equals("구시청")
+                || p.equals("금남로") || p.startsWith("금남로") && p.endsWith("가")) {
+            return "국립아시아문화전당";
+        }
+        return place;
+    }
+
+    /**
+     * 그곳으로 가는 버스로 볼 정류장 이름 앞부분 (11-13). 충장로는 "충장로…" 정류장이 거의 없고
+     * 구시청·문화전당역·금남로 정류장에서 내려서 걸어감 (현장 확인: 구 시청 정류장)
+     */
+    public static java.util.List<String> stopNames(String place) {
+        if (!"국립아시아문화전당".equals(anchor(place)) || place.replaceAll("\\s+", "").equals("국립아시아문화전당")) {
+            return java.util.List.of();
+        }
+        return java.util.List.of("국립아시아문화전당", "구시청", "문화전당", "금남로", "충장로", "구도청");
+    }
+
     /** 노선 끝 이름과 맞춰 볼 말: "수완동" → "수완", "광주역" → "광주역" (동네 이름 끝 '동'은 종점 이름에 잘 안 붙어서 뺌) */
     public static String stem(String place) {
         String p = place.replaceAll("\\s+", "");
