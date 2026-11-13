@@ -27,6 +27,32 @@ public final class BusStopQuery {
         return STOP.matcher(rest).matches();
     }
 
+    private static final Pattern NEAR_PLACE = Pattern.compile(
+            "^(.+?)\\s*(근처|앞|주변|옆|쪽)\\s*(에|에서|의)?\\s*(있는\\s*)?(버스\\s*)?(정류장|정류소|승강장|버스)(.*)$");
+    private static final java.util.Set<String> NOT_PLACE = java.util.Set.of(
+            "내", "제", "지금", "여기", "이", "이곳", "우리", "가까운", "가장", "제일", "바로", "집");
+
+    /**
+     * "광주역 근처 정류장", "문화전당 앞 버스 정류장 어디야" → "광주역"·"문화전당" (11-13: 통째로 카카오에 넘기면
+     * 경기 광주가 나왔음). 장소 말이 없거나 정류장 찾는 말이 아니면 null
+     */
+    public static String anchor(String text) {
+        if (text == null) {
+            return null;
+        }
+        java.util.regex.Matcher m = NEAR_PLACE.matcher(text.strip());
+        if (!m.matches()) {
+            return null;
+        }
+        String tail = FILLER.matcher(m.group(7).replaceAll("\\s+", "")).replaceAll("");
+        String a = m.group(1).strip();
+        String last = a.contains(" ") ? a.substring(a.lastIndexOf(' ') + 1) : a;
+        if (!tail.isEmpty() || a.length() < 2 || NOT_PLACE.contains(a) || NOT_PLACE.contains(last)) {
+            return null;
+        }
+        return a;
+    }
+
     /** 정류장 이름으로 쓸 말: "조선대해오름관" → "조선대해오름관 정류장" (이미 정류장·승강장이면 그대로) */
     public static String stopName(String name) {
         String n = name == null ? "" : name.strip();

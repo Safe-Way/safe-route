@@ -92,6 +92,40 @@ class RuleBrain {
         // "택시 타는 곳", "근처 택시 승강장": 카카오에 있는 택시 승강장 중 가장 가까운 곳 (11-13).
         // "택시 불러 줘"는 부르기라 아래 못 하는 일 그대로 (점검 32번)
         // "근처 버스", "가까운 버스 정류장": DB 정류장 표에서 가장 가까운 곳 (11-13, 카카오는 '버스' 든 가게가 섞임)
+        // "03번 버스 어디로 가?", "버스 03": 노선 기점↔종점·첫차·막차·배차 (11-13)
+        String lineNo = com.saferoute.place.BusLineQuery.number(Fillers.clean(t.text == null ? "" : t.text.strip()));
+        if (lineNo != null) {
+            String info = tools.busLineInfo(t, lineNo);
+            if (info != null) {
+                return Outcome.say(info);
+            }
+        }
+        // "수완동으로 가는 버스": 그쪽이 종점인 노선, 없으면 택시 권하기 (11-13)
+        String busTo = com.saferoute.place.BusLineQuery.goingTo(Fillers.clean(t.text == null ? "" : t.text.strip()));
+        if (busTo != null) {
+            String lines = tools.busLinesTo(t, busTo);
+            String go = " 지금 계신 곳에서 타는 곳과 갈아타는 길은 '" + busTo + " 가자'라고 말씀하시면 찾아 드려요.";
+            if (lines != null && !lines.isEmpty()) {
+                return Outcome.say(lines + go);
+            }
+            if (lines == null) {
+                String taxi = "";
+                if (t.located()) {
+                    tools.findTaxi(t);
+                    taxi = " 버스가 불편하시면 택시를 추천해요. " + Sentences.spot(t);
+                }
+                return Outcome.say(Josa.ro(busTo) + " 바로 가는(종점인) 버스는 찾지 못했어요." + go + taxi);
+            }
+        }
+        // "광주역 근처 정류장": 광주역을 먼저 찾고 그 근처 (11-13)
+        String busAt = com.saferoute.place.BusStopQuery.anchor(Fillers.clean(t.text == null ? "" : t.text.strip()));
+        if (busAt != null) {
+            Place anchor = tools.firstPlace(t, busAt);
+            if (anchor != null) {
+                tools.findBusStop(t, anchor.lat(), anchor.lon());
+                return Outcome.say(anchor.name() + " 근처에서 찾았어요. " + Sentences.spot(t));
+            }
+        }
         if (com.saferoute.place.BusStopQuery.asks(f)) {
             if (!t.located()) {
                 return Outcome.ask("지금 계신 곳을 알아야 찾을 수 있어요. 위치 켜기를 눌러 주세요.");
