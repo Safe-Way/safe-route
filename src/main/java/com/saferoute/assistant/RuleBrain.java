@@ -184,6 +184,10 @@ class RuleBrain {
         if (asksLocationSaved(f)) {
             return Outcome.say(LOCATION_SAVED);
         }
+        // "왜 이 길이야?": 방금 고른 걷는 길의 엔진 이유를 그대로 ("인도가 있는 길로 갑니다", 11-13 원일님 부탁)
+        if (t.convo.why() != null && asksWhyRoute(f)) {
+            return Outcome.say(t.convo.why());
+        }
         if (f.contains("뭐할수있") || f.contains("뭘할수있") || f.contains("무슨기능") || f.equals("도움말")) {
             return Outcome.ask("길 찾기, 가까운 화장실·쉴 곳 찾기, 길 문제 신고, 지도에 보일 것 바꾸기를 할 수 있어요. 무엇을 할까요?",
                     List.of(new Choice("문화전당 가자", "문화전당 가자"), new Choice("화장실 어디야", "화장실 어디야"),
@@ -198,6 +202,12 @@ class RuleBrain {
      */
     static final String LOCATION_SAVED = "지금 계신 위치나 지나온 길은 저장하지 않아요. 위치는 길을 찾을 때만 쓰고 AI에도 보내지 않아요."
             + " 다닌 기록에 동의하신 경우에만 간 곳 이름과 약 100m로 반올림한 위치가 남고, 보호자 위치 공유 중에는 마지막 위치 한 점만 보여 줘요.";
+
+    /** "왜 이 길이야?", "왜 이쪽으로 가?", "왜 돌아가?" 같은 말이면 true */
+    static boolean asksWhyRoute(String f) {
+        return f.contains("왜") && (f.contains("길") || f.contains("이쪽") || f.contains("이리") || f.contains("이렇게")
+                || f.contains("돌아") || f.contains("이걸로") || f.contains("이경로") || f.contains("골랐"));
+    }
 
     /** 위치를 저장하는지 묻는 말이면 true ("집 위치 저장해 줘"처럼 해 달라는 말은 아님) */
     static boolean asksLocationSaved(String f) {

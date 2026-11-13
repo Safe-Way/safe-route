@@ -157,6 +157,26 @@ class AssistantServiceTests {
     }
 
     @Test
+    void whyThisRouteRepeatsTheEngineReason() {
+        // 원일님 부탁 (11-13): 엔진 설명 문장을 이유 맨 앞에 두고, "왜 이 길이야?"에 그대로 말한다
+        wheelchairUser();
+        when(kakao.search(eq("국립아시아문화전당"), any(), any())).thenReturn(List.of(
+                new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
+        Trip walk = new Trip("walk", 9, 600, 0, 0, "걸어서 9분, 600m", Map.of(), "safe", Map.of(), List.of(), false,
+                null);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of("밤이라 밝은 길")), WeatherDust.unknown(), false, null, "인도가 있는 길로 갑니다"));
+        AssistantReply first = ask(A, "문화전당 가자", null);
+        assertThat(first.because()).containsExactly("인도가 있는 길로 갑니다", "밤이라 밝은 길");
+        AssistantReply why = ask(A, "왜 이 길이야?", first.conversationId());
+        assertThat(why.say()).isEqualTo("인도가 있는 길로 갑니다");
+        assertThat(why.tools()).isEmpty();
+        // 엔진 이유가 없는 길이면 규칙이 지어내지 않는다
+        assertThat(RuleBrain.asksWhyRoute("왜이쪽으로가")).isTrue();
+        assertThat(RuleBrain.asksWhyRoute("왜안돼")).isFalse();
+    }
+
+    @Test
     void voiceReportAsksFirstThenSends() {
         wheelchairUser();
         AssistantReply first = ask(A, "여기 공사 중이라 못 지나가", null);
