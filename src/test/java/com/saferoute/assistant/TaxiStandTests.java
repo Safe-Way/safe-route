@@ -93,4 +93,18 @@ class TaxiStandTests {
         assertThat(RuleBrain.taxiStandAsked("택시불러줘")).isFalse();
         assertThat(AssistantTools.taxiStand("○○운수 택시회사")).isFalse();
     }
+
+    @Test
+    void handListFillsWhatKakaoLacks() {
+        // 유스퀘어 근처: 카카오 "택시승강장"은 송정역(약 8km)뿐 — 거리는 시험용 예시
+        when(kakao.search(eq("택시승강장"), anyDouble(), anyDouble())).thenReturn(List.of(
+                new Place("1", "광주송정역 택시승강장", "광주 광산구 송정동", 35.1379, 126.7900, 8000)));
+        when(kakao.search(eq("택시"), anyDouble(), anyDouble())).thenReturn(List.of());
+        when(kakao.searchAddress("광주 서구 무진대로 904")).thenReturn(List.of(
+                new Place(null, "광주 서구 무진대로 904", "광주 서구 무진대로 904", 35.1605, 126.8795, null)));
+        AssistantReply r = service.answer(new AssistantRequest(A, "근처 택시 승강장", 35.1590, 126.8800,
+                null, null, null, null, null, "senior"));
+        assertThat(r.say()).contains("유스퀘어 택시승강장");
+        assertThat(r.place().lat()).isEqualTo(35.1605);
+    }
 }

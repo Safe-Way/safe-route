@@ -79,6 +79,7 @@ public class AssistantTools {
             StopPlanner stops) {
         this.stops = stops;
         this.kakao = kakao;
+        this.taxiStands = new TaxiStands(kakao);
         this.trips = trips;
         this.facilities = facilities;
         this.memory = memory;
@@ -665,6 +666,8 @@ public class AssistantTools {
     /** 택시 승강장을 찾는 거리. 승강장이 드물어 다른 시설(1km)보다 넓게 */
     static final int TAXI_RADIUS_M = 2000;
 
+    private TaxiStands taxiStands;
+
     /**
      * 가장 가까운 택시 승강장 (11-13). 우리 DB에는 택시 자료가 없어 카카오 장소 검색("교통,수송 > 택시")을 쓴다.
      * 카카오에 등록된 곳만 나온다 (광주송정역 택시승강장·호출택시승차장 등). 못 찾으면 null, 까닭은 t.spotMessage
@@ -687,8 +690,12 @@ public class AssistantTools {
             }
         } catch (PlaceSearchException e) {
             log.warn("비서 택시 승강장 검색 실패: {}", e.getMessage());
-            t.spotMessage = "지금은 장소 검색이 잘 안 돼요. 잠시 뒤에 다시 물어봐 주세요.";
-            return null;
+        }
+        // 카카오에 없는 광주 시내 승강장 손 목록 (11-13)
+        for (com.saferoute.place.Place p : taxiStands.around(t.lat, t.lon)) {
+            if (p.distanceM() <= TAXI_RADIUS_M) {
+                found.add(p);
+            }
         }
         if (found.isEmpty()) {
             t.spotMessage = "2km 안에 등록된 택시 승강장을 찾지 못했어요. 큰길에서 택시를 잡으시거나 택시 앱으로 불러 주세요.";
