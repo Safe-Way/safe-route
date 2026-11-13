@@ -30,6 +30,8 @@ import com.saferoute.route.engine.graph.RoadGraph;
 import com.saferoute.route.engine.score.RouteScorer;
 import com.saferoute.situation.NightJudge;
 
+import tools.jackson.databind.json.JsonMapper;
+
 /**
  * 경로를 못 찾았을 때 범위를 넓혀 다시 찾기, 휠체어 비포장 조건부 제외와 알림 (2026-11-04 결정).
  * 운영 테스트(RouteRandomCheck) 시드 20261104에서 찾은 경우를 작게 줄였다.
@@ -189,6 +191,46 @@ class RetryAndRelaxTests {
         RouteService s = service(new InMemoryRoadGraphSource(pocket(70)));
 
         assertThatThrownBy(() -> s.route(toward(north(T, 70), "wheelchair")))
+                .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
+    }
+
+    /** 계단 구역 안 D에서 S로 (건물 안 출발). reroute: 길안내 중 다시 찾기 */
+    static RouteRequest from(double[] d, Boolean reroute) {
+        return new RouteRequest(new Place(d[1], d[0], null), new Place(S[1], S[0], null), "auto", "wheelchair", null,
+                null, null, null, reroute);
+    }
+
+    @Test
+    void wheelchairOriginSnapsUpTo100mFurther() {
+        // 출발점만 100m까지 (유스퀘어 건물 안 출발, 2026-11-13). 도착은 위처럼 50m
+        RouteResult r = service(new InMemoryRoadGraphSource(pocket(80))).route(from(north(T, 80), null));
+
+        assertThat(r.explanation().text()).endsWith("(주의: 출발점 근처 약 80m는 휠체어로 이어진 길이 확인되지 않았습니다)");
+    }
+
+    @Test
+    void appJsonCarriesReroute() {
+        // 앱이 보내는 reroute가 버려지지 않는다 (호환 생성자가 여럿이라 확인)
+        RouteRequest r = JsonMapper.builder().build().readValue("""
+                { "origin": { "lat": 35.16, "lon": 126.879 }, "destination": { "lat": 35.15, "lon": 126.87 },
+                  "mode": "wheelchair", "reroute": true }
+                """, RouteRequest.class);
+        assertThat(r.reroute()).isTrue();
+    }
+
+    @Test
+    void wheelchairRerouteOriginKeeps50m() {
+        RouteService s = service(new InMemoryRoadGraphSource(pocket(80)));
+
+        assertThatThrownBy(() -> s.route(from(north(T, 80), true)))
+                .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
+    }
+
+    @Test
+    void wheelchairOriginGivesNoRouteWhenReachableRoadIsMoreThan100mFurther() {
+        RouteService s = service(new InMemoryRoadGraphSource(pocket(130)));
+
+        assertThatThrownBy(() -> s.route(from(north(T, 130), null)))
                 .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
     }
 
