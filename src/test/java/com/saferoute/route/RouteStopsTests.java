@@ -227,15 +227,19 @@ class RouteStopsTests {
         double[] d = g.point(4);
         double[] u = g.point(5);
 
-        // 휠체어: D는 계단으로만 닿고, 지날 수 있는 길(T)은 50m 넘게 더 멀다
+        // 휠체어: D는 계단으로만 닿고, 지날 수 있는 길(T)은 50m 넘게 더 멀다 (들를 곳은 50m까지)
         assertNoRoute(() -> s.route(request(start, u, "wheelchair", place(d, "다이소"))),
                 "다이소까지 가는 길을 찾지 못했어요");
-        assertNoRoute(() -> s.route(request(start, d, "wheelchair", place(u, "편의점"))),
-                "도착지까지 가는 길을 찾지 못했어요");
         assertNoRoute(() -> s.route(request(start, u, "wheelchair", place(d, " "))),
                 "들를 곳 1까지 가는 길을 찾지 못했어요");
+        // 도착점은 100m까지 붙으므로 (2026-11-13) 130m 뒤로
+        RoadGraph far = pocket(130);
+        RouteService fs = service(far, 12);
+        double[] fd = far.point(4);
+        assertNoRoute(() -> fs.route(request(start, fd, "wheelchair", place(u, "편의점"))),
+                "도착지까지 가는 길을 찾지 못했어요");
         // 들를 곳이 없으면 지금 문장 그대로
-        assertNoRoute(() -> s.route(request(start, d, "wheelchair")), RouteError.NO_ROUTE.message());
+        assertNoRoute(() -> fs.route(request(start, fd, "wheelchair")), RouteError.NO_ROUTE.message());
     }
 
     @Test
