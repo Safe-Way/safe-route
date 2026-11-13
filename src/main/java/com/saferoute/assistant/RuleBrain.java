@@ -69,6 +69,20 @@ class RuleBrain {
         }
         // "근처 엘리베이터", "엘리베이터 어디야": 되묻지 않고 엘리베이터 육교·출구 중 가장 가까운 곳 (11-13)
         if ("elevator".equals(nearbyKind(f))) {
+            // "문화전당 앞 엘리베이터 어디야": 지금 위치가 아니라 말한 곳 근처 (11-13 현장 시험)
+            String at = anchorBefore(t.text);
+            if (at != null) {
+                Place anchor = tools.firstPlace(t, at);
+                if (anchor != null) {
+                    tools.findNearby(t, "elevator", anchor.lat(), anchor.lon());
+                    return Outcome.say(anchor.name() + " 근처에서 찾았어요. " + Sentences.spot(t));
+                }
+                if (!t.located()) {
+                    return Outcome.ask("'" + at + "'을(를) 찾지 못했어요. 다른 이름으로 말씀해 주시겠어요?");
+                }
+                tools.findNearby(t, "elevator");
+                return Outcome.say("'" + at + "'을(를) 찾지 못해서 지금 계신 곳 근처로 찾았어요. " + Sentences.spot(t));
+            }
             if (!t.located()) {
                 return Outcome.ask("지금 계신 곳을 알아야 찾을 수 있어요. 위치 켜기를 눌러 주세요.");
             }
@@ -962,6 +976,28 @@ class RuleBrain {
         return null;
     }
 
+    private static final java.util.regex.Pattern ANCHOR = java.util.regex.Pattern.compile(
+            "^(.+?)\\s*(앞|근처|주변|옆|쪽|안)\\s*(에|에서|의)?\\s*(있는\\s*)?(엘베|엘리베이터)");
+    private static final java.util.Set<String> NOT_PLACE = java.util.Set.of(
+            "내", "제", "지금", "여기", "이", "이곳", "우리", "가까운", "가장", "제일", "바로");
+
+    /** "문화전당 앞 엘리베이터", "금남지하상가 근처에 있는 엘베" → "문화전당"·"금남지하상가". 장소 말이 없으면 null */
+    static String anchorBefore(String text) {
+        if (text == null) {
+            return null;
+        }
+        java.util.regex.Matcher m = ANCHOR.matcher(Fillers.clean(text.strip()));
+        if (!m.find()) {
+            return null;
+        }
+        String a = m.group(1).strip();
+        String last = a.contains(" ") ? a.substring(a.lastIndexOf(' ') + 1) : a;
+        if (a.length() < 2 || NOT_PLACE.contains(a) || NOT_PLACE.contains(last) || a.startsWith("지금")) {
+            return null;
+        }
+        return a;
+    }
+
     /** 택시 타는 곳을 묻는 말 (부르기·예약은 아님) */
     static boolean taxiStandAsked(String flat) {
         return flat.contains("택시")
@@ -972,7 +1008,7 @@ class RuleBrain {
 
     /** 가까운 곳을 찾는 말 ("근처", "가까운", "어디") */
     private static final java.util.regex.Pattern NEAR_WORD = java.util.regex.Pattern.compile(
-            "근처|가까운|가까이|주변|어디|어딨|찾아");
+            "근처|가까운|가까이|주변|어디|어딨|찾아|앞에|옆에");
 
     static String nearbyKind(String flat) {
         // 엘리베이터 (고장 신고, 지도에 보여 달라는 말은 빼고)

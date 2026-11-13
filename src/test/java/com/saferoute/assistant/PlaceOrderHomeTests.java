@@ -84,13 +84,13 @@ class PlaceOrderHomeTests {
 
     @Test
     void parkingLotGoesAfterTheRealPlace() {
-        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+        when(kakao.search(eq("국립아시아문화전당"), any(), any())).thenReturn(List.of(
                 new Place("1", "국립아시아문화전당 부설주차장", "광주 동구", 35.1460, 126.9200, 100),
                 new Place("2", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, 200),
                 new Place("3", "카페 전당앞", "광주 동구", 35.1468, 126.9210, 210)));
-        AssistantReply r = ask("문화전당 가자", null);
-        assertThat(r.choices()).isNotEmpty();
-        assertThat(r.choices().get(0).label()).startsWith("국립아시아문화전당").doesNotContain("주차장");
+        // 11-13: "문화전당"은 국립아시아문화전당으로 바꿔 찾고, 이름이 똑같은 곳이 있어 주차장이 아니라 그곳으로 바로 감
+        ask("문화전당 가자", null);
+        verify(trips).recommend(argThat(a -> a.dest().lat() == 35.1467));
     }
 
     @Test
