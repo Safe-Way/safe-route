@@ -114,7 +114,9 @@ class RuleBrain {
                     tools.findTaxi(t);
                     taxi = " 버스가 불편하시면 택시를 추천해요. " + Sentences.spot(t);
                 }
-                return Outcome.say(Josa.ro(busTo) + " 가는 버스는 찾지 못했어요." + go + taxi);
+                String none = tools.passingKnown() ? Josa.ro(busTo) + " 가는 버스는 찾지 못했어요."
+                        : Josa.iGa(busTo) + " 처음이나 끝 정류장인 버스는 없어요. 중간에 지나가는 버스 정보는 아직 준비 중이에요.";
+                return Outcome.say(none + go + taxi);
             }
         }
         // "광주역 근처 정류장": 광주역을 먼저 찾고 그 근처 (11-13)

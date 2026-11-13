@@ -813,6 +813,11 @@ public class AssistantTools {
         this.lineStops = lineStops;
     }
 
+    /** 노선별 정류장 파일을 읽었는지 (없으면 "지나가는 버스"는 모르고 기점·종점만 앎) */
+    boolean passingKnown() {
+        return lineStops != null && lineStops.loaded() > 0;
+    }
+
     /**
      * "수완동으로 가는 버스" (11-13): 그곳을 지나는 노선(광주버스정보 노선별 정류장) + 그쪽이 기점·종점인 노선.
      * 없으면 null. 노선 표를 못 읽으면 빈 문자열

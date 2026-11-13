@@ -132,7 +132,7 @@ class FieldTest1113Tests {
         when(lines.endingAt("양림")).thenReturn(List.of());
         when(kakao.search(eq("택시승강장"), anyDouble(), anyDouble())).thenReturn(List.of(
                 new Place("5", "조선대 택시승강장", "광주 동구", 35.141, 126.932, 150)));
-        assertThat(ask("양림동 가는 버스").say()).contains("양림동으로 가는 버스는 찾지 못했어요", "택시를 추천해요",
+        assertThat(ask("양림동 가는 버스").say()).contains("양림동이 처음이나 끝 정류장인 버스는 없어요", "아직 준비 중", "택시를 추천해요",
                 "조선대 택시승강장");
     }
 
