@@ -60,7 +60,7 @@ class BusLineSearchTests {
         when(kakao.search("수완동", 35.14, 126.93)).thenReturn(List.of(
                 new Place("1", "수완동", "광주 광산구 수완동", 35.19, 126.82, 12000)));
         List<Place> ps = ((PlacesResponse) controller.places("수완동으로 가는 버스", 35.14, 126.93).getBody()).places();
-        assertThat(ps).extracting(Place::name).containsExactly("03번 버스", "수완동");
+        assertThat(ps).extracting(Place::name).containsExactly("03번 버스"); // 가게·장소는 섞지 않음
         assertThat(ps.get(0).address()).isEqualTo("수완지구 ↔ 조선대 · 15분마다");
     }
 
@@ -76,8 +76,21 @@ class BusLineSearchTests {
         when(passing.to("수완동", 35.19, 126.82)).thenReturn(List.of(new com.saferoute.bus.BusLineStops.Hit(l,
                 new com.saferoute.bus.LineStop(20, 501, "수완지구", 35.191, 126.821))));
         List<Place> ps = ((PlacesResponse) controller.places("수완동으로 가는 버스", 35.14, 126.93).getBody()).places();
-        assertThat(ps).extracting(Place::name).containsExactly("03번 버스", "수완동");
+        assertThat(ps).extracting(Place::name).containsExactly("03번 버스"); // 가게·장소는 섞지 않음
         assertThat(ps.get(0).address()).isEqualTo("수완지구 지나요 · 첨단공영차고지 ↔ 조선대");
         assertThat(ps.get(0).lat()).isEqualTo(35.191); // 지나는 정류장 좌표 (기점 좌표는 몰라도 됨)
+    }
+
+    @Test
+    void noBusShowsJustThePlaceNotShopsNamedAfterIt() {
+        // 11-13 시험: "수완동으로 가는 버스"에 수완로 교회·가게 5곳이 나옴 → 버스가 없으면 동 한가운데 하나만
+        when(lines.endingAt("양림")).thenReturn(List.of());
+        when(kakao.searchAddress("광주 양림동")).thenReturn(List.of(
+                new Place("a", "양림동", "광주 남구 양림동", 35.1395, 126.9150, null)));
+        List<Place> ps = ((PlacesResponse) controller.places("양림동 가는 버스", 35.1405, 126.9310).getBody()).places();
+        assertThat(ps).extracting(Place::name).containsExactly("양림동");
+        assertThat(ps.get(0).distanceM()).isBetween(1300, 1600);
+        assertThat(PlaceController.DONG.matcher("월곡1동").matches()).isTrue();
+        assertThat(PlaceController.DONG.matcher("충장로").matches()).isFalse();
     }
 }

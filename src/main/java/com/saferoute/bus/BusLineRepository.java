@@ -23,8 +23,9 @@ public class BusLineRepository {
      * 기점 좌표는 정류장 표에서 이름이 같은 첫 정류장 (없으면 null)
      */
     public List<BusLine> find(String number) {
-        return query("l.line_name = ? OR l.line_name LIKE ?", "(l.line_name = ?) DESC, l.line_name",
-                number, "%" + number, number);
+        // "1003"은 "03"이 아님: 앞이 숫자가 아닐 때만 같은 번호로 본다 (급행03·수완03은 맞음, 11-13 터미널 확인)
+        return query("l.line_name = ? OR (l.line_name LIKE ? AND l.line_name NOT REGEXP ?)",
+                "(l.line_name = ?) DESC, l.line_name", number, "%" + number, "[0-9]" + number + "$", number);
     }
 
     /**

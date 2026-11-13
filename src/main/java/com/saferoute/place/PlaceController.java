@@ -107,7 +107,8 @@ public class PlaceController {
             }
         }
         // "수완동으로 가는 버스", "수완동 가는 버스", "수완동행 버스": 장소만 찾는다 (11-13).
-        // 그곳을 지나는 노선(광주버스정보 노선별 정류장)과 그쪽이 기점·종점인 노선을 맨 앞에, 그 아래 장소
+        // 그곳을 지나는 노선과 그쪽이 기점·종점인 노선만 보인다 (아래에 그 거리의 가게까지 섞이면 헷갈림, 11-13 시험).
+        // 노선이 하나도 없을 때만 장소를 보여 줘서 [도착]으로 고르면 갈아타는 길까지 나오게 한다
         java.util.regex.Matcher to = GOING_BUS.matcher(q);
         List<Place> lineFirst = List.of();
         if (to.matches()) {
@@ -115,6 +116,16 @@ public class PlaceController {
             if (place.length() >= 2) {
                 q = place;
                 lineFirst = linesEndingAt(place, lat, lon);
+                if (!lineFirst.isEmpty()) {
+                    return ResponseEntity.ok(new PlacesResponse(lineFirst));
+                }
+                // 가는 버스가 없으면 그 장소 하나만 (그 이름이 든 가게·교회 목록 대신). [도착]으로 고르면 갈아타는 길이 나옴
+                Place only = gwangjuPlace(BusLineQuery.anchor(place));
+                if (only != null) {
+                    return ResponseEntity.ok(new PlacesResponse(List.of(new Place(only.id(), only.name(),
+                            only.address(), only.lat(), only.lon(),
+                            lat == null ? null : meters(lat, lon, only.lat(), only.lon())))));
+                }
             }
         }
         // "광주역 근처 정류장": 광주역을 먼저 찾고 그 근처 정류장 (11-13, 통째로 카카오에 넘기면 경기 광주가 나옴)
@@ -152,12 +163,6 @@ public class PlaceController {
             // 광주 안 결과가 있으면 광주 밖(경기 광주 등)은 뺀다. 시연·서비스는 광주만
             if (found.stream().anyMatch(PlaceController::inGwangju)) {
                 found = found.stream().filter(PlaceController::inGwangju).toList();
-            }
-            // "○○로 가는 버스": 그쪽이 종점인 노선 먼저, 그다음 장소 (장소를 [도착]으로 고르면 갈아타는 길까지 나옴)
-            if (!lineFirst.isEmpty()) {
-                List<Place> out = new ArrayList<>(lineFirst);
-                out.addAll(found);
-                found = out.subList(0, Math.min(MAX_PLACES, out.size()));
             }
             return ResponseEntity.ok(new PlacesResponse(found));
         } catch (PlaceSearchException e) {
@@ -219,10 +224,22 @@ public class PlaceController {
         return p.lon() >= 126.64 && p.lat() >= 35.04 && p.lon() <= 127.03 && p.lat() <= 35.27;
     }
 
+    /** "수완동", "서석동", "충장동", "월곡1동" 같은 동네 이름 */
+    static final java.util.regex.Pattern DONG = java.util.regex.Pattern.compile("[가-힣]{1,5}\\d?(동|읍|면)");
+
     /** 이름으로 광주 안 장소 하나: 이름이 똑같은 곳 먼저, 없으면 광주 안 첫 곳. 못 찾으면 null */
     private Place gwangjuPlace(String spoken) {
         String name = PlaceAlias.of(spoken);
         try {
+            if (DONG.matcher(name.replaceAll("\\s+", "")).matches()) {
+                // "수완동": 키워드로 찾으면 동 이름이 든 교회·가게가 나와서, 주소 검색으로 동 한가운데를 쓴다 (11-13 시험)
+                List<Place> dong = kakao.searchAddress("광주 " + name).stream().filter(PlaceController::inGwangju)
+                        .toList();
+                if (!dong.isEmpty()) {
+                    Place d = dong.get(0);
+                    return new Place(d.id(), name, d.address(), d.lat(), d.lon(), d.distanceM());
+                }
+            }
             List<Place> in = kakao.search(name, null, null).stream().filter(PlaceController::inGwangju).toList();
             if (in.isEmpty() && !name.startsWith("광주")) {
                 // 전국에서 찾으면 경기 고양·성남 같은 곳이 앞을 채울 때가 있어 "광주 "를 붙여 한 번 더 (11-13 터미널 확인)
