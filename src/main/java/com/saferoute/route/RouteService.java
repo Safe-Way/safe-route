@@ -355,7 +355,7 @@ public class RouteService {
      * points: 출발, 들를 곳, 도착. 모든 점을 같은 도로망에 먼저 붙인 뒤 구간마다 찾는다: 붙일 때 길을 나눈 임시 노드가
      * 다른 구간과 겹치지 않게. underground: 지하 길을 넣은 도로망인지. noTrail: 등산로를 빼고 찾는지.
      * 먼저 모드 기준(profile.passable)대로 붙여 찾고, 못 찾으면 등산로를 뺀 길로 이어진 곳에 다시 붙인다 (아래 휠체어와 같은 방법).
-     * reroute: 길안내 중 다시 찾기. 휠체어 출발점도 넓힌 한도(100m) 대신 50m로 다시 붙인다 (2026-11-13)
+     * reroute: 길안내 중 다시 찾기. 휠체어 출발·도착점도 넓힌 한도(100m) 대신 50m로 다시 붙인다 (2026-11-13)
      */
     private Attempt attempt(RoadGraph graph, boolean underground, List<double[]> points, List<Place> stops,
             Conditions cond, RouteProperties.Profile profile, double wideDetour, RouteProperties.Phase phase,
@@ -404,11 +404,12 @@ public class RouteService {
         // 대부분의 요청은 위에서 찾으므로 연결 덩어리 계산은 못 찾았을 때만 한다.
         // 들를 곳이 있어도 모든 점을 함께 다시 붙이고 구간 전부를 다시 찾는다: 한 구간만 옮기면 앞 구간 끝 노드와 이어지지 않는다
         Set<Long> part = graph.mainPart(underground ? e -> passable.test(e) && !RouteFinder.isUnderground(e) : passable);
-        // 휠체어 출발점만 100m까지 (건물 안 출발, 2026-11-13): 이미 그 안에 있으면 휠체어로 들어온 길이 있다고 본다
+        // 휠체어 출발·도착점만 100m까지 (건물 안 출발·도착, 2026-11-13): 이미 그 안에 있으면 휠체어로 드나드는 길이 있다고 본다
         boolean stairsExcluded = profile.exclude().contains(Penalty.STAIRS);
         List<Placed> placed = new ArrayList<>();
         for (int k = 0; k < points.size(); k++) {
-            double extraM = k == 0 && stairsExcluded && !reroute ? props.passableSnapOriginExtraM()
+            boolean end = k == 0 || k == points.size() - 1;
+            double extraM = end && stairsExcluded && !reroute ? props.passableSnapOriginExtraM()
                     : props.passableSnapExtraM();
             try {
                 placed.add(place(graph, points.get(k), snaps.get(k), part, passable, extraM));
@@ -693,8 +694,8 @@ public class RouteService {
     /**
      * 지날 수 있는 길로 이어진 덩어리(part) 안에 다시 붙인다 (휠체어, 등산로를 피할 때).
      * 가장 가까운 길이 계단·등산로로만 드나드는 구역이면 옆 길에 붙는데, 모든 길 기준보다
-     * extraM(보통 passable-snap-extra-m 50m, 휠체어 출발점은 passable-snap-origin-extra-m 100m) 넘게 멀어지면
-     * 붙이지 않는다 (2026-11-04, 출발점 2026-11-13)
+     * extraM(보통 passable-snap-extra-m 50m, 휠체어 출발·도착점은 passable-snap-origin-extra-m 100m) 넘게 멀어지면
+     * 붙이지 않는다 (2026-11-04, 출발·도착점 2026-11-13)
      */
     private Placed place(RoadGraph graph, double[] p, RoadGraph.Snap any, Set<Long> part,
             java.util.function.Predicate<RoadEdge> passable, double extraM) {

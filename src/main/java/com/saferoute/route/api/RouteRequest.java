@@ -12,7 +12,7 @@ package com.saferoute.route.api;
  * @param stops 들를 곳 최대 3곳, 이 순서대로 거친다 (2026-11-10). 없으면 null 또는 빈 목록
  * @param allowTrail 등산로(OSM sac_scale이 붙은 산길)를 지나도 되는지. null·false면 등산로 없는 길이 있는 한 그 길로 간다 (한도 없음).
  *                   휠체어는 true여도 등산로를 지나지 않는다 (2026-11-12)
- * @param reroute 길안내 중 다시 찾기인지. true면 휠체어 출발점도 이어진 길에 50m까지만 다시 붙인다 (보통은 100m, 건물 안 출발).
+ * @param reroute 길안내 중 다시 찾기인지. true면 휠체어 출발·도착점도 이어진 길에 50m까지만 다시 붙인다 (보통은 100m, 건물 안 출발·도착).
  *                null·false면 보통 찾기 (2026-11-13)
  */
 public record RouteRequest(Place origin, Place destination, String night, String mode, String guestId, String rain,

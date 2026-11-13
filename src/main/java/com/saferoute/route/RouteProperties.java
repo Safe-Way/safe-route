@@ -22,7 +22,7 @@ import com.saferoute.route.engine.search.RouteFinder;
  * @param searchMarginM 출발·도착 사각형을 넓혀 도로망을 읽는 거리
  * @param retryMarginM  그 범위에서 경로를 못 찾으면 이만큼 넓혀 한 번 더 찾는다 (강·철도·큰 도로를 돌아가는 길)
  * @param passableSnapExtraM 휠체어가 지날 수 있는 길에 붙일 때, 모든 길 기준보다 이만큼 넘게 멀어지면 붙이지 않는다
- * @param passableSnapOriginExtraM 휠체어 출발점만 쓰는 위 한도 (건물 안 출발). 길안내 중 다시 찾기(reroute)는 위 값 (2026-11-13)
+ * @param passableSnapOriginExtraM 휠체어 출발·도착점만 쓰는 위 한도 (건물 안 출발·도착). 길안내 중 다시 찾기(reroute)는 위 값 (2026-11-13)
  * @param darkStretch 걷는 동안 "앞으로 ○m는 조명이 적습니다" 안내에 쓸 어두운 구간 기준 (FR-31)
  * @param turn        걷는 동안 "80m 앞 왼쪽" 안내에 쓸 꺾는 곳 기준 (FR-34)
  * @param events      길 위의 행사·돌발상황을 다루는 기준 (2026-11-06)
