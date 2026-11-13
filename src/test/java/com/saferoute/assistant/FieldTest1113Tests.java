@@ -183,4 +183,27 @@ class FieldTest1113Tests {
         assertThat(no.say()).startsWith("알겠어요. 03번 타는 곳이");
         assertThat(no.place()).isNull();
     }
+
+    @Test
+    void busRouteMapSaysMainStops() {
+        com.saferoute.bus.BusLineRepository lines = mock(com.saferoute.bus.BusLineRepository.class);
+        tools.setBusLines(lines);
+        com.saferoute.bus.BusLine l = new com.saferoute.bus.BusLine(28, "03", "조선대해오름관", "첨단공영차고지", null, null,
+                null, null, null);
+        when(lines.find("03")).thenReturn(List.of(l));
+        // 파일 없으면 사실대로
+        tools.setLineStops(new com.saferoute.bus.BusLineStops(lines));
+        assertThat(ask("03번 노선도 보여줘").say()).isEqualTo(
+                "03번은 조선대해오름관 ↔ 첨단공영차고지예요. 중간에 서는 정류장 정보는 아직 준비 중이에요.");
+        com.saferoute.bus.BusLineStops passing = mock(com.saferoute.bus.BusLineStops.class);
+        tools.setLineStops(passing);
+        java.util.List<com.saferoute.bus.LineStop> route = new java.util.ArrayList<>();
+        for (int i = 0; i < 11; i++) {
+            route.add(new com.saferoute.bus.LineStop(i + 1, i, i == 0 ? "조선대해오름관" : i == 10 ? "첨단공영차고지" : "정류장" + i,
+                    35.1, 126.9));
+        }
+        when(passing.route(28, "첨단공영차고지")).thenReturn(route);
+        assertThat(ask("03번 버스 어디어디 지나가?").say()).isEqualTo(
+                "03번은 조선대해오름관에서 출발해 정류장2, 정류장4, 정류장6, 정류장8을 지나 첨단공영차고지까지 가요. 정류장은 모두 11개예요.");
+    }
 }
