@@ -1260,3 +1260,30 @@ JOIN spotted a ON a.id = l.spot_id
 JOIN spotted s ON s.spot_id = l.spot_id AND s.d BETWEEN l.starts_on AND l.ends_on
 WHERE l.ends_on >= CURDATE()   -- @@TODAY@@
 GROUP BY l.spot_id, l.report_type, a.lat, a.lon, a.edge_id, l.starts_on, l.ends_on;
+
+-- 034 인도(보도): 국토지리정보원 연속수치지형도 인도 선 + 국가기본도 보도경계면, 우리 길마다 옆 인도. 넣기 scripts/load_sidewalk.py
+CREATE TABLE IF NOT EXISTS sidewalk (
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    source     VARCHAR(20)  NOT NULL COMMENT 'ngii_line(연속수치지형도 인도 선), ngii_area(국가기본도 보도경계면)',
+    source_id  VARCHAR(40)  NOT NULL COMMENT '원본 번호 (UFID 또는 NF_ID)',
+    kind       VARCHAR(10)  NULL     COMMENT 'sidewalk 인도, cycleway 자전거도로 (선만, 면은 NULL)',
+    width_m    DECIMAL(5,2) NULL     COMMENT '폭 m. 선은 원본 WIDT(0이면 NULL), 면은 넓이 ÷ (둘레/2)로 계산한 대략값',
+    material   VARCHAR(20)  NULL     COMMENT 'asphalt 아스콘, concrete 콘크리트, block 블록, unpaved 비포장, asphalt_block 아스콘/블록, other 기타 (선만)',
+    bicycle    TINYINT      NULL     COMMENT '자전거도로 함께 있음 1, 없음 0 (선만)',
+    made_on    VARCHAR(10)  NULL     COMMENT '원본 갱신일 (면) 또는 제작 연도',
+    geom       GEOMETRY     NOT NULL SRID 0 COMMENT '경위도 (선 LINESTRING, 면 POLYGON)',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_sidewalk_source (source, source_id),
+    SPATIAL INDEX sx_sidewalk_geom (geom)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '인도(보도) 원본 (국토지리정보원)';
+
+CREATE TABLE IF NOT EXISTS edge_sidewalk (
+    edge_id     BIGINT       NOT NULL COMMENT 'road_edge.id',
+    left_ratio  DECIMAL(4,2) NOT NULL COMMENT '길을 그린 방향 왼쪽에 인도가 있는 점의 비율 0~1',
+    right_ratio DECIMAL(4,2) NOT NULL COMMENT '오른쪽에 인도가 있는 점의 비율 0~1',
+    side        VARCHAR(5)   NOT NULL COMMENT 'both, left, right, no (비율 0.5 넘는 쪽). OSM sidewalk 태그와 같은 말',
+    width_m     DECIMAL(5,2) NULL     COMMENT '붙은 인도 폭 중간값 m (모르면 NULL)',
+    material    VARCHAR(20)  NULL     COMMENT '붙은 인도 재질 중 가장 긴 것 (sidewalk.material과 같은 값)',
+    source      VARCHAR(20)  NULL     COMMENT '판단에 쓴 자료: ngii_line, ngii_area, both',
+    PRIMARY KEY (edge_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '우리 길마다 옆 인도 (034, scripts/load_sidewalk.py)';
