@@ -100,6 +100,41 @@ public class KakaoLocalClient {
         }
     }
 
+    /**
+     * 좌표 → 주소 (11-13 "현재 위치" 주소 보기). name = 건물 이름(없으면 도로명, 그것도 없으면 지번 주소),
+     * address = 도로명 주소(없으면 지번). 주소가 없는 곳(산·바다)이면 null.
+     * 문서: https://developers.kakao.com/docs/latest/ko/local/dev-guide#coord-to-address
+     *
+     * @throws PlaceSearchException 키가 없거나 카카오가 실패했을 때
+     */
+    public Place addressAt(double lat, double lon) {
+        if (key == null || key.isBlank()) {
+            throw new PlaceSearchException("KAKAO_REST_KEY 가 .env 에 없습니다", null);
+        }
+        try {
+            CoordResponse res = rest.get()
+                    .uri(b -> b.path("/v2/local/geo/coord2address.json")
+                            .queryParam("x", lon).queryParam("y", lat).build())
+                    .header("Authorization", "KakaoAK " + key)
+                    .retrieve()
+                    .body(CoordResponse.class);
+            if (res == null || res.documents() == null || res.documents().isEmpty()) {
+                return null;
+            }
+            CoordDocument d = res.documents().get(0);
+            String road = d.road_address() == null ? null : d.road_address().address_name();
+            String jibun = d.address() == null ? null : d.address().address_name();
+            String building = d.road_address() == null ? null : d.road_address().building_name();
+            String address = isBlank(road) ? jibun : road;
+            if (isBlank(address)) {
+                return null;
+            }
+            return new Place(null, isBlank(building) ? address : building, address, lat, lon, 0);
+        } catch (RestClientException e) {
+            throw new PlaceSearchException("카카오 좌표→주소 실패: " + e.getMessage(), e);
+        }
+    }
+
     static Place toPlace(KakaoDocument d) {
         String address = isBlank(d.road_address_name()) ? d.address_name() : d.road_address_name();
         Integer distance = isBlank(d.distance()) ? null : Integer.valueOf(d.distance());
@@ -126,6 +161,16 @@ public class KakaoLocalClient {
     }
 
     record AddressDocument(String address_name, String x, String y) {
+    }
+
+    /** 좌표→주소 응답에서 쓰는 칸만 (road_address 도로명·건물 이름, address 지번) */
+    record CoordResponse(List<CoordDocument> documents) {
+    }
+
+    record CoordDocument(CoordAddress road_address, CoordAddress address) {
+    }
+
+    record CoordAddress(String address_name, String building_name) {
     }
 
     record KakaoDocument(String id, String place_name, String address_name, String road_address_name,

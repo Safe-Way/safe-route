@@ -88,6 +88,25 @@ public class TransitService {
         this.clock = clock;
     }
 
+    /**
+     * ODsay 추천 순으로 MAX_PATHS개. 그 안에 버스+지하철 같이 타는 길이 없는데 뒤에 있으면 마지막 자리를 그 길로 (11-13).
+     * 버스만·지하철만 길만 보여서 "같이 타는 길"을 고를 수 없던 문제. ODsay를 더 부르지 않는다
+     */
+    static List<OdsayPath> pick(List<OdsayPath> usable) {
+        List<OdsayPath> out = new ArrayList<>(usable.subList(0, Math.min(MAX_PATHS, usable.size())));
+        if (out.size() == MAX_PATHS && out.stream().noneMatch(TransitService::busAndSubway)) {
+            usable.stream().skip(MAX_PATHS).filter(TransitService::busAndSubway).findFirst()
+                    .ifPresent(mixed -> out.set(MAX_PATHS - 1, mixed));
+        }
+        return out;
+    }
+
+    /** 버스와 지하철을 둘 다 타는 길 */
+    static boolean busAndSubway(OdsayPath p) {
+        return p.segs().stream().anyMatch(s -> s.type() == OdsayPath.BUS)
+                && p.segs().stream().anyMatch(s -> s.type() == OdsayPath.SUBWAY);
+    }
+
     public TransitResult search(RouteRequest req) {
         if (req == null) {
             throw TransitException.bad("요청 내용이 비어 있어요");
@@ -108,7 +127,7 @@ public class TransitService {
             }
         }
         List<TransitResult.TransitPath> out = new ArrayList<>();
-        for (OdsayPath p : usable.subList(0, Math.min(MAX_PATHS, usable.size()))) {
+        for (OdsayPath p : pick(usable)) {
             out.add(build(p, from, to, req.night(), mode, look));
         }
         String note = null;
