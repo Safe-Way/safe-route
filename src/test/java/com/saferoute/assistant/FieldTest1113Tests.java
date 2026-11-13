@@ -151,4 +151,36 @@ class FieldTest1113Tests {
         assertThat(ask("수완동으로 가는 버스").say())
                 .startsWith("수완동으로 가는 버스는 03번(수완지구를 지나요, 첨단공영차고지 ↔ 조선대)이 있어요.");
     }
+
+    @Test
+    void busGoingThereOffersTheNearestStopOfThatLine() {
+        com.saferoute.bus.BusLineRepository lines = mock(com.saferoute.bus.BusLineRepository.class);
+        com.saferoute.bus.BusLineStops passing = mock(com.saferoute.bus.BusLineStops.class);
+        tools.setBusLines(lines);
+        tools.setLineStops(passing);
+        when(kakao.search(eq("수완지구"), anyDouble(), anyDouble())).thenReturn(List.of(
+                new Place("9", "수완지구", "광주 광산구 수완동", 35.19, 126.82, 9000)));
+        com.saferoute.bus.BusLine l = new com.saferoute.bus.BusLine(28, "03", "첨단공영차고지", "조선대", null, null,
+                null, null, null);
+        com.saferoute.bus.LineStop near = new com.saferoute.bus.LineStop(3, 77, "조선대병원", 35.1410, 126.9300);
+        when(passing.to("수완지구", 35.19, 126.82)).thenReturn(List.of(new com.saferoute.bus.BusLineStops.Hit(l,
+                new com.saferoute.bus.LineStop(20, 501, "수완지구", 35.191, 126.821))));
+        when(passing.stopsOf(28)).thenReturn(List.of(near));
+        when(passing.nearestStop(28, LAT, LON)).thenReturn(near);
+
+        AssistantReply first = ask("수완지구 가는 버스");
+        assertThat(first.say()).startsWith("수완지구로 가는 버스는 03번(")
+                .endsWith("03번이 서는 가장 가까운 정류장으로 안내할까요?");
+        assertThat(first.choices()).extracting(AssistantReply.Choice::label).containsExactly("네", "아니요");
+
+        AssistantReply yes = service.answer(new AssistantRequest(A, "", LAT, LON, null, first.conversationId(), "yes",
+                null, null, "adult"));
+        assertThat(yes.say()).contains("03번이 서는 정류장은 조선대병원", "[여기로 가기]");
+        assertThat(yes.place().lat()).isEqualTo(35.1410);
+
+        AssistantReply no = service.answer(new AssistantRequest(A, "아니요", LAT, LON, null, first.conversationId(), null,
+                null, null, "adult"));
+        assertThat(no.say()).startsWith("알겠어요. 03번 타는 곳이");
+        assertThat(no.place()).isNull();
+    }
 }

@@ -57,6 +57,8 @@ final class Turn {
     Conversation.Place planDest;
     AssistantReply.Spot spot;
     String spotKindName;
+    /** "○○ 가는 버스"에서 맨 앞에 말한 노선 (정류장 파일에 그 노선이 있을 때만) */
+    com.saferoute.bus.BusLine busLine;
     String spotMessage;
     /** 저장 전 확인 질문 (이게 있으면 답은 이 질문) */
     String confirm;

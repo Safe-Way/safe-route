@@ -101,6 +101,25 @@ public class BusLineStops {
         return stops.size();
     }
 
+    /** 그 노선이 서는 정류장 (순서대로). 파일에 없으면 빈 목록 */
+    public List<LineStop> stopsOf(int lineId) {
+        return stops.getOrDefault(lineId, List.of());
+    }
+
+    /** 그 노선이 서는 정류장 중 (lat, lon)에서 가장 가까운 곳. 없으면 null */
+    public LineStop nearestStop(int lineId, double lat, double lon) {
+        LineStop best = null;
+        double bestM = Double.MAX_VALUE;
+        for (LineStop s : stopsOf(lineId)) {
+            double m = meters(lat, lon, s.lat(), s.lon());
+            if (m < bestM) {
+                bestM = m;
+                best = s;
+            }
+        }
+        return best;
+    }
+
     /** 파일을 받은 날 ("2026-11-14"). 모르면 null */
     public String fetchedAt() {
         return fetchedAt;
@@ -165,7 +184,7 @@ public class BusLineStops {
         }
     }
 
-    static double meters(double lat1, double lon1, double lat2, double lon2) {
+    public static double meters(double lat1, double lon1, double lat2, double lon2) {
         double r = 6_371_000;
         double dLat = Math.toRadians(lat2 - lat1);
         double dLon = Math.toRadians(lon2 - lon1);

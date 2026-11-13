@@ -835,6 +835,9 @@ public class AssistantTools {
                 List<com.saferoute.bus.BusLineStops.Hit> hits = lineStops.to(place, at == null ? null : at.lat(),
                         at == null ? null : at.lon());
                 total = hits.size();
+                if (!hits.isEmpty() && !lineStops.stopsOf(hits.get(0).line().id()).isEmpty()) {
+                    t.busLine = hits.get(0).line();
+                }
                 for (com.saferoute.bus.BusLineStops.Hit h : hits.stream().limit(3).toList()) {
                     parts.add(h.line().name() + "번(" + (h.via() == null ? h.line().summary()
                             : Josa.eul(h.via().name()) + " 지나요, " + h.line().from() + " ↔ " + h.line().to()) + ")");
@@ -854,6 +857,25 @@ public class AssistantTools {
             log.warn("비서 노선 조회 실패: {}", e.getMostSpecificCause().getMessage());
             return "";
         }
+    }
+
+    /**
+     * "03번이 서는 가장 가까운 정류장으로 안내할까요?"에 네 (11-13): 정류장 파일에서 그 노선이 서는 곳 중
+     * 지금 위치에서 가장 가까운 곳을 [여기로 가기] 자리로
+     */
+    AssistantReply.Spot findLineStop(Turn t, int lineId, String lineName) {
+        t.tools.add("find_nearby");
+        t.spotKindName = lineName + "번이 서는 정류장";
+        com.saferoute.bus.LineStop s = lineStops == null || !t.located() ? null
+                : lineStops.nearestStop(lineId, t.lat, t.lon);
+        if (s == null) {
+            t.spotMessage = lineName + "번이 서는 정류장 정보를 아직 못 불러왔어요.";
+            return null;
+        }
+        int m = (int) Math.round(com.saferoute.bus.BusLineStops.meters(t.lat, t.lon, s.lat(), s.lon()));
+        t.spot = new AssistantReply.Spot("bus_stop", com.saferoute.place.BusStopQuery.stopName(s.name()), s.lat(), s.lon(),
+                m, null);
+        return t.spot;
     }
 
     /** 버스 정류장 표 (DB 없는 테스트에서는 안 넣음 → "지금은 못 찾아요") */

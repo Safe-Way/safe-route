@@ -106,6 +106,11 @@ class RuleBrain {
             String lines = tools.busLinesTo(t, busTo);
             String go = " 지금 계신 곳에서 타는 곳과 갈아타는 길은 '" + busTo + " 가자'라고 말씀하시면 찾아 드려요.";
             if (lines != null && !lines.isEmpty()) {
+                if (t.busLine != null && t.located()) {
+                    // "03번이 서는 가장 가까운 정류장으로 안내할까요?" → [네]/[아니요] (11-13)
+                    t.convo = t.convo.asked(BUS_LINE_ASK + t.busLine.id() + ":" + t.busLine.name());
+                    return Outcome.ask(lines + " " + t.busLine.name() + "번이 서는 가장 가까운 정류장으로 안내할까요?", YES_NO);
+                }
                 return Outcome.say(lines + go);
             }
             if (lines == null) {
@@ -376,8 +381,32 @@ class RuleBrain {
             case "place" -> place(t);
             case "go_near" -> goNear(t);
             case "food" -> foodKind(t);
-            default -> null;
+            default -> asked.startsWith(BUS_LINE_ASK) ? busLineStop(t, asked.substring(BUS_LINE_ASK.length())) : null;
         };
+    }
+
+    static final String BUS_LINE_ASK = "bus_line:";
+
+    /** "03번이 서는 가장 가까운 정류장으로 안내할까요?"에 대한 답. idName = "28:03" */
+    Outcome busLineStop(Turn t, String idName) {
+        Boolean yes = yesNo(t.text, t.req.choice());
+        t.convo = t.convo.asked(null);
+        if (yes == null) {
+            return null;
+        }
+        int colon = idName.indexOf(':');
+        String name = idName.substring(colon + 1);
+        if (!yes) {
+            return Outcome.say("알겠어요. " + name + "번 타는 곳이 필요하면 다시 말씀해 주세요.");
+        }
+        int id;
+        try {
+            id = Integer.parseInt(idName.substring(0, colon));
+        } catch (RuntimeException e) {
+            return null;
+        }
+        tools.findLineStop(t, id, name);
+        return Outcome.say(Sentences.spot(t));
     }
 
     /** 오늘 제안 (사용자가 말하지 않고 앱이 먼저 물어봄) */
