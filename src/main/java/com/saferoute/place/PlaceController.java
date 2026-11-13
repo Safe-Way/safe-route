@@ -79,7 +79,21 @@ public class PlaceController {
             }
         }
         try {
-            return ResponseEntity.ok(new PlacesResponse(kakao.search(q, lat, lon)));
+            String name = PlaceAlias.of(q);
+            List<Place> found = kakao.search(name, lat, lon);
+            // 가까운 순 10곳에 이름이 똑같은 곳이 없으면 정확도 순으로 한 번 더 보고 맨 앞에 (11-13 "금남지하상가")
+            if (lat != null && found.stream().noneMatch(p -> PlaceAlias.same(p.name(), name))) {
+                for (Place p : kakao.search(name, null, null)) {
+                    if (PlaceAlias.same(p.name(), name)) {
+                        List<Place> out = new ArrayList<>();
+                        out.add(new Place(p.id(), p.name(), p.address(), p.lat(), p.lon(), meters(lat, lon, p.lat(), p.lon())));
+                        out.addAll(found);
+                        found = out.subList(0, Math.min(MAX_PLACES, out.size()));
+                        break;
+                    }
+                }
+            }
+            return ResponseEntity.ok(new PlacesResponse(found));
         } catch (PlaceSearchException e) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(new ErrorResponse("SEARCH_UNAVAILABLE", "검색이 잠시 안 됩니다. 지도를 길게 눌러 고를 수 있어요"));
@@ -122,5 +136,15 @@ public class PlaceController {
             log.warn("정류장 검색 DB 실패, 카카오로: {}", e.getMostSpecificCause().getMessage());
         }
         return out;
+    }
+
+    /** 곧은 거리(m) */
+    static int meters(double lat1, double lon1, double lat2, double lon2) {
+        double r = 6_371_000;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1))
+                * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return (int) Math.round(2 * r * Math.asin(Math.sqrt(a)));
     }
 }

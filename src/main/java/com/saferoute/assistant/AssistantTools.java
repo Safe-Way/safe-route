@@ -108,7 +108,7 @@ public class AssistantTools {
 
     private Found findPlace(Turn t, String query) {
         t.tools.add("search_place");
-        String q = query == null ? "" : query.strip();
+        String q = query == null ? "" : com.saferoute.place.PlaceAlias.of(query.strip());
         if (q.isEmpty()) {
             return new Found("none", List.of());
         }
@@ -152,6 +152,11 @@ public class AssistantTools {
         } catch (PlaceSearchException e) {
             log.warn("비서 장소 검색 실패: {}", e.getMessage());
             return new Found("error", List.of());
+        }
+        // 카카오는 위치를 주면 가까운 순 10곳만 줘서, 이름에 '금남지하상가'가 든 가게 10곳이 진짜 금남지하상가(296m)를
+        // 밀어낼 수 있다 (11-13). 이름이 똑같은 곳이 없으면 정확도 순으로 한 번 더 보고, 광주 안에 똑같은 곳이 있으면 맨 앞에
+        if (!near && t.located() && found.stream().noneMatch(p -> com.saferoute.place.PlaceAlias.same(p.name(), q))) {
+            found = withExact(found, q);
         }
         // "남광주 시장"처럼 띄어 써서 광주에 맞는 곳이 없으면 붙여서 다시 (11-12 음성 인식 ④)
         String joined = q.replace(" ", "");
@@ -321,10 +326,33 @@ public class AssistantTools {
         return new Found("choose", cand);
     }
 
+    /** 정확도 순 검색에서 이름이 똑같은 광주 안 장소를 찾아 맨 앞에 넣는다. 없거나 실패하면 그대로 */
+    private List<com.saferoute.place.Place> withExact(List<com.saferoute.place.Place> found, String q) {
+        try {
+            for (com.saferoute.place.Place p : kakao.search(q, null, null)) {
+                if (com.saferoute.place.PlaceAlias.same(p.name(), q)
+                        && inGwangju(new Place(p.name(), p.address(), p.lat(), p.lon()))) {
+                    List<com.saferoute.place.Place> out = new ArrayList<>();
+                    out.add(p);
+                    out.addAll(found);
+                    return out;
+                }
+            }
+        } catch (PlaceSearchException e) {
+            log.info("이름 똑같은 곳 다시 찾기 실패: {}", e.getMessage());
+        }
+        return found;
+    }
+
     /** 이름으로 광주 안 첫 장소 하나 (근처를 정할 기준점). 대화는 바꾸지 않는다. 못 찾으면 null */
     Place firstPlace(Turn t, String name) {
         try {
-            for (com.saferoute.place.Place p : kakao.search(name, t.lat, t.lon)) {
+            String n = com.saferoute.place.PlaceAlias.of(name);
+            List<com.saferoute.place.Place> found = kakao.search(n, t.lat, t.lon);
+            if (found.stream().noneMatch(p -> com.saferoute.place.PlaceAlias.same(p.name(), n))) {
+                found = withExact(found, n);
+            }
+            for (com.saferoute.place.Place p : found) {
                 Place c = new Place(p.name(), p.address(), p.lat(), p.lon());
                 if (inGwangju(c)) {
                     return c;
@@ -488,7 +516,8 @@ public class AssistantTools {
      * 카카오는 지금 위치에서 가까운 순이라 "광주역"을 찾으면 가까운 "남광주역"이 먼저 온다 (11-12 시험).
      * 찾은 곳 이름이 말한 이름과 다르면 가까운 순 없이 다시 찾아, 이름이 똑같은 광주 안 장소가 있으면 그곳으로.
      */
-    Place exactOrigin(String name, Place first) {
+    Place exactOrigin(String spoken, Place first) {
+        String name = com.saferoute.place.PlaceAlias.of(spoken);
         String want = name.replace(" ", "");
         if (first.name().replace(" ", "").equals(want)) {
             return first;
@@ -635,6 +664,11 @@ public class AssistantTools {
      * 휠체어면 화장실은 장애인 화장실만, 지하철역은 엘리베이터 출구가 있는 역만 (재휘님 /api/places/nearby 와 같은 규칙).
      */
     AssistantReply.Spot findNearby(Turn t, String kind) {
+        return findNearby(t, kind, t.lat, t.lon);
+    }
+
+    /** lat·lon(지금 위치 또는 "문화전당 앞"처럼 말한 곳) 근처 kind 중 가장 가까운 곳. 거리는 그 점에서 잰 것 */
+    AssistantReply.Spot findNearby(Turn t, String kind, double lat, double lon) {
         t.tools.add("find_nearby");
         String k = NEARBY.containsKey(kind) ? kind : "toilet";
         boolean wheel = "wheelchair".equals(t.mode()) && ("toilet".equals(k) || "subway".equals(k));
@@ -642,7 +676,7 @@ public class AssistantTools {
                 : wheel ? "엘리베이터로 들어갈 수 있는 지하철역" : NEARBY.get(k);
         List<Facility> list;
         try {
-            list = facilities.near(t.lat, t.lon, k, wheel, NEARBY_RADIUS_M);
+            list = facilities.near(lat, lon, k, wheel, NEARBY_RADIUS_M);
         } catch (DataAccessException e) {
             log.warn("비서 가까운 시설 조회 실패: {}", e.getMostSpecificCause().getMessage());
             t.spotMessage = "지금은 시설 정보를 볼 수 없어요. 잠시 뒤에 다시 물어봐 주세요.";
