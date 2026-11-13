@@ -59,6 +59,19 @@ public class PlaceController {
             return ResponseEntity.badRequest()
                     .body(new ErrorResponse("BAD_PARAM", "lat 과 lon 은 함께 보내야 합니다"));
         }
+        // "현재 위치", "내 위치": 지금 있는 곳의 주소 한 줄 (11-13)
+        if (lat != null && HereQuery.asks(q)) {
+            try {
+                Place here = kakao.addressAt(lat, lon);
+                Place one = new Place("here", "현재 위치",
+                        here == null ? "주소를 찾을 수 없는 곳이에요" : here.address() + (here.name().equals(here.address()) ? "" : " (" + here.name() + ")"),
+                        lat, lon, 0);
+                return ResponseEntity.ok(new PlacesResponse(List.of(one)));
+            } catch (PlaceSearchException e) {
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                        .body(new ErrorResponse("SEARCH_UNAVAILABLE", "지금은 주소를 찾을 수 없어요"));
+            }
+        }
         if (lat != null && busStops != null && BusStopQuery.asks(q)) {
             List<Place> stops = nearStops(lat, lon);
             if (!stops.isEmpty()) {
@@ -73,13 +86,37 @@ public class PlaceController {
         }
     }
 
-    /** DB 정류장 1km 안 가까운 순. 주소 칸에는 방향(다음 정류장)을 넣어 길 건너 같은 이름 정류장을 나눈다 */
+    /**
+     * 좌표 → 주소 (11-13). 예: /api/places/here?lat=35.1401&lon=126.9336
+     * → {"name":"조선대학교 본관","address":"광주 동구 필문대로 309","lat":..,"lon":..}. 주소 없는 곳이면 404.
+     * 위치는 로그에 남기지 않는다 (NFR-07)
+     */
+    @GetMapping("/api/places/here")
+    public ResponseEntity<?> here(@RequestParam double lat, @RequestParam double lon) {
+        try {
+            Place p = kakao.addressAt(lat, lon);
+            if (p == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new ErrorResponse("NO_ADDRESS", "주소를 찾을 수 없는 곳이에요"));
+            }
+            return ResponseEntity.ok(p);
+        } catch (PlaceSearchException e) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(new ErrorResponse("SEARCH_UNAVAILABLE", "지금은 주소를 찾을 수 없어요"));
+        }
+    }
+
+    /**
+     * DB 정류장 1km 안 가까운 순. 이름은 정류장 이름 그대로(구글처럼 "조선대해오름관"),
+     * 아래 작은 글씨(주소 칸)는 "버스 정류장 · 조선대장미원 방면" — 길 건너 같은 이름 정류장을 나눈다
+     */
     private List<Place> nearStops(double lat, double lon) {
         List<Place> out = new ArrayList<>();
         try {
             for (BusStop s : busStops.near(lat, lon, BUS_RADIUS_M, MAX_PLACES)) {
-                String way = s.nextStop() == null || s.nextStop().isBlank() ? "버스 정류장" : s.nextStop().strip() + " 방면";
-                out.add(new Place("bus:" + s.id(), BusStopQuery.stopName(s.name()), way, s.lat(), s.lon(), s.distanceM()));
+                String way = s.nextStop() == null || s.nextStop().isBlank()
+                        ? "버스 정류장" : "버스 정류장 · " + s.nextStop().strip() + " 방면";
+                out.add(new Place("bus:" + s.id(), s.name().strip(), way, s.lat(), s.lon(), s.distanceM()));
             }
         } catch (DataAccessException e) {
             log.warn("정류장 검색 DB 실패, 카카오로: {}", e.getMostSpecificCause().getMessage());
