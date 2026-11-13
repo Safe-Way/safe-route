@@ -93,7 +93,7 @@ class AssistantServiceTests {
     @Test
     void appModeSkipsSetupWhenServerDoesNotKnowMe() {
         String guest = "00000000-0000-4000-8000-000000000998";
-        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+        when(kakao.search(eq("국립아시아문화전당"), any(), any())).thenReturn(List.of(
                 new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
         Trip walk = new Trip("walk", 12, 700, 0, 0, "걸어서 12분, 700m", Map.of(), "safe", Map.of(), List.of(), false,
                 null);
@@ -143,7 +143,7 @@ class AssistantServiceTests {
     void reportOnTheWayIsSaidPlainly() {
         // 원일님 w11: 엔진이 못 피한 신고는 events[] kind "신고", title 종류 이름 → "가는 길에 공사 신고가 있어요."
         wheelchairUser();
-        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+        when(kakao.search(eq("국립아시아문화전당"), any(), any())).thenReturn(List.of(
                 new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
         RouteResult.Event rep = new RouteResult.Event("신고", "공사", null, null, "2026-11-16T23:59", 120, 160, true,
                 null);
@@ -254,7 +254,7 @@ class AssistantServiceTests {
     void firstTimeUserGetsRouteFirstThenSetupQuestion() {
         // 사용성 점검: 처음 쓰는 사람도 "문화전당 가자"면 길부터 찾고 그다음 "어떻게 다니세요?"
         String guest = "00000000-0000-4000-8000-000000000996";
-        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+        when(kakao.search(eq("국립아시아문화전당"), any(), any())).thenReturn(List.of(
                 new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
         Trip walk = new Trip("walk", 12, 700, 0, 0, "걸어서 12분, 700m", Map.of(), "safe", Map.of(), List.of(), false,
                 null);
@@ -289,7 +289,7 @@ class AssistantServiceTests {
     @Test
     void rainyDayRecommendsLowFloorBusWithHabit() {
         wheelchairUser();
-        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+        when(kakao.search(eq("국립아시아문화전당"), any(), any())).thenReturn(List.of(
                 new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
         Trip bus = new Trip("transit", 14, 120, 0, 0, "버스 30번, 14분", Map.of(), null, Map.of(), List.of(), true,
                 "30번 5분 뒤");
@@ -309,7 +309,7 @@ class AssistantServiceTests {
     @Test
     void wheelchairWalkMentionsCurbs() {
         wheelchairUser();
-        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+        when(kakao.search(eq("국립아시아문화전당"), any(), any())).thenReturn(List.of(
                 new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
         Trip walk = new Trip("walk", 9, 600, 0, 0, "걸어서 9분, 600m", Map.of(), "safe", Map.of(), List.of(), false,
                 null);
@@ -388,7 +388,7 @@ class AssistantServiceTests {
     @Test
     void eval1RainyWheelchairWithoutBusSaysSo() {
         wheelchairUser();
-        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+        when(kakao.search(eq("국립아시아문화전당"), any(), any())).thenReturn(List.of(
                 new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
         Trip walk = new Trip("walk", 22, 1500, 0, 0, "휠체어로 22분, 1,500m", Map.of(), "safe", Map.of(), List.of(),
                 false, null);

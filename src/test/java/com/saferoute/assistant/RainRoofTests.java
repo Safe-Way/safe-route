@@ -92,7 +92,7 @@ class RainRoofTests {
         Clock clock = Clock.fixed(Instant.parse("2026-11-06T03:00:00Z"), ZoneId.of("Asia/Seoul"));
         AssistantService service = new AssistantService(new RuleBrain(tools, memory, unmet),
                 new GeminiBrain(new GeminiClient(RestClient.builder(), "", "m"), tools, json), tools, json, clock);
-        when(kakao.search(eq("문화전당"), any(), any())).thenReturn(List.of(
+        when(kakao.search(eq("국립아시아문화전당"), any(), any())).thenReturn(List.of(
                 new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
         when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk(600), List.of(),
                 List.of()), w, false, null));
