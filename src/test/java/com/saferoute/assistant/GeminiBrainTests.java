@@ -249,6 +249,23 @@ class GeminiBrainTests {
     }
 
     @Test
+    void cutOffAfterToolsAnswersFromToolsWithoutSearchingAgain() {
+        // 11-16: 도구를 부른 뒤 제미나이가 끊기면(시간 한도·실패) 규칙이 처음부터 다시 찾지 않고 찾은 결과로 답한다
+        server.expect(requestTo(URL)).andRespond(withSuccess("""
+                {"candidates":[{"content":{"role":"model","parts":[
+                  {"functionCall":{"name":"find_nearby","args":{"kind":"toilet"}}}]}}]}
+                """, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL)).andRespond(
+                org.springframework.test.web.client.response.MockRestResponseCreators.withServerError());
+        AssistantReply r = ask("화장실 급해");
+        server.verify();
+        assertThat(r.ai()).isFalse();
+        assertThat(r.say()).contains("50m");
+        org.mockito.Mockito.verify(facilities, org.mockito.Mockito.times(1))
+                .near(35.148, 126.926, "toilet", true, 1000);
+    }
+
+    @Test
     void savingToolOnlyAsksAndDoesNotSave() {
         server.expect(requestTo(URL)).andRespond(withSuccess("""
                 {"candidates":[{"content":{"role":"model","parts":[
