@@ -315,6 +315,13 @@ public class AssistantService {
             "\\s*[^.!?]*턱[^.!?]*피(한|했|해)[^.!?]*[.!?]");
 
     /**
+     * 휠체어 이유 문장(WHEELCHAIR_WHY) 중 한 줄만 이미 말한 것 (2026-11-16). 제미나이가 앞 문장만 따라 말하면
+     * 서버가 두 문장을 다 붙이면서 "못 지나는 것으로 확인된 길은 빼고 골랐어요"가 두 번 나왔다 (점검 2번, 11-12 기록)
+     */
+    private static final java.util.regex.Pattern WHEELCHAIR_PART = java.util.regex.Pattern.compile(
+            "\\s*[^.!?]*(못 지나는|턱 정보|턱 있어)[^.!?]*[.!?]");
+
+    /**
      * 제미나이가 말을 바꿔도 꼭 들어가야 하는 문장을 서버가 붙인다 (비서 점검 c10).
      * 휠체어로 걷는 길을 추천했으면 왜 이 길인지 한 줄.
      */
@@ -323,7 +330,7 @@ public class AssistantService {
             return null;
         }
         if ("wheelchair".equals(mode) && pick != null && "walk".equals(pick.type()) && !say.contains(WHEELCHAIR_WHY)) {
-            String rest = CURB_CLAIM.matcher(say).replaceAll("").strip();
+            String rest = WHEELCHAIR_PART.matcher(CURB_CLAIM.matcher(say).replaceAll("")).replaceAll("").strip();
             return (rest.isEmpty() ? "" : rest + " ") + WHEELCHAIR_WHY;
         }
         // 어르신: 제미나이가 줄이면서 쉴 곳 안내를 빼먹으면 서버가 붙인다 (점검 11번 11/12, 규칙 답과 같은 문장)
