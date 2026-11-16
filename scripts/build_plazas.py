@@ -16,12 +16,15 @@ load_road_network.py 는 면의 테두리만 걷는 길이 되는 것을 막으�
      쓰지 않게 tags.wheelchair = 'unknown' 으로 둔다.
   5. 면 하나 안에서만 잇기 때문에, 붙어 있는 광장 면 사이를 넘어가는 길은 생기지 않는다. 그런 곳 중 확인한 곳은
      MANUAL_LINKS 에 손으로 적어(입구 두 점 + 그 사이 꺾이는 점) 같은 표에 넣는다.
+  6. 넓은 광장 가운데를 지나는 긴 선은 SPINES 에 뼈대로 적는다(11-16, 5·18민주광장). 뼈대에서 가까운 길 점·역 출구를
+     가지로 붙이고, 가지 끝 두 개마다 '점 → 뼈대 → 점' 꺾인 선 하나를 넣는다. 현장에서 평지로 본 뼈대는
+     tags.wheelchair = 'yes' 라 휠체어도 쓴다(원일 #266).
 새 점은 만들지 않는다(입구는 모두 이미 road_node 에 있음. 꺾이는 점은 선 모양일 뿐 길찾기 점이 아님).
 
 쓰는 법
   python3 scripts/build_plazas.py            # 받고, SQL 만들고, DB에 넣고, 시연 지역 거리 비교
   python3 scripts/build_plazas.py --dry-run  # DB에 넣지 않음 (비교는 함)
-  --refresh: 받아 둔 OSM 응답(data/raw/osm/plazas_gwangju.json) 대신 새로 받음
+  --refresh: 받아 둔 OSM 응답(data/raw/osm/plazas_gwangju.json, spine_buildings_*.json) 대신 새로 받음
 다시 돌려도 된다(plaza 줄을 지우고 새로 넣음).
 """
 import heapq
@@ -58,6 +61,23 @@ MANUAL_LINKS = [
     {"from": 7179003402, "to": 13052475511, "via": [(35.147759, 126.9206315), (35.148111, 126.921380)],
      "osm": "way/1034349957", "name": None},
 ]
+# 뼈대 선 (6번). head: 손으로 그린 뼈대 꺾이는 점 (위도, 경도). 첫 점 → 둘째 점 방향을 서쪽으로 곧게 늘려
+# road 선(road_edge id)과 만나는 곳이 뼈대 서쪽 끝이고, road 의 두 끝 점(road_ends)은 그 길을 따라 뼈대에 붙는다.
+# east: 뼈대 동쪽 끝 도로망 점. entries: 뼈대에서 멀어도(SPINE_R_ENTRY) 붙일 광장 입구 점.
+SPINES = [
+    # 2026-11-16 재휘: 원일 그림(11-13)의 가운데 긴 초록 선. 서석로 쪽 광장 가장자리(3·4번 출구 북쪽) →
+    # 5·18민주광장 → 상무관 옆 북쪽 보행로 띠 → 하늘마당 동쪽 입구(제봉로 보도). 뼈대 307m, 가지 끝 9개, 선 36개.
+    # 휠체어 금남로 → 하늘마당 동쪽 363m (성인과 같음, 학교 서버 11-16)
+    {"way_id": -399002, "spine": "5.18민주광장", "osm": "relation/19102230",
+     "head": [(35.14716, 126.91912), (35.148111, 126.921380)], "east": 13052475511,
+     "road": 119462, "road_ends": (13050545588, 824103424),  # 서석로 (광장 서쪽 가장자리를 따라감)
+     "entries": [824103424, 13056485379, 436486786, 6175977287, 12819746050, 7179003402],
+     "box": (35.1455, 126.9180, 35.1495, 126.9235),
+     "max_s": 250,  # 뼈대 동쪽 끝 57m(하늘마당 동쪽)는 광장 선이 이미 촘촘해 가지를 붙이지 않음
+     "wheelchair": "yes", "checked": "2026-11-16 재휘 (5·18민주광장·북쪽 보행로 평지, 현장 확인 필요)"},
+]
+SPINE_R, SPINE_R_ENTRY = 35, 75  # 가지 최대 길이 (길 점·출구, 광장 입구)
+SPINE_LAT0 = 35.147
 
 
 def path_m(pts):
@@ -268,11 +288,11 @@ def query(cmd, sql):
     return [line.split("\t") for line in r.stdout.splitlines() if line]
 
 
-def car_lines_in(cmd, s, w, n, e, lat0):
+def car_lines_in(cmd, s, w, n, e, lat0, highways=CAR_ROADS):
     """범위 안 찻길 선들 (평면 좌표 점 목록)"""
     box = f"ST_GeomFromText('POLYGON(({w} {s},{e} {s},{e} {n},{w} {n},{w} {s}))', 0)"
     rows = query(cmd, f"""SELECT ST_AsText(geom) FROM road_edge WHERE MBRIntersects({box}, geom)
-        AND highway IN ({",".join(q(h) for h in CAR_ROADS)})""")
+        AND highway IN ({",".join(q(h) for h in highways)})""")
     out = []
     for (wkt,) in rows:
         pts = [tuple(map(float, xy.split())) for xy in re.findall(r"[-\d.]+ [-\d.]+", wkt)]
@@ -299,6 +319,147 @@ def network_nodes_in(cmd, s, w, n, e):
 
 def q(v):
     return "'" + str(v).replace("\\", "\\\\").replace("'", "''") + "'"
+
+
+# ---------- 뼈대 선 (6번) ----------
+
+def spine_buildings(sp):
+    """뼈대 범위의 건물 고리들 (OSM building 길, 평면 좌표). 받아 둔 응답이 있으면 그것을 씀"""
+    path = os.path.join(ROOT, "data", "raw", "osm", f"spine_buildings_{-sp['way_id']}.json")
+    if os.path.exists(path) and "--refresh" not in sys.argv:
+        data = json.load(open(path, encoding="utf-8"))
+    else:
+        s, w, n, e = sp["box"]
+        data = overpass(f'[out:json][timeout:60];way["building"]({s},{w},{n},{e});out geom;')
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        json.dump(data, open(path, "w", encoding="utf-8"), ensure_ascii=False)
+    return [[to_xy(p["lat"], p["lon"], SPINE_LAT0) for p in el["geometry"]]
+            for el in data["elements"] if el["type"] == "way" and el.get("geometry")]
+
+
+def spine_edges(cmd, sp):
+    """뼈대 하나의 선들. 가지 끝 점 두 개마다 '점 → (가지) → 뼈대 → (가지) → 점' 꺾인 선 하나"""
+    X = lambda ll: to_xy(ll[0], ll[1], SPINE_LAT0)  # noqa: E731
+    s, w, n, e = sp["box"]
+    box = f"ST_GeomFromText('POLYGON(({w} {s},{e} {s},{e} {n},{w} {n},{w} {s}))', 0)"
+    # 붙일 후보: 찻길이 아닌 길이 쓰는 점
+    nodes = {int(a): (float(b), float(c)) for a, b, c in query(cmd, f"""SELECT n.id, n.lat, n.lon FROM road_node n
+        WHERE MBRIntersects({box}, n.geom) AND EXISTS (SELECT 1 FROM road_edge x
+          WHERE (x.from_node = n.id OR x.to_node = n.id) AND x.highway NOT IN ({",".join(q(h) for h in CAR_ROADS)}))""")}
+    known = dict(nodes)
+    ids = ",".join(str(i) for i in [*sp["entries"], sp["east"], *sp["road_ends"]])
+    known.update({int(a): (float(b), float(c)) for a, b, c in query(cmd, f"SELECT id, lat, lon FROM road_node WHERE id IN ({ids})")})
+    for k in [*sp["entries"], sp["east"], *sp["road_ends"]]:
+        if k not in known:
+            sys.exit(f"SPINES {sp['spine']}: road_node 에 없는 점 {k}")
+    # 지하 역 출구 (road_node_excluded, tags.exit). 엘리베이터 출구가 뼈대 옆이면 가지로 붙임
+    exits = {int(a): ((float(b), float(c)), nm) for a, b, c, nm in query(cmd, f"""SELECT id, lat, lon,
+        JSON_UNQUOTE(JSON_EXTRACT(tags, '$.name')) FROM road_node_excluded
+        WHERE JSON_EXTRACT(tags, '$.exit') IS NOT NULL AND MBRIntersects({box}, geom)""")}
+    # 광장 안 차량 통로(service)는 걸어서 건너는 곳이라 막는 찻길에서 뺌
+    cars = car_lines_in(cmd, s, w, n, e, SPINE_LAT0, [h for h in CAR_ROADS if h != "service"])
+    bld = spine_buildings(sp)
+
+    # 서쪽 끝: head 를 서쪽으로 곧게 늘려 road 선과 처음 만나는 점
+    wkt, frm = query(cmd, f"SELECT ST_AsText(geom), from_node FROM road_edge WHERE id = {sp['road']}")[0]
+    road = [tuple(map(float, p.split()))[::-1] for p in re.findall(r"[-\d.]+ [-\d.]+", wkt)]
+    if int(frm) != sp["road_ends"][0]:
+        road = road[::-1]
+    e0, s0 = X(sp["head"][1]), X(sp["head"][0])
+    dx, dy = s0[0] - e0[0], s0[1] - e0[1]
+    meet = None
+    for k, (a, b) in enumerate(zip(road, road[1:])):
+        pa, pb = X(a), X(b)
+        rx, ry = pb[0] - pa[0], pb[1] - pa[1]
+        den = dx * ry - dy * rx
+        if abs(den) < 1e-9:
+            continue
+        t = ((pa[0] - e0[0]) * ry - (pa[1] - e0[1]) * rx) / den
+        u = ((pa[0] - e0[0]) * dy - (pa[1] - e0[1]) * dx) / den
+        if t > 0 and 0 <= u <= 1 and (meet is None or t < meet[0]):
+            meet = (t, k, (a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u))
+    if meet is None:
+        sys.exit(f"SPINES {sp['spine']}: 뼈대를 늘려도 road {sp['road']} 와 만나지 않음")
+    _, seg, west = meet
+    spine = [west, *sp["head"][1:], known[sp["east"]]]
+    segs = list(zip(spine, spine[1:]))
+    cum = [0.0]
+    for a, b in segs:
+        cum.append(cum[-1] + meters(a, b))
+
+    def blocked(a, b):
+        """a → b 곧은 선이 건물 안(1m마다)을 지나거나 찻길과 엇갈리는지"""
+        xa, xb = X(a), X(b)
+        length = math.hypot(xb[0] - xa[0], xb[1] - xa[1])
+        k = 1.0
+        while k < length - 1:
+            t = k / length
+            p = (xa[0] + (xb[0] - xa[0]) * t, xa[1] + (xb[1] - xa[1]) * t)
+            if any(inside(p, h) for h in bld):
+                return True
+            k += 1.0
+        return crosses_car(xa, xb, cars)
+
+    for a, b in segs:
+        if blocked(a, b):
+            sys.exit(f"SPINES {sp['spine']}: 뼈대가 건물·찻길을 지남 {a} → {b}")
+
+    # 가지 끝: road 두 끝 점(길을 따라 서쪽 끝으로), 동쪽 끝 점, 그리고 뼈대에서 가까운 길 점·출구
+    a_end, b_end = sp["road_ends"]
+    ends = [{"id": k, "ll": known[k], "via": v, "q": west, "i": 0, "s": 0.0, "name": None}
+            for k, v in ((a_end, road[1:seg + 1]), (b_end, list(reversed(road[seg + 1:-1]))))]
+    ends.append({"id": sp["east"], "ll": known[sp["east"]], "via": [], "q": known[sp["east"]], "i": len(segs) - 1,
+                 "s": cum[-1], "name": None})
+    samples = []  # 뼈대 위 1m마다 점 (가지를 붙일 자리 후보)
+    for i, (a, b) in enumerate(segs):
+        length, k = meters(a, b), 0.0
+        while k <= length:
+            t = k / length
+            samples.append(((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), i, cum[i] + k))
+            k += 1.0
+    taken = {x["id"] for x in ends}
+    pool = [(k, known[k], None) for k in sorted((set(nodes) | set(sp["entries"])) - taken)]
+    pool += [(k, ll, nm) for k, (ll, nm) in sorted(exits.items())]
+    for k, ll, nm in pool:
+        lim = SPINE_R_ENTRY if k in sp["entries"] else SPINE_R
+        # 가장 가까운, 건물·찻길을 지나지 않는 뼈대 자리 (수직이 막히면 비스듬히)
+        hit = None
+        for d, qq, i, sv in sorted(((meters(ll, qq), qq, i, sv) for qq, i, sv in samples), key=lambda r: r[0]):
+            if d > lim:
+                break
+            if not blocked(ll, qq):
+                hit = (d, qq, i, sv)
+                break
+        if not hit:
+            continue
+        d, qq, i, sv = hit
+        # 동쪽 끝은 하늘마당 동쪽 광장 선이 촘촘함, 서쪽 끝 바깥(찻길 건너) 보도는 뺌 (출구는 붙임)
+        if sv > sp["max_s"] or (sv < 1 and not nm):
+            continue
+        ends.append({"id": k, "ll": ll, "via": [], "q": qq, "i": i, "s": sv, "name": nm})
+    ends.sort(key=lambda x: x["s"])
+
+    def line(p, r):
+        a, b = (p, r) if p["s"] <= r["s"] else (r, p)
+        pts = [a["ll"], *a["via"], a["q"], *[spine[j + 1] for j in range(a["i"], b["i"])], b["q"],
+               *reversed(b["via"]), b["ll"]]
+        out = [pts[0]]
+        for x in pts[1:]:
+            if meters(out[-1], x) > 0.5:
+                out.append(x)
+        return out
+
+    tags = {"area": "plaza", "osm": sp["osm"], "wheelchair": sp["wheelchair"], "source": "manual",
+            "spine": sp["spine"], "checked": sp["checked"]}
+    edges = []
+    for i in range(len(ends)):
+        for j in range(i + 1, len(ends)):
+            edges.append({"way_id": sp["way_id"], "seq": len(edges), "from": ends[i]["id"], "to": ends[j]["id"],
+                          "pts": line(ends[i], ends[j]), "name": None, "osm": sp["osm"], "tags": tags})
+    print(f"뼈대 {sp['spine']}: {cum[-1]:.0f}m, 가지 끝 {len(ends)}개, 선 {len(edges)}개 (wheelchair {sp['wheelchair']})")
+    for x in ends:
+        print(f"  {x['id']} {x['name'] or ''} 뼈대 {x['s']:.0f}m 지점")
+    return edges
 
 
 def main():
@@ -354,9 +515,13 @@ def main():
                               "pts": [known[m["from"]], *m["via"], known[m["to"]]], "name": m["name"], "osm": m["osm"]})
             print(f"손으로 확인한 면 사이 길 {len(MANUAL_LINKS)}개")
 
+        # 뼈대 선 (6번)
+        for sp in SPINES:
+            edges += spine_edges(cmd, sp)
+
         with open(OUT, "w", encoding="utf-8") as f:
             f.write("-- scripts/build_plazas.py 가 만든 파일. 손으로 고치지 말고 스크립트를 다시 돌린다.\n")
-            f.write("-- 보행자 광장(OSM 면)을 가로지르는 길. 엔진은 원일님이 확인한 뒤 읽는다 (reason plaza)\n")
+            f.write("-- 보행자 광장(OSM 면)을 가로지르는 길 + 손으로 확인한 면 사이 길(-399001) + 뼈대 선(-399002~) (reason plaza)\n")
             f.write("SET NAMES utf8mb4;\n")
             f.write(f"DELETE FROM road_edge_excluded WHERE reason = {q(REASON)};\n")
             for i in range(0, len(edges), 500):
@@ -366,12 +531,12 @@ def main():
                 f.write(",\n".join(
                     f"({e['way_id']},{e['seq']},{e['from']},{e['to']},{path_m(e['pts']):.2f},'pedestrian',"
                     f"{q(e['name']) if e['name'] else 'NULL'},NULL,0,0,0,NULL,"
-                    f"{q(json.dumps({'area': 'plaza', 'osm': e['osm'], 'wheelchair': 'unknown', 'source': 'manual'}, ensure_ascii=False))},"
+                    f"{q(json.dumps(e.get('tags') or {'area': 'plaza', 'osm': e['osm'], 'wheelchair': 'unknown', 'source': 'manual'}, ensure_ascii=False))},"
                     "ST_GeomFromText('LINESTRING(" + ",".join(f"{p[1]:.7f} {p[0]:.7f}" for p in e["pts"])
                     + f")', 0),{q(REASON)})" for e in chunk) + ";\n")
             f.write(f"""INSERT INTO data_source (type, source, title, api, license, total_count, loaded_count,
                     skipped_count, complete, loaded_at)
-VALUES ('road_edge_plaza', 'osm', {q('보행자 광장 가로지르기 (OSM 면 → 입구끼리 곧은 길, build_plazas.py)')},
+VALUES ('road_edge_plaza', 'osm', {q('보행자 광장 가로지르기 (OSM 면 → 입구끼리 곧은 길 + 뼈대 선, build_plazas.py)')},
         'Overpass API', 'ODbL (출처 표시)', {len(edges)}, {len(edges)}, 0, 1, NOW())
 ON DUPLICATE KEY UPDATE title = VALUES(title), total_count = VALUES(total_count), loaded_count = VALUES(loaded_count),
   complete = 1, loaded_at = NOW();

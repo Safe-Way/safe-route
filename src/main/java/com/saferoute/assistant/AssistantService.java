@@ -8,6 +8,8 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.saferoute.assistant.AssistantReply.Other;
@@ -37,20 +39,35 @@ public class AssistantService {
     private final AssistantTools tools;
     private final Conversation.Codec codec;
     private final Clock clock;
+    /** 답 하나에 쓰는 시간 한도 ms (assistant.answer-budget-ms). 앱이 10초에 끊어서 그보다 먼저 답한다 */
+    private final long budgetMs;
 
+    /** 테스트용: 기본 한도(7초) */
     public AssistantService(RuleBrain rules, GeminiBrain gemini, AssistantTools tools, JsonMapper json, Clock clock) {
+        this(rules, gemini, tools, json, clock, DEFAULT_BUDGET_MS);
+    }
+
+    @Autowired
+    public AssistantService(RuleBrain rules, GeminiBrain gemini, AssistantTools tools, JsonMapper json, Clock clock,
+            @Value("${assistant.answer-budget-ms:7000}") long budgetMs) {
         this.rules = rules;
         this.gemini = gemini;
         this.tools = tools;
         this.codec = new Conversation.Codec(json);
         this.clock = clock;
+        this.budgetMs = budgetMs;
     }
+
+    static final long DEFAULT_BUDGET_MS = 7000;
 
     public AssistantReply answer(AssistantRequest req) {
         AssistantRequest asked = req == null ? AssistantRequest.empty() : req;
+        // 질문을 받은 때부터 잰다. 다른 받아쓰기 후보로 다시 생각해도 같은 한도 안에서 (2026-11-16)
+        long deadline = System.nanoTime() + budgetMs * 1_000_000L;
         List<String> heard = Hearing.candidates(asked);
         int first = Hearing.best(heard);
         Turn t = turn(first == 0 ? asked : asked.withText(heard.get(first)));
+        t.deadline = deadline;
         Outcome o = think(t);
         // 말한 장소를 못 찾았으면 받아쓰기 다른 후보로 다시 ("남광주시정" → 후보 "남광주시장", 11-12 음성 인식 ②)
         int used = first;
@@ -59,8 +76,12 @@ public class AssistantService {
             if (i == first || Hearing.score(heard.get(i)) < Hearing.score(heard.get(first))) {
                 continue;
             }
+            if (System.nanoTime() >= deadline) {
+                break; // 시간이 다 됐으면 다른 후보는 보지 않고 지금 답으로
+            }
             tries++;
             Turn again = turn(asked.withText(heard.get(i)));
+            again.deadline = deadline;
             Outcome o2 = think(again);
             if (!again.placeMissed) {
                 t = again;
@@ -294,6 +315,13 @@ public class AssistantService {
             "\\s*[^.!?]*턱[^.!?]*피(한|했|해)[^.!?]*[.!?]");
 
     /**
+     * 휠체어 이유 문장(WHEELCHAIR_WHY) 중 한 줄만 이미 말한 것 (2026-11-16). 제미나이가 앞 문장만 따라 말하면
+     * 서버가 두 문장을 다 붙이면서 "못 지나는 것으로 확인된 길은 빼고 골랐어요"가 두 번 나왔다 (점검 2번, 11-12 기록)
+     */
+    private static final java.util.regex.Pattern WHEELCHAIR_PART = java.util.regex.Pattern.compile(
+            "\\s*[^.!?]*(못 지나는|턱 정보|턱 있어)[^.!?]*[.!?]");
+
+    /**
      * 제미나이가 말을 바꿔도 꼭 들어가야 하는 문장을 서버가 붙인다 (비서 점검 c10).
      * 휠체어로 걷는 길을 추천했으면 왜 이 길인지 한 줄.
      */
@@ -302,7 +330,7 @@ public class AssistantService {
             return null;
         }
         if ("wheelchair".equals(mode) && pick != null && "walk".equals(pick.type()) && !say.contains(WHEELCHAIR_WHY)) {
-            String rest = CURB_CLAIM.matcher(say).replaceAll("").strip();
+            String rest = WHEELCHAIR_PART.matcher(CURB_CLAIM.matcher(say).replaceAll("")).replaceAll("").strip();
             return (rest.isEmpty() ? "" : rest + " ") + WHEELCHAIR_WHY;
         }
         // 어르신: 제미나이가 줄이면서 쉴 곳 안내를 빼먹으면 서버가 붙인다 (점검 11번 11/12, 규칙 답과 같은 문장)

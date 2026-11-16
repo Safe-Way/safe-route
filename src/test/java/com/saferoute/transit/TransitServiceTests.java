@@ -161,6 +161,20 @@ class TransitServiceTests {
     }
 
     @Test
+    void walkFallsBackToOdsayWhenEngineFailsUnexpectedly() {
+        // DB가 잠깐 끊기는 등 뜻밖의 오류도 대중교통 전체를 실패시키지 않고 그 걷는 구간만 ODsay 값으로 (11-16)
+        when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("문화전당"));
+        stubLive(true);
+        when(route.route(any())).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("db down"));
+
+        TransitResult.TransitPath p = service.search(new RouteRequest(HOME, GOAL, null, null)).paths().get(0);
+
+        assertThat(p.legs().get(0).safeWalk()).isFalse();
+        assertThat(p.legs().get(0).distanceM()).isEqualTo(250);
+        assertThat(p.totalMin()).isEqualTo(38);
+    }
+
+    @Test
     void wheelchairHidesPathThroughStationWithoutElevatorExit() {
         when(odsay.search(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(busThenSubway("양동시장"));
         stubLive(false);

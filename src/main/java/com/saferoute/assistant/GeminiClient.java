@@ -46,6 +46,11 @@ public class GeminiClient {
     private final String key;
     private final String model;
     private final List<String> models;
+    /** 호출 한 번을 기다리는 시간 ms (assistant.timeout-ms). 테스트 생성자는 정하지 않음 */
+    private final long callTimeoutMs;
+    /** 남은 시간이 호출 한도보다 짧을 때 그 시간만 기다리려고 따로 돌리는 곳 (가벼운 가상 스레드) */
+    private static final java.util.concurrent.ExecutorService WAITER =
+            java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
     /** 마지막으로 대답한 모델 순번. 다음 질문은 그 모델부터 묻는다 (바쁜 모델을 매번 기다리지 않게) */
     private volatile int working = 0;
 
@@ -53,11 +58,16 @@ public class GeminiClient {
     public GeminiClient(@Value("${api-keys.gemini:}") String key,
             @Value("${assistant.gemini-model:}") String model,
             @Value("${assistant.timeout-ms:6000}") int timeoutMs) {
-        this(RestClient.builder().requestFactory(timeoutFactory(timeoutMs)), key, model);
+        this(RestClient.builder().requestFactory(timeoutFactory(timeoutMs)), key, model, timeoutMs);
     }
 
     /** 테스트에서 가짜 제미나이 서버를 붙일 때 쓴다 */
     GeminiClient(RestClient.Builder builder, String key, String model) {
+        this(builder, key, model, Long.MAX_VALUE);
+    }
+
+    GeminiClient(RestClient.Builder builder, String key, String model, long callTimeoutMs) {
+        this.callTimeoutMs = callTimeoutMs;
         this.rest = builder.baseUrl("https://generativelanguage.googleapis.com").build();
         this.key = key;
         this.model = model == null || model.isBlank() ? DEFAULT_MODEL : model.strip();
@@ -82,6 +92,39 @@ public class GeminiClient {
      */
     public JsonNode chat(String system, List<Object> contents, List<Map<String, Object>> tools) {
         return chat(system, contents, tools, null);
+    }
+
+    /**
+     * chat 과 같고, 남은 시간(leftMs)만큼만 기다린다 (비서 답 시간 한도, 2026-11-16).
+     * 남은 시간이 호출 한도(assistant.timeout-ms)보다 길면 그냥 부른다. 짧으면 따로 불러 그 시간만 기다리고,
+     * 넘으면 null (비서는 규칙으로 답한다). 넘긴 호출은 뒤에서 호출 한도까지 돌다 끝나고 답은 버린다
+     */
+    public JsonNode chat(String system, List<Object> contents, List<Map<String, Object>> tools, TokenUsage usage,
+            long leftMs) {
+        if (!available()) {
+            return null;
+        }
+        if (leftMs <= 0) {
+            return null;
+        }
+        if (leftMs >= callTimeoutMs) {
+            return chat(system, contents, tools, usage);
+        }
+        java.util.concurrent.Future<JsonNode> call = WAITER.submit(() -> chat(system, contents, tools, usage));
+        try {
+            return call.get(leftMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            call.cancel(true);
+            log.warn("제미나이가 남은 시간({}ms) 안에 답하지 않아 규칙으로 대답함", leftMs);
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            call.cancel(true);
+            return null;
+        } catch (java.util.concurrent.ExecutionException e) {
+            log.warn("제미나이 호출 실패: {}", e.getCause() == null ? "-" : e.getCause().getClass().getSimpleName());
+            return null;
+        }
     }
 
     /** chat 과 같고, 쓴 토큰을 usage 에 더한다 (null 이면 로그만) */

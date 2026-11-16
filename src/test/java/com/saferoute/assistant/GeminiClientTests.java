@@ -89,6 +89,51 @@ class GeminiClientTests {
         assertThat(usage.snapshot(List.of("a", "b"), false)).isEqualTo(new AssistantReply.Usage(2400, 70, 2, List.of("a", "b"), false));
     }
 
+    static final String GEN_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent";
+    static final String SHORT_ANSWER = """
+            {"candidates":[{"content":{"role":"model","parts":[{"text":"네"}]}}]}
+            """;
+
+    @Test
+    void chatGivesUpWhenTimeRunsOut() {
+        // 비서 답 시간 한도 (11-16): 제미나이가 2초 걸려도 남은 0.2초만 기다리고 null (비서는 규칙으로 답함)
+        RestClient.Builder b = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(b).build();
+        GeminiClient c = new GeminiClient(b, "k", "gemini-test", 10_000);
+        server.expect(requestTo(GEN_URL)).andRespond(request -> {
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return withSuccess(SHORT_ANSWER, MediaType.APPLICATION_JSON).createResponse(request);
+        });
+        List<Object> contents = List.of(Map.of("role", "user", "parts", List.of(Map.of("text", "안녕"))));
+        long start = System.nanoTime();
+        assertThat(c.chat("지시", contents, List.of(Map.of("name", "a")), new TokenUsage(), 200)).isNull();
+        assertThat((System.nanoTime() - start) / 1_000_000).isLessThan(1500);
+    }
+
+    @Test
+    void chatWithNoTimeLeftSendsNothing() {
+        RestClient.Builder b = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(b).build();
+        GeminiClient c = new GeminiClient(b, "k", "gemini-test", 10_000);
+        assertThat(c.chat("지시", List.of(), List.of(Map.of("name", "a")), new TokenUsage(), 0)).isNull();
+        server.verify(); // 아무 요청도 안 감
+    }
+
+    @Test
+    void chatWithinTimeGivesAnswer() {
+        RestClient.Builder b = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(b).build();
+        GeminiClient c = new GeminiClient(b, "k", "gemini-test", 10_000);
+        server.expect(requestTo(GEN_URL)).andRespond(withSuccess(SHORT_ANSWER, MediaType.APPLICATION_JSON));
+        List<Object> contents = List.of(Map.of("role", "user", "parts", List.of(Map.of("text", "안녕"))));
+        assertThat(c.chat("지시", contents, List.of(Map.of("name", "a")), new TokenUsage(), 5000)).isNotNull();
+        server.verify();
+    }
+
     @Test
     void noUsageMetadataMeansNoUsage() {
         TokenUsage usage = new TokenUsage();
