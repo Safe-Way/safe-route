@@ -11,6 +11,8 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.saferoute.assistant.Conversation.Pending;
@@ -29,6 +31,8 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @Component
 class GeminiBrain {
+
+    private static final Logger log = LoggerFactory.getLogger(GeminiBrain.class);
 
     static final int MAX_ROUNDS = 5;
     static final String AGAIN = "그때 다시 여쭤볼게요.";
@@ -168,7 +172,13 @@ class GeminiBrain {
         contents.add(Map.of("role", "user", "parts", List.of(Map.of("text", context(t) + "\n" + reference + t.text))));
         StringBuilder facts = new StringBuilder(t.text).append(' ').append(context(t)).append(' ').append(reference);
         for (int round = 0; round < MAX_ROUNDS; round++) {
-            JsonNode content = gemini.chat(system, contents, declarations, t.usage);
+            // 답 시간 한도 (2026-11-16): 남은 시간만큼만 기다리고, 다 썼으면 규칙으로 (null)
+            long left = t.leftMs();
+            if (left <= 0) {
+                log.warn("비서 시간 한도를 다 써서 규칙으로 대답함 (왕복 {}번째 전)", round + 1);
+                return null;
+            }
+            JsonNode content = gemini.chat(system, contents, declarations, t.usage, left);
             if (content == null) {
                 return null;
             }

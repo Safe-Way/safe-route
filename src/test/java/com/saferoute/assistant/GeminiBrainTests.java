@@ -94,6 +94,22 @@ class GeminiBrainTests {
     }
 
     @Test
+    void outOfTimeAnswersWithRulesWithoutAskingGemini() {
+        // 비서 답 시간 한도 (11-16): 한도를 다 썼으면 제미나이를 부르지 않고 규칙으로 답한다
+        AssistantTools tools = new AssistantTools(kakao, mock(TripRecommender.class),
+                facilities, memory, mock(ReportService.class), mock(WeatherDustService.class), new NightJudge());
+        JsonMapper json = JsonMapper.builder().build();
+        GeminiBrain brain = new GeminiBrain(new GeminiClient(builder, "test-key", "gemini-test"), tools, json);
+        AssistantService s = new AssistantService(new RuleBrain(tools, memory, mock(UnmetRepository.class)), brain, tools,
+                json, Clock.fixed(Instant.parse("2026-11-06T03:00:00Z"), ZoneId.of("Asia/Seoul")), 0);
+        AssistantReply r = s.answer(new AssistantRequest(A, "AI가 내 위치 알아?", 35.148, 126.926, null, null, null, null,
+                null, null));
+        server.verify(); // 제미나이 요청 없음
+        assertThat(r.say()).isNotBlank();
+        assertThat(r.ai()).isFalse();
+    }
+
+    @Test
     void placeButtonsNeverAskForANumber() {
         // 사용성 점검: 버튼에 번호가 없는데 "번호를 말씀해 주세요" → 서버 문장으로 바꿈
         Turn t = new Turn(new AssistantRequest(A, "카페 가자", 35.148, 126.926, null, null, null, null, null, null),

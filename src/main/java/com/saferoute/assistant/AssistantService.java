@@ -8,6 +8,8 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.saferoute.assistant.AssistantReply.Other;
@@ -37,20 +39,35 @@ public class AssistantService {
     private final AssistantTools tools;
     private final Conversation.Codec codec;
     private final Clock clock;
+    /** 답 하나에 쓰는 시간 한도 ms (assistant.answer-budget-ms). 앱이 10초에 끊어서 그보다 먼저 답한다 */
+    private final long budgetMs;
 
+    /** 테스트용: 기본 한도(7초) */
     public AssistantService(RuleBrain rules, GeminiBrain gemini, AssistantTools tools, JsonMapper json, Clock clock) {
+        this(rules, gemini, tools, json, clock, DEFAULT_BUDGET_MS);
+    }
+
+    @Autowired
+    public AssistantService(RuleBrain rules, GeminiBrain gemini, AssistantTools tools, JsonMapper json, Clock clock,
+            @Value("${assistant.answer-budget-ms:7000}") long budgetMs) {
         this.rules = rules;
         this.gemini = gemini;
         this.tools = tools;
         this.codec = new Conversation.Codec(json);
         this.clock = clock;
+        this.budgetMs = budgetMs;
     }
+
+    static final long DEFAULT_BUDGET_MS = 7000;
 
     public AssistantReply answer(AssistantRequest req) {
         AssistantRequest asked = req == null ? AssistantRequest.empty() : req;
+        // 질문을 받은 때부터 잰다. 다른 받아쓰기 후보로 다시 생각해도 같은 한도 안에서 (2026-11-16)
+        long deadline = System.nanoTime() + budgetMs * 1_000_000L;
         List<String> heard = Hearing.candidates(asked);
         int first = Hearing.best(heard);
         Turn t = turn(first == 0 ? asked : asked.withText(heard.get(first)));
+        t.deadline = deadline;
         Outcome o = think(t);
         // 말한 장소를 못 찾았으면 받아쓰기 다른 후보로 다시 ("남광주시정" → 후보 "남광주시장", 11-12 음성 인식 ②)
         int used = first;
@@ -59,8 +76,12 @@ public class AssistantService {
             if (i == first || Hearing.score(heard.get(i)) < Hearing.score(heard.get(first))) {
                 continue;
             }
+            if (System.nanoTime() >= deadline) {
+                break; // 시간이 다 됐으면 다른 후보는 보지 않고 지금 답으로
+            }
             tries++;
             Turn again = turn(asked.withText(heard.get(i)));
+            again.deadline = deadline;
             Outcome o2 = think(again);
             if (!again.placeMissed) {
                 t = again;
