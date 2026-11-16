@@ -45,7 +45,8 @@ public record RouteRequest(Place origin, Place destination, String night, String
     }
 
     /**
-     * 좌표 이름은 lat·lon. name은 화면 표시용이고 계산에는 쓰지 않는다.
+     * 좌표 이름은 lat·lon. name은 화면 표시용이고, 도착지 name이 지하 시설("금남지하상가", "문화전당역 광주1호선")이면
+     * 그 시설에 들어가는 출구까지 안내하는 데만 쓴다 (2026-11-16).
      * 숫자가 빠진 요청을 (0, 0)으로 잘못 읽지 않도록 Double로 받는다.
      */
     public record Place(Double lat, Double lon, String name) {

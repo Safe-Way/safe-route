@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
+import com.saferoute.route.data.PreferenceSource;
 import com.saferoute.route.TestSupport.Out;
 import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteRequest;
@@ -104,7 +105,7 @@ class TmapCompareCheck {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Asia/Seoul")).withHour(hour).withMinute(0);
         RouteService service = new RouteService(new MysqlRoadGraphSource(db, props), pois, new NightJudge(),
                 new RouteScorer(props), new RouteResultAssembler(counter, props), props,
-                Clock.fixed(now.toInstant(), now.getZone()));
+                Clock.fixed(now.toInstant(), now.getZone()), PreferenceSource.NONE, null);
         TmapWalkClient tmap = new TmapWalkClient(env.getOrDefault("TMAP_APP_KEY", ""));
 
         Out o = new Out("TMAP 보통 길 vs 우리 안전 길 (" + mode + ", " + hour + "시)");

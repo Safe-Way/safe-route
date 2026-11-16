@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
+import com.saferoute.route.data.PreferenceSource;
 import com.saferoute.route.TestSupport.Out;
 import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteRequest;
@@ -145,7 +146,7 @@ class RainSensitivityCheck {
         RouteProperties props = TestRoutes.props(s.overrides());
         RouteService service = new RouteService(roads, pois, new NightJudge(), new RouteScorer(props),
                 new RouteResultAssembler(new FacilityCounter(props), props), props,
-                Clock.fixed(now.toInstant(), now.getZone()));
+                Clock.fixed(now.toInstant(), now.getZone()), PreferenceSource.NONE, null);
         List<RouteResult> out = new ArrayList<>();
         for (Pair p : pairs) {
             try {

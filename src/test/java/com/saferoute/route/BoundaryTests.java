@@ -151,7 +151,7 @@ class BoundaryTests {
 
     /** 북쪽 길(S–N–T)이 지름길보다 몇 배 긴지 */
     static double northRatio(RoadGraph g) {
-        RouteFinder.Found any = RouteFinder.find(g, S, T, RouteFinderTests.DIRECT_IS_DARK, 0, e -> true, false);
+        RouteFinder.Found any = RouteFinderTests.find(g, S, T, RouteFinderTests.DIRECT_IS_DARK, 0, e -> true, false);
         return any.safe().lengthM() / any.shortest().lengthM();
     }
 
@@ -160,9 +160,9 @@ class BoundaryTests {
         RoadGraph g = RouteFinderTests.diamond(0.0006, EdgePenalty.NONE);
         double ratio = northRatio(g);
 
-        RouteFinder.Found in = RouteFinder.find(g, S, T, RouteFinderTests.DIRECT_IS_DARK, ratio * (1 + 1e-9),
+        RouteFinder.Found in = RouteFinderTests.find(g, S, T, RouteFinderTests.DIRECT_IS_DARK, ratio * (1 + 1e-9),
                 e -> true, false);
-        RouteFinder.Found out = RouteFinder.find(g, S, T, RouteFinderTests.DIRECT_IS_DARK, ratio * (1 - 1e-9),
+        RouteFinder.Found out = RouteFinderTests.find(g, S, T, RouteFinderTests.DIRECT_IS_DARK, ratio * (1 - 1e-9),
                 e -> true, false);
         assertThat(RouteFinderTests.goesNorth(in)).isTrue();
         assertThat(RouteFinderTests.goesNorth(out)).isFalse();
@@ -172,11 +172,11 @@ class BoundaryTests {
     @Test
     void seniorStairAvoidanceLimitIsInclusive() {
         RoadGraph g = RouteFinderTests.diamond(0.0006, RouteFinderTests.STAIRS);
-        RouteFinder.Found free = RouteFinder.find(g, S, T, null, 0, e -> true, true);
+        RouteFinder.Found free = RouteFinderTests.find(g, S, T, null, 0, e -> true, true);
         double ratio = free.safe().lengthM() / free.shortest().lengthM();
 
-        RouteFinder.Found in = RouteFinder.find(g, S, T, null, ratio * (1 + 1e-9), e -> true, true);
-        RouteFinder.Found out = RouteFinder.find(g, S, T, null, ratio * (1 - 1e-9), e -> true, true);
+        RouteFinder.Found in = RouteFinderTests.find(g, S, T, null, ratio * (1 + 1e-9), e -> true, true);
+        RouteFinder.Found out = RouteFinderTests.find(g, S, T, null, ratio * (1 - 1e-9), e -> true, true);
         assertThat(in.safe().edges()).noneMatch(RouteFinder::isStairs);
         assertThat(out.safe().edges()).anyMatch(RouteFinder::isStairs);
     }
@@ -206,11 +206,11 @@ class BoundaryTests {
                 NightOption.AUTO).sunset();
         ZonedDateTime edge = ZonedDateTime.of(day, sunset.minusMinutes(60), seoul);
 
-        assertThat(s.conditions(S_P, edge.minusMinutes(1), NightOption.AUTO, 60).night()).isFalse();
-        assertThat(s.conditions(S_P, edge, NightOption.AUTO, 60).night()).isTrue();
-        assertThat(s.conditions(S_P, edge.plusMinutes(1), NightOption.AUTO, 60).night()).isTrue();
+        assertThat(s.conditions(S_P, edge.minusMinutes(1), NightOption.AUTO, 60, false, "auto").night()).isFalse();
+        assertThat(s.conditions(S_P, edge, NightOption.AUTO, 60, false, "auto").night()).isTrue();
+        assertThat(s.conditions(S_P, edge.plusMinutes(1), NightOption.AUTO, 60, false, "auto").night()).isTrue();
         // 어른(0분)은 같은 시각에 아직 낮
-        assertThat(s.conditions(S_P, edge, NightOption.AUTO, 0).night()).isFalse();
+        assertThat(s.conditions(S_P, edge, NightOption.AUTO, 0, false, "auto").night()).isFalse();
     }
 
     static final Set<LocalDate> NO_HOLIDAY = Set.of();

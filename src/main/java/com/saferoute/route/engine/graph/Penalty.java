@@ -1,16 +1,17 @@
 package com.saferoute.route.engine.graph;
 
 /**
- * 길 성질 종류. 경로 엔진은 STAIRS·CURB·FOOTBRIDGE·UNPAVED·TRAIL·FORD·SURFACE_UNKNOWN·CROSSWALK만 읽는다 (값 1 = 확실히 해당, 0 = 아님·모름).
+ * 길 성질 종류. 도로망을 읽을 때 길마다 값을 정한다 (값 1 = 확실히 해당, 없으면 0 = 아님·모름).
+ * NO_SIDEWALK_ALLEY만 값으로 두지 않고 길 종류·인도 태그로 판단한다.
  * 밝기·CCTV·도움 시설 같은 선호 기준은 {@link com.saferoute.route.engine.score.Criterion}으로 요청 때 계산한다.
  * 지붕(COVERED)·지하(UNDERGROUND)는 비 오는 날 기준에 쓴다.
  */
 public enum Penalty {
     /** 계단이면 1 */
     STAIRS,
-    /** 보도턱: 지나는 횡단보도의 보도턱이 안 낮춰졌으면 1, 낮춰졌으면 0, 모르면 0.5 (crosswalk.curb_lowered, 휠체어) */
+    /** 보도턱: 확인된 턱(edge_stat.curb = 1)이면 1, 낮췄거나 모르면 0 (휠체어 제외) */
     CURB,
-    /** 육교: 휠체어로 못 지나는 육교면 1, 경사로·엘리베이터가 있으면 0, 모르면 0.5 (footbridge.wheelchair_ok, 휠체어) */
+    /** 육교: 휠체어로 못 지나는 육교(edge_stat.footbridge_ok = 0)면 1, 지날 수 있거나 모르면 0 (휠체어 제외) */
     FOOTBRIDGE,
     /** 비포장: 바닥 재질이 비포장이거나, 재질을 모르는 농로가 tracktype grade2~5·없음이면 1 (휠체어 조건부 제외, 2026-11-04) */
     UNPAVED,

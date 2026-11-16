@@ -29,7 +29,8 @@ class PersonalPreferencesTests {
         var now = at(12);
         RouteService s = new RouteService(new InMemoryRoadGraphSource(g), TestRoutes.pois(List.of()), new NightJudge(),
                 new RouteScorer(p), new RouteResultAssembler(new FacilityCounter(p), p), p,
-                Clock.fixed(now.toInstant(), now.getZone()), id -> "guest-1".equals(id) ? prefs : UserPreferences.NONE);
+                Clock.fixed(now.toInstant(), now.getZone()), id -> "guest-1".equals(id) ? prefs : UserPreferences.NONE,
+                null);
         return s.route(new RouteRequest(new Place(LAT, S_P[0], "출발"), new Place(LAT, T_P[0], "도착"), "auto", mode,
                 guest));
     }

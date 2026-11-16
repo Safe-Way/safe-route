@@ -8,6 +8,9 @@ import java.util.Map;
 import java.util.Set;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.boot.web.server.context.WebServerApplicationContext;
+import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -42,7 +45,8 @@ import com.saferoute.route.engine.graph.UndergroundLinks;
  *   <li>지붕: road_edge.covered = 1이면 지붕 있는 길 (비 오는 날 기준, 2026-11-09)</li>
  *   <li>지하 길 (2026-11-09): road_edge_excluded의 reason = underground 줄(A파트가 그린 역 출구 계단·엘리베이터, 대합실,
  *       금남지하상가 통로). 같이 읽어 두되 비 올 때 운행 시간 안에만 요청 도로망에 넣고, 출구 점(road_node_excluded tags.attach_edge)을
- *       그 지상 길 위에 잇는다 ({@link UndergroundLinks}). 그 표의 id는 road_edge.id와 겹칠 수 있어 -(10억 + id)로 바꿔 쓴다</li>
+ *       그 지상 길 위에 잇는다 ({@link UndergroundLinks}). 그 표의 id는 road_edge.id와 겹칠 수 있어 -(10억 + id)로 바꿔 쓴다.
+ *       출구가 아닌 지하 점(대합실·지하상가 통로 점)의 이름도 읽어 둔다: 도착지가 지하 시설이면 들어가는 출구까지 안내 (2026-11-16)</li>
  *   <li>보행자 광장 (2026-11-10, w13): 같은 표의 reason = plaza 줄(A파트가 OSM 광장 면에서 입구끼리 그은 곧은 길, 양 끝은 road_node).
  *       5·18 민주광장처럼 면으로만 있는 광장을 가로지르지 못해 돌아가던 것을 막는다. 실제로 늘 걷는 땅이라 날씨·시간·모드
  *       조건 없이 보통 평지 보도처럼 늘 넣는다(노인도 계단 없는 길로 봄, 사용자 결정 11-10). 휠체어는 쓰지 않는다
@@ -77,14 +81,33 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
      * @param area  모든 길을 감싼 사각형 (도로망을 넣은 지역)
      * @param exits 지하 길의 역 출구 점과 붙일 지상 길
      * @param crosswalks 횡단보도 점 {경도, 위도}
+     * @param places 지하 시설 점(출구 아닌 점) 번호 → 이름
      */
     private record Network(List<RoadEdge> edges, double[][] boxes, BBox area, List<UndergroundLinks.Exit> exits,
-            List<double[]> crosswalks) {
+            List<double[]> crosswalks, Map<Long, String> places) {
     }
 
     public MysqlRoadGraphSource(JdbcTemplate jdbc, com.saferoute.route.RouteProperties props) {
         this.jdbc = jdbc;
         this.props = props;
+    }
+
+    /**
+     * 서버가 뜬 뒤 도로망을 미리 읽는다: 배포 뒤 첫 요청이 광주 전체를 읽느라 기다리지 않게. 그사이 온 요청은 {@link #network()}의
+     * 잠금에서 이 읽기를 기다렸다가 같은 것을 쓴다(두 번 읽지 않음). 실패해도 서버는 뜨고 첫 요청이 다시 읽는다.
+     * 웹 서버가 뜬 실행에서만 한다: 테스트(가짜 웹 환경)·적재 전용 실행은 도로망을 쓰지 않는다
+     */
+    @EventListener
+    public void warmUp(ApplicationReadyEvent event) {
+        if (!(event.getApplicationContext() instanceof WebServerApplicationContext)) {
+            return;
+        }
+        long started = System.nanoTime();
+        try {
+            log.info("도로망 미리 읽기 {}개 {}ms", network().edges().size(), (System.nanoTime() - started) / 1_000_000);
+        } catch (RuntimeException e) {
+            log.warn("도로망 미리 읽기 실패, 첫 요청 때 다시 읽음: {}", e.getMessage());
+        }
     }
 
     /** 도로망을 넣은 지역(길 전체를 감싼 사각형) 안인지 */
@@ -127,6 +150,11 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             nodes.putIfAbsent(e.to(), e.geometry().get(e.geometry().size() - 1));
         }
         return new RoadGraph(nodes, edges);
+    }
+
+    @Override
+    public Map<Long, String> undergroundPlaces() {
+        return network().places();
     }
 
     @Override
@@ -231,6 +259,11 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
                     return new UndergroundLinks.Exit(rs.getLong("id"), new double[] {rs.getDouble("lon"), rs.getDouble("lat")},
                             attach);
                 }).stream().filter(java.util.Objects::nonNull).toList();
+        Map<Long, String> places = new HashMap<>();
+        jdbc.query("SELECT id, JSON_UNQUOTE(JSON_EXTRACT(tags, '$.name')) AS name FROM road_node_excluded"
+                + " WHERE reason = 'underground' AND JSON_EXTRACT(tags, '$.attach_edge') IS NULL"
+                + " AND JSON_EXTRACT(tags, '$.name') IS NOT NULL",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> places.put(rs.getLong("id"), rs.getString("name")));
         List<double[]> crosswalks = jdbc.query("SELECT lon, lat FROM poi WHERE kind = 'crosswalk'",
                 (rs, i) -> new double[] {rs.getDouble("lon"), rs.getDouble("lat")});
         double[][] boxes = new double[edges.size()][];
@@ -250,7 +283,7 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
             no = Math.max(no, b[3]);
         }
         return new Network(edges, boxes, edges.isEmpty() ? null : new BBox(w, so, e, no), exits,
-                crosswalks);
+                crosswalks, places);
     }
 
     /** 지상(road_edge)·지하(road_edge_excluded) 두 표에서 같은 칸을 같은 이름으로 읽는 SELECT 부분. t는 표 별칭, w는 보도 자료 별칭(없으면 null) */

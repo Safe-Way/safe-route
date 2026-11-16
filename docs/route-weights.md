@@ -359,7 +359,8 @@
   `{level, kind, text}`. level은 `warn`(주의)·`info`(알림)·`unknown`(확인 안 됨), kind는 `stairs`(노인 계단)·`event`(행사·돌발)·
   `unpaved`(휠체어 비포장)·`surface`(재질 모르는 산길)·`snap`(휠체어 출발·도착을 옆 길에 붙임)·`underground`(비 오는 날 지하로 지남, 9장)·`trail`(등산로 말고는 길이 없어 지남, 13장)·
   `crossing`(횡단보도 없이 큰 길을 건넘)·`alley`(휠체어·노인·어린이가 골목길 30m 이상을 지남, 2026-11-12)·`narrow`(휠체어가 좁은 인도를 못 피함, 2026-11-13)·
-  `no_sidewalk_alley`(휠체어가 인도 없는 골목 말고는 길이 없어 지남, 2026-11-13).
+  `no_sidewalk_alley`(휠체어가 인도 없는 골목 말고는 길이 없어 지남, 2026-11-13)·`entrance`(도착지 `destination.name`이 지하 시설이면 들어가는 출구,
+  info "금남지하상가는 문화전당역 4번 출구(엘리베이터)로 들어가요", 2026-11-16).
   `text`는 summary 뒤에 notes를 "(주의: …)"처럼 이어 붙인 것으로, 앱이 summary·notes로 옮길 때까지 둔다.
 - **골목길 `routes[].alleys`·`alleyM`** (2026-11-12, 카카오맵 현장 비교): 항목 `{from, to, lengthM}`, 경로 순서. 없으면 빈 목록, `alleyM` 0.
   `from`·`to`는 `sidewalks`와 같은 geometry 점 번호(길 밖 출발이 첫 점으로 붙으면 하나 밀림), 이어진 골목길은 한 구간, `lengthM`은 반올림한 m,

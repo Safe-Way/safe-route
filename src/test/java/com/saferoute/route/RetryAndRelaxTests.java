@@ -12,6 +12,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import com.saferoute.route.data.PreferenceSource;
 import com.saferoute.route.api.RouteError;
 import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteRequest;
@@ -76,7 +77,8 @@ class RetryAndRelaxTests {
         RouteProperties p = props();
         var now = TestRoutes.at(12);
         return new RouteService(roads, TestRoutes.pois(List.of()), new NightJudge(), new RouteScorer(p),
-                new RouteResultAssembler(new FacilityCounter(p), p), p, Clock.fixed(now.toInstant(), now.getZone()));
+                new RouteResultAssembler(new FacilityCounter(p), p), p, Clock.fixed(now.toInstant(), now.getZone()),
+                PreferenceSource.NONE, null);
     }
 
     static RouteRequest request(String mode) {
@@ -310,6 +312,52 @@ class RetryAndRelaxTests {
         RouteResult r = service(new InMemoryRoadGraphSource(pocket(80))).route(from(north(T, 80), null));
 
         assertThat(r.explanation().text()).endsWith("(주의: 출발점 근처 약 80m는 휠체어로 이어진 길이 확인되지 않았습니다)");
+    }
+
+    /**
+     * 큰길 W–S–T–E와, S–T 가운데 북쪽 30~60m의 막다른 보행로 P1–P2. T에서 계단으로만 이어진다.
+     * 그 보행로 위 점에 휠체어는 S–T 길 가운데로 다시 붙어, S–T 길을 나눈다
+     */
+    static RoadGraph deadEndBehindStairs() {
+        double[] mid = {(S[0] + T[0]) / 2, LAT};
+        double[] p1 = north(mid, 30);
+        double[] p2 = north(mid, 60);
+        double[] w = {S[0] - 0.002, LAT};
+        double[] e = {T[0] + 0.002, LAT};
+        return new RoadGraph(Map.of(1L, S, 2L, T, 3L, p1, 4L, p2, 5L, e, 6L, w), List.of(
+                edge(1, 1, 2, S, T, EdgePenalty.NONE), edge(4, 2, 5, T, e, EdgePenalty.NONE),
+                edge(5, 6, 1, w, S, EdgePenalty.NONE),
+                edge(2, 2, 3, T, p1, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0))),
+                edge(3, 3, 4, p1, p2, EdgePenalty.NONE)));
+    }
+
+    @Test
+    void wheelchairKeepsDarkStretchesAfterSnappingToAnotherRoad() {
+        // 다시 붙이며 나눈 길에도 커버율이 있어야 밤 어두운 구간 안내가 빠지지 않는다 (가로등 없음 = 모두 어두움)
+        RouteService s = service(new InMemoryRoadGraphSource(deadEndBehindStairs()));
+        double[] d = north(new double[] {(S[0] + T[0]) / 2, LAT}, 45);
+
+        for (String mode : List.of("adult", "wheelchair")) {
+            RouteResult r = s.route(new RouteRequest(new Place(S[1], S[0], null), new Place(d[1], d[0], null), "on",
+                    mode));
+            assertThat(r.routes().get(r.routes().size() - 1).dark()).as(mode).isNotEmpty();
+        }
+    }
+
+    @Test
+    void sameRoadPointIsWalkedWithOrWithoutStop() {
+        // 80m 떨어진 두 점이 모두 막다른 길 끝 P2에 붙는다. SAME_POINT는 직선거리로만 정하므로 들를 곳이 있어도 똑같이 안내한다
+        double[] p2 = north(new double[] {(S[0] + T[0]) / 2, LAT}, 60);
+        double dLon = 40 / (M_PER_LAT * Math.cos(Math.toRadians(p2[1])));
+        Place a = new Place(p2[1], p2[0] + dLon, null);
+        Place b = new Place(p2[1], p2[0] - dLon, null);
+        RouteService s = service(new InMemoryRoadGraphSource(deadEndBehindStairs()));
+
+        RouteResult direct = s.route(new RouteRequest(a, b, "off", "adult"));
+        RouteResult via = s.route(new RouteRequest(a, b, "off", "adult", null, null,
+                List.of(new Place(b.lat(), b.lon() + 0.00001, "가게")), null));
+
+        assertThat(via.routes().get(0).distanceM()).isEqualTo(direct.routes().get(0).distanceM()).isBetween(75, 85);
     }
 
     @Test

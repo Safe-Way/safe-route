@@ -43,13 +43,20 @@ class RouteFinderTests {
     /** 지름길만 비싸게 (어두운 길) */
     static final ToDoubleFunction<RoadEdge> DIRECT_IS_DARK = e -> e.id() <= 11 ? e.lengthM() * 13 : 0;
 
+    /** 계단 조건부 제외만 켜고 끄는 찾기 (행사·신고 피하기 없음, 비용은 길이) */
+    static RouteFinder.Found find(RoadGraph g, long from, long to, ToDoubleFunction<RoadEdge> extra, double maxDetour,
+            java.util.function.Predicate<RoadEdge> passable, boolean avoidStairs) {
+        return RouteFinder.find(g, from, to, extra, maxDetour, passable, avoidStairs ? RouteFinder::isStairs : null,
+                List.of(), RoadEdge::lengthM);
+    }
+
     static boolean goesNorth(RouteFinder.Found f) {
         return f.safe().edges().stream().anyMatch(e -> e.id() == 12);
     }
 
     @Test
     void noPreferenceGivesShortest() {
-        RouteFinder.Found f = RouteFinder.find(diamond(0.0006, EdgePenalty.NONE), S, T, null, 1.3, e -> true, false);
+        RouteFinder.Found f = find(diamond(0.0006, EdgePenalty.NONE), S, T, null, 1.3, e -> true, false);
         assertThat(f.safe().sameAs(f.shortest())).isTrue();
         assertThat(f.shortest().lengthM()).isCloseTo(200, org.assertj.core.api.Assertions.within(1.0));
     }
@@ -57,14 +64,14 @@ class RouteFinderTests {
     @Test
     void preferenceWinsWithinDetourLimit() {
         // 북쪽 길은 약 1.2배
-        RouteFinder.Found f = RouteFinder.find(diamond(0.0006, EdgePenalty.NONE), S, T, DIRECT_IS_DARK, 1.3, e -> true, false);
+        RouteFinder.Found f = find(diamond(0.0006, EdgePenalty.NONE), S, T, DIRECT_IS_DARK, 1.3, e -> true, false);
         assertThat(goesNorth(f)).isTrue();
         assertThat(f.detourCapped()).isFalse();
     }
 
     @Test
     void overTheLimitKeepsShortestAndSaysCapped() {
-        RouteFinder.Found f = RouteFinder.find(diamond(0.0006, EdgePenalty.NONE), S, T, DIRECT_IS_DARK, 1.1, e -> true, false);
+        RouteFinder.Found f = find(diamond(0.0006, EdgePenalty.NONE), S, T, DIRECT_IS_DARK, 1.1, e -> true, false);
         assertThat(goesNorth(f)).isFalse();
         assertThat(f.detourCapped()).isTrue();
     }
@@ -72,7 +79,7 @@ class RouteFinderTests {
     @Test
     void seniorAvoidsStairsWhenStairFreeRouteIsWithinLimit() {
         // 북쪽 길 약 1.09배 ≤ 1.2
-        RouteFinder.Found f = RouteFinder.find(diamond(0.0004, STAIRS), S, T, null, 1.2, e -> true, true);
+        RouteFinder.Found f = find(diamond(0.0004, STAIRS), S, T, null, 1.2, e -> true, true);
         assertThat(goesNorth(f)).isTrue();
         assertThat(f.safe().edges()).noneMatch(RouteFinder::isStairs);
     }
@@ -80,7 +87,7 @@ class RouteFinderTests {
     @Test
     void seniorKeepsStairsWhenEveryStairFreeRouteIsTooLong() {
         // 북쪽 길 약 1.34배 > 1.2 → 계단이 있어도 경로는 나온다
-        RouteFinder.Found f = RouteFinder.find(diamond(0.0008, STAIRS), S, T, null, 1.2, e -> true, true);
+        RouteFinder.Found f = find(diamond(0.0008, STAIRS), S, T, null, 1.2, e -> true, true);
         assertThat(goesNorth(f)).isFalse();
     }
 
@@ -88,7 +95,7 @@ class RouteFinderTests {
     void stairAvoidanceIsNotWeakenedByOtherPreferences() {
         // 계단 길이 밝고(선호) 북쪽은 어두워도, 계단 없는 길이 한도 안이면 계단을 뺀다
         ToDoubleFunction<RoadEdge> northIsDark = e -> e.id() >= 12 ? e.lengthM() * 13 : 0;
-        RouteFinder.Found f = RouteFinder.find(diamond(0.0004, STAIRS), S, T, northIsDark, 1.2, e -> true, true);
+        RouteFinder.Found f = find(diamond(0.0004, STAIRS), S, T, northIsDark, 1.2, e -> true, true);
         assertThat(goesNorth(f)).isTrue();
     }
 
@@ -100,17 +107,17 @@ class RouteFinderTests {
         RoadGraph g = new RoadGraph(Map.of(S, S_P, M, M_P, T, T_P, N, nP), List.of(
                 edge(10, S, M, S_P, M_P, EdgePenalty.NONE), edge(11, M, T, M_P, T_P, EdgePenalty.NONE),
                 edge(12, S, N, S_P, nP, STAIRS), edge(13, T, N, T_P, nP, EdgePenalty.NONE)));
-        RouteFinder.Found f = RouteFinder.find(g, S, T, DIRECT_IS_DARK, 1.2, e -> true, true);
+        RouteFinder.Found f = find(g, S, T, DIRECT_IS_DARK, 1.2, e -> true, true);
         assertThat(f.safe().edges()).noneMatch(RouteFinder::isStairs);
 
         // 어른(계단 조건부 제외 없음)은 밝은 북쪽 길로 간다
-        assertThat(goesNorth(RouteFinder.find(g, S, T, DIRECT_IS_DARK, 1.2, e -> true, false))).isTrue();
+        assertThat(goesNorth(find(g, S, T, DIRECT_IS_DARK, 1.2, e -> true, false))).isTrue();
     }
 
     @Test
     void wheelchairHasNoDetourLimit() {
         // 지름길에 확인된 턱 → 북쪽 길(약 1.58배)이라도 그 길로
-        RouteFinder.Found f = RouteFinder.find(diamond(0.0011, CURB), S, T, null, 0,
+        RouteFinder.Found f = find(diamond(0.0011, CURB), S, T, null, 0,
                 e -> e.penalty().get(Penalty.CURB) < 1, false);
         assertThat(goesNorth(f)).isTrue();
         assertThat(f.shortest().sameAs(f.safe())).isTrue();
@@ -136,7 +143,7 @@ class RouteFinderTests {
     @Test
     void noPassableRouteIsNoRoute() {
         RoadGraph g = new RoadGraph(Map.of(S, S_P, M, M_P), List.of(edge(10, S, M, S_P, M_P, CURB)));
-        assertThatThrownBy(() -> RouteFinder.find(g, S, M, null, 0, e -> e.penalty().get(Penalty.CURB) < 1, false))
+        assertThatThrownBy(() -> find(g, S, M, null, 0, e -> e.penalty().get(Penalty.CURB) < 1, false))
                 .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE));
     }
 }

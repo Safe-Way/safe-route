@@ -18,6 +18,7 @@ import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
 import org.springframework.core.io.ClassPathResource;
 
+import com.saferoute.route.data.PreferenceSource;
 import com.saferoute.route.data.InMemoryRoadGraphSource;
 import com.saferoute.route.data.PoiSource;
 import com.saferoute.route.engine.event.RoadEvent;
@@ -123,7 +124,7 @@ final class TestRoutes {
     static RouteService service(RoadGraph graph, PoiSource pois, ZonedDateTime now, RouteProperties props) {
         return new RouteService(new InMemoryRoadGraphSource(graph), pois, new NightJudge(), new RouteScorer(props),
                 new RouteResultAssembler(new FacilityCounter(props), props),
-                props, Clock.fixed(now.toInstant(), now.getZone()));
+                props, Clock.fixed(now.toInstant(), now.getZone()), PreferenceSource.NONE, null);
     }
 
     /** 2026-10-30(금) hour시 서울 */

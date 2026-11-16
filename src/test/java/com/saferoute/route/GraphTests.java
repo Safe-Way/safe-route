@@ -43,7 +43,7 @@ class GraphTests {
         nodes.put(99L, new double[] {126.93001, LAT}); // S 바로 옆이지만 길이 없는 노드
         RoadGraph g = new RoadGraph(nodes, List.of(edge(1, S, M, S_P, M_P, EdgePenalty.NONE)));
 
-        RoadGraph.Snap snap = g.nearest(126.93001, LAT);
+        RoadGraph.Snap snap = g.nearest(126.93001, LAT, e -> true);
 
         assertThat(snap.node()).isEqualTo(S);
         assertThat(snap.distanceM()).isBetween(0.5, 1.5);
@@ -59,12 +59,12 @@ class GraphTests {
 
         assertThat(part).containsExactlyInAnyOrder(S, M);
         assertThat(g.nearest(T_P[0], T_P[1], part, e -> !RouteFinder.isStairs(e)).node()).isEqualTo(M);
-        assertThat(g.nearest(T_P[0], T_P[1]).node()).isEqualTo(T);
+        assertThat(g.nearest(T_P[0], T_P[1], e -> true).node()).isEqualTo(T);
     }
 
     @Test
     void nearestOnEmptyGraphIsNull() {
-        assertThat(new RoadGraph(Map.of(), List.of()).nearest(126.93, LAT)).isNull();
+        assertThat(new RoadGraph(Map.of(), List.of()).nearest(126.93, LAT, e -> true)).isNull();
         assertThat(new RoadGraph(Map.of(), List.of()).isEmpty()).isTrue();
     }
 
@@ -86,7 +86,7 @@ class GraphTests {
 
     @Test
     void lineFromAddsRequestedEndsOnlyWhenDifferent() {
-        var path = RouteFinder.find(diamond(0.0006), S, T, null, 1.3, e -> true, false).shortest();
+        var path = RouteFinderTests.find(diamond(0.0006), S, T, null, 1.3, e -> true, false).shortest();
         double[] start = {126.92990, LAT}; // 노드에서 약 9m 서쪽
         double[] end = T_P;                 // 노드와 같은 점
 
@@ -118,7 +118,7 @@ class GraphTests {
         RoadGraph g = new RoadGraph(nodes, List.of(road(1, 11, 12, "primary", nodes), road(2, 21, 22, "primary", nodes),
                 road(3, 22, 23, "primary", nodes), road(4, 11, 21, "footway", nodes), road(5, 12, 23, "footway", nodes)));
 
-        RoadGraph.Snap snap = g.nearest(at(-11, 100)[0], at(-11, 100)[1]);
+        RoadGraph.Snap snap = g.nearest(at(-11, 100)[0], at(-11, 100)[1], e -> true);
 
         // 예전 방식은 동쪽 노드 22에 24m로 붙었다
         assertThat(snap.node()).isNegative();

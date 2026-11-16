@@ -257,7 +257,8 @@ public record RouteResult(
      *              crossing(안전 경로가 횡단보도 없는 곳에서 큰 길을 건넘, 2026-11-12 진행표 w20),
      *              alley(휠체어·노인·어린이가 골목길을 30m 이상 지남, 2026-11-12),
      *              narrow(휠체어가 좁은 인도를 피하지 못하고 지남, 2026-11-13),
-     *              no_sidewalk_alley(휠체어가 인도 없는 골목 말고는 길이 없어 지남, 2026-11-13)
+     *              no_sidewalk_alley(휠체어가 인도 없는 골목 말고는 길이 없어 지남, 2026-11-13),
+     *              entrance(도착지인 지하 시설에 들어가는 출구, 2026-11-16)
      * @param text  괄호·머리말 없는 문장
      */
     public record Note(String level, String kind, String text) {
