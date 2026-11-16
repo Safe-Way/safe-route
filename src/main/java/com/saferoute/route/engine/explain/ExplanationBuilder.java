@@ -347,7 +347,7 @@ public final class ExplanationBuilder {
     }
 
     /** 마지막 글자에 받침이 있으면 "이", 없으면 "가" (한글이 아니면 "가") */
-    static String iGa(String word) {
+    public static String iGa(String word) {
         char c = word.isEmpty() ? ' ' : word.charAt(word.length() - 1);
         return c >= '가' && c <= '힣' && (c - '가') % 28 != 0 ? "이" : "가";
     }

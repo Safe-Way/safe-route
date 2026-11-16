@@ -477,7 +477,7 @@ public class RouteService {
         List<RoadGraph.Snap> snaps = new ArrayList<>();
         for (int k = 0; k < points.size(); k++) {
             try {
-                snaps.add(snapper.snap(graph, points.get(k), profile, surface));
+                snaps.add(snapper.snap(graph, points.get(k), profile, surface, clear(points.get(k), avoided)));
             } catch (RouteException e) {
                 throw noRoute(stops, k);
             }
@@ -506,7 +506,7 @@ public class RouteService {
         try {
             return joined(legs(graph, at, extra, score, profile, passable, cost, wideDetour, asides(graph, av, edges, profile), cov,
                     stops), at,
-                    nearby, List.of(), cov, av, edges, profile.avoid(), in);
+                    nearby, throughNotes(graph, points, snaps, avoided, stops, in), cov, av, edges, profile.avoid(), in);
         } catch (RouteException e) {
             if (profile.exclude().isEmpty() && !noTrail) {
                 throw e;
@@ -526,7 +526,7 @@ public class RouteService {
                     : props.passableSnapExtraM();
             try {
                 // 연 골목에는 다시 붙이지 않는다: 붙이며 길을 나누면 새 번호라 endAlleys에서 빠진다
-                placed.add(snapper.place(graph, points.get(k), snaps.get(k), part, base, extraM));
+                placed.add(snapper.place(graph, points.get(k), snaps.get(k), part, base, extraM, clear(points.get(k), avoided)));
             } catch (RouteException e) {
                 throw noRoute(stops, k);
             }
@@ -549,9 +549,9 @@ public class RouteService {
                 : profile.onlyStairsExcluded() ? (noTrail ? "계단·등산로 없이" : "계단 없이") : "휠체어로";
         // 도착을 지하 시설에 들어가는 곳으로 바꿨으면 도착점 근처 알림은 붙이지 않는다
         for (int k = 0; k < (movedIn == null ? placed.size() : placed.size() - 1); k++) {
-            String which = k == 0 ? "출발점" : k == placed.size() - 1 ? "도착점" : stopName(stops, k - 1);
-            Snapper.placeNote(which, placed.get(k), way).ifPresent(notes::add);
+            Snapper.placeNote(pointName(stops, k), placed.get(k), way).ifPresent(notes::add);
         }
+        notes.addAll(throughNotes(graph, points, placedSnaps, avoided, stops, movedIn));
         return joined(legs(graph, moved, withReports(score, reachable(graph, costed, moved), movedEdges, profile), score,
                 profile, passable, cost, wideDetour, asides(graph, movedAv, movedEdges, profile), cov, stops), moved,
                 nearby, notes, cov, movedAv, movedEdges, profile.avoid(), movedIn);
@@ -610,6 +610,11 @@ public class RouteService {
         }
         String to = k > stops.size() ? "도착지" : stopName(stops, k - 1);
         return new RouteException(RouteError.NO_ROUTE, "%s까지 가는 길을 찾지 못했어요".formatted(to));
+    }
+
+    /** k번째 점(0 출발, 들를 곳, 마지막 도착)을 알림에 쓰는 이름 */
+    private static String pointName(List<Place> stops, int k) {
+        return k == 0 ? "출발점" : k == stops.size() + 1 ? "도착점" : stopName(stops, k - 1);
     }
 
     /** i번째(0부터) 들를 곳 이름. 비었으면 "들를 곳 N" */
@@ -798,6 +803,38 @@ public class RouteService {
         if (points.stream().anyMatch(p -> !roads.covers(p[0], p[1]))) {
             throw new RouteException(RouteError.OUT_OF_AREA);
         }
+    }
+
+    /** 점 p에서 at까지 곧은 줄이 avoided(이 모드가 피할 행사·신고) 어느 반경도 지나지 않는지 */
+    private static java.util.function.Predicate<double[]> clear(double[] p, List<RoadEvent> avoided) {
+        return at -> avoided.stream().noneMatch(e -> crosses(p, at, e));
+    }
+
+    /**
+     * 곧은 줄이 반경을 지나 그 너머(at이 반경 밖)로 가는지. at이 반경 안이면 그 행사·신고로 가는 길이라 reachable이 피하지 않고
+     * 알리기만 하는 예전 규칙을 따른다 (행사 반경 300m 근처 사람을 멀리 붙이지 않게, RouteStopsTests.festivalAtAStopIsNotAvoided)
+     */
+    static boolean crosses(double[] p, double[] at, RoadEvent e) {
+        return Geo.distanceToSegment(e.point(), p, at) <= e.radiusM() && Geo.distance(at, e.point()) > e.radiusM();
+    }
+
+    /** 다른 후보가 없어 피할 곳 반경을 지나는 곧은 줄로 붙였으면 알린다. 점마다 하나 ("출발점 근처 곧은 연결 구간에 공사 신고가 있어요") */
+    private static List<RouteResult.Note> throughNotes(RoadGraph graph, List<double[]> points, List<RoadGraph.Snap> at,
+            List<RoadEvent> avoided, List<Place> stops, Long entranceIn) {
+        List<RouteResult.Note> out = new ArrayList<>();
+        // 도착을 지하 시설에 들어가는 곳으로 바꿨으면 도착점 곧은 줄은 걷지 않으므로 보지 않는다
+        for (int k = 0; k < (entranceIn == null ? at.size() : at.size() - 1); k++) {
+            double[] p = points.get(k);
+            double[] to = graph.point(at.get(k).node());
+            String which = pointName(stops, k);
+            avoided.stream().filter(e -> crosses(p, to, e)).findFirst().ifPresent(e -> {
+                // 응답 events와 같은 이름: 돌발은 "무진대로 공사", 신고는 "공사 신고"
+                String name = e.title().contains(e.kind()) ? e.title() : e.title() + " " + e.kind();
+                out.add(RouteResult.Note.warn("snap_through_report", "%s 근처 곧은 연결 구간에 %s%s 있어요".formatted(which,
+                        name, ExplanationBuilder.iGa(name))));
+            });
+        }
+        return out;
     }
 
     /** {경도, 위도} */
