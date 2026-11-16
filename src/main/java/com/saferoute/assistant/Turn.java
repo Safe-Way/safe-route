@@ -44,6 +44,17 @@ final class Turn {
     /** 받아쓰기 다른 후보(alternatives)를 썼으면 true */
     boolean alternative;
     TripRecommender.Plan plan;
+    /**
+     * 답을 끝내야 하는 시각 (System.nanoTime 기준, 2026-11-16). 지나면 제미나이를 더 기다리지 않고 규칙으로 답한다.
+     * 받아쓰기 다른 후보로 다시 생각해도 처음 질문을 받은 때부터 잰다. 정하지 않으면 한도 없음
+     */
+    long deadline = Long.MAX_VALUE;
+
+    /** 남은 시간 ms. 한도가 없으면 Long.MAX_VALUE, 지났으면 0 이하 */
+    long leftMs() {
+        return deadline == Long.MAX_VALUE ? Long.MAX_VALUE : (deadline - System.nanoTime()) / 1_000_000;
+    }
+
     /** 이번 질문에 제미나이가 쓴 토큰 (R1). AI를 안 불렀으면 비어 있음 */
     final TokenUsage usage = new TokenUsage();
     /** 제미나이에게 보낸 도구 이름 (R2). AI를 안 불렀으면 빈 목록 */
