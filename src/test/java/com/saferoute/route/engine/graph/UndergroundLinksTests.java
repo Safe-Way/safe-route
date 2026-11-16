@@ -102,4 +102,27 @@ class UndergroundLinksTests {
         UndergroundLinks.Exit x = new UndergroundLinks.Exit(-3000101, X1.point(), 999);
         assertThat(UndergroundLinks.attach(List.of(ROAD), List.of(x))).containsExactly(ROAD);
     }
+    /** 출구 점에서 북쪽으로 나가는 지상 길 (A파트가 출구 점에 그은 선) */
+    static RoadEdge surface(long id, Penalty p) {
+        double[] far = {126.93050, LAT + 0.0005};
+        return new RoadEdge(id, X1.node(), 3, Geo.distance(X1.point(), far), "footway", List.of(X1.point(), far),
+                p == null ? EdgePenalty.NONE : new EdgePenalty(java.util.Map.of(p, 1.0)));
+    }
+
+    @Test
+    void exitAlreadyOnAUsableSurfaceEdgeGetsNoLink() {
+        // 휠체어 확인한 광장 선(광장 표시 없음)이 출구 점에 닿은 문화전당역 4번 출구: 곧은 연결 길을 더하지 않는다 (2026-11-16)
+        RoadEdge plazaYes = surface(200, null);
+        assertThat(UndergroundLinks.attach(List.of(ROAD, plazaYes), List.of(X1))).containsExactly(ROAD, plazaYes);
+    }
+
+    @Test
+    void exitTouchingOnlyStairsOrUnknownPlazaKeepsItsLink() {
+        // 계단·높낮이 모르는 광장 선으로는 휠체어가 못 나가므로 그대로 잇는다. 지하 길도 지상 길로 치지 않는다
+        List<RoadEdge> out = UndergroundLinks.attach(
+                List.of(ROAD, surface(201, Penalty.STAIRS), surface(202, Penalty.PLAZA), surface(203, Penalty.UNDERGROUND)),
+                List.of(X1));
+        assertThat(pieces(out)).hasSize(2);
+        assertThat(out).filteredOn(e -> e.from() == X1.node() && e.to() == pieces(out).get(0).to()).hasSize(1);
+    }
 }
