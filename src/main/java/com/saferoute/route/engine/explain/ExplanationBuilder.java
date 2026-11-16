@@ -217,11 +217,7 @@ public final class ExplanationBuilder {
             if (e.penalty().get(Penalty.UNDERGROUND) < 1 || e.name() == null) {
                 continue;
             }
-            String name = e.name().replaceFirst(" (계단|엘리베이터)$", "") + switch (java.util.Objects.requireNonNullElse(e.highway(), "")) {
-                case "steps" -> "(계단)";
-                case "elevator" -> "(엘리베이터)";
-                default -> "";
-            };
+            String name = undergroundName(e);
             // 지하상가 조각처럼 같은 이름이 이어지면 한 번만
             if (names.isEmpty() || !names.get(names.size() - 1).equals(name)) {
                 names.add(name);
@@ -229,6 +225,15 @@ public final class ExplanationBuilder {
         }
         return names.isEmpty() ? Optional.empty()
                 : Optional.of(RouteResult.Note.info("underground", "지하로 지납니다: " + String.join(" → ", names)));
+    }
+
+    /** 지하 길 이름. 출구 계단·엘리베이터는 이름 끝에서 떼고 괄호로: "문화전당역 3번 출구(엘리베이터)" */
+    public static String undergroundName(RoadEdge e) {
+        return e.name().replaceFirst(" (계단|엘리베이터)$", "") + switch (java.util.Objects.requireNonNullElse(e.highway(), "")) {
+            case "steps" -> "(계단)";
+            case "elevator" -> "(엘리베이터)";
+            default -> "";
+        };
     }
 
     /**

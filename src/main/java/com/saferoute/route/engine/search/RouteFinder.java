@@ -167,6 +167,23 @@ public final class RouteFinder {
         return e.penalty().get(Penalty.UNDERGROUND) >= 1;
     }
 
+    /**
+     * from에서 길 비용(cost)이 가장 적게 드는 targets 점 하나 (2026-11-16, 지하 시설에 들어가는 곳 고르기).
+     * 다익스트라 한 번으로 가까운 차례로 넓혀 가다 처음 닿는 target에서 멈춘다. 닿는 것이 없으면 null
+     */
+    public static Long closest(RoadGraph graph, long from, java.util.Set<Long> targets, Predicate<RoadEdge> passable,
+            ToDoubleFunction<RoadEdge> cost) {
+        var it = new org.jgrapht.traverse.ClosestFirstIterator<>(
+                new AsWeightedGraph<>(mask(graph, passable), cost::applyAsDouble, false, false), from);
+        while (it.hasNext()) {
+            Long v = it.next();
+            if (targets.contains(v)) {
+                return v;
+            }
+        }
+        return null;
+    }
+
     private static Graph<Long, RoadEdge> mask(RoadGraph graph, Predicate<RoadEdge> passable) {
         return new MaskSubgraph<>(graph.graph(), v -> false, e -> !passable.test(e));
     }

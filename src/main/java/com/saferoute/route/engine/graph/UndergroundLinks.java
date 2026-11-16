@@ -86,6 +86,41 @@ public final class UndergroundLinks {
         return out;
     }
 
+    /**
+     * 지하 시설 점(places)에서 지날 수 있는 지하 길(passable)로 이어진 출구 점 (2026-11-16). 출구는 지상 길(연결 길)이 닿은 점이다.
+     * 지하상가는 통로를 따라 양쪽 역 대합실을 거쳐 두 역의 출구가 모두 나오고, 역 대합실은 그 역 출구만 나온다.
+     * 휠체어는 계단을 못 지나 엘리베이터 출구만 나온다
+     */
+    public static java.util.Set<Long> exits(RoadGraph graph, java.util.Set<Long> places,
+            java.util.function.Predicate<RoadEdge> passable) {
+        org.jgrapht.Graph<Long, RoadEdge> g = graph.graph();
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        java.util.Deque<Long> todo = new java.util.ArrayDeque<>();
+        for (long p : places) {
+            if (g.containsVertex(p) && seen.add(p)) {
+                todo.add(p);
+            }
+        }
+        java.util.Set<Long> out = new java.util.HashSet<>();
+        while (!todo.isEmpty()) {
+            long v = todo.poll();
+            for (RoadEdge e : g.edgesOf(v)) {
+                if (e.penalty().get(Penalty.UNDERGROUND) < 1) {
+                    out.add(v);
+                } else if (passable.test(e)) {
+                    long w = org.jgrapht.Graphs.getOppositeVertex(g, e, v);
+                    // 시설 밖 점(지하상가에서 간 대합실)에서는 출구로만 간다: 역을 찾을 때 지하상가를 지나 다른 역 출구로 가지 않게
+                    boolean go = places.contains(v)
+                            || g.edgesOf(w).stream().anyMatch(x -> x.penalty().get(Penalty.UNDERGROUND) < 1);
+                    if (go && seen.add(w)) {
+                        todo.add(w);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
     /** 출구에서 길 선 위 가장 가까운 점 */
     private static Foot foot(Exit x, List<double[]> g) {
         Foot best = null;
