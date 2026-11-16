@@ -176,11 +176,11 @@ class GeminiBrain {
             long left = t.leftMs();
             if (left <= 0) {
                 log.warn("비서 시간 한도를 다 써서 규칙으로 대답함 (왕복 {}번째 전)", round + 1);
-                return null;
+                return fromTools(t);
             }
             JsonNode content = gemini.chat(system, contents, declarations, t.usage, left);
             if (content == null) {
-                return null;
+                return fromTools(t);
             }
             List<JsonNode> calls = new ArrayList<>();
             StringBuilder text = new StringBuilder();
@@ -305,6 +305,21 @@ class GeminiBrain {
         }
         boolean question = text.endsWith("?") || text.endsWith("요?") || text.endsWith("까요?");
         return new Outcome(text, question ? text : null, List.of(), true);
+    }
+
+    /**
+     * 제미나이가 중간에 끊겼을 때(시간 한도·실패) 이미 부른 도구 결과로 답한다 (2026-11-16).
+     * 길 추천·장소 찾기를 이미 했으면 그 결과를 규칙 문장으로 말하고, 아무것도 없으면 null (규칙이 처음부터).
+     * 규칙이 처음부터 다시 하면 같은 장소 검색·길 추천(카카오·ODsay)을 두 번 부르고 시간도 더 걸렸다 (11-16 시험 2번 7.5초)
+     */
+    static Outcome fromTools(Turn t) {
+        if (t.plan != null) {
+            return Outcome.say(Sentences.trip(t));
+        }
+        if (t.spot != null || t.spotMessage != null) {
+            return Outcome.say(Sentences.spot(t));
+        }
+        return null;
     }
 
     /** 제미나이에게 주는 지금 상황 (좌표는 보내지 않음) */
