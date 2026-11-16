@@ -2,18 +2,25 @@ package com.saferoute.transit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.time.Clock;
+import java.sql.SQLException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -102,6 +109,36 @@ class OdsayClientTests {
         server.expect(ExpectedCount.times(2), requestTo(Matchers.startsWith(OdsayClient.URL)))
                 .andRespond(withSuccess(PATH_JSON, MediaType.APPLICATION_JSON));
         c.search(35.1, 126.9, 35.2, 126.8);
+        c.search(35.1, 126.9, 35.2, 126.8);
+        assertThatThrownBy(() -> c.search(35.1, 126.9, 35.2, 126.8))
+                .isInstanceOf(TransitException.class).extracting("code").isEqualTo("DAILY_LIMIT");
+        server.verify();
+    }
+
+    @Test
+    void countsInDatabaseSoBothServersShareTheLimit() {
+        // DB가 "이미 한도"라고 하면 이 서버가 한 번도 안 불렀어도 ODsay 를 부르지 않는다 (다른 서버가 다 씀)
+        OdsayCallCounter counter = mock(OdsayCallCounter.class);
+        when(counter.take(LocalDate.of(2026, 11, 5), 30)).thenReturn(true, false);
+        OdsayClient c = new OdsayClient(builder, "k", 30, clock, counter);
+        server.expect(ExpectedCount.once(), requestTo(Matchers.startsWith(OdsayClient.URL)))
+                .andRespond(withSuccess(PATH_JSON, MediaType.APPLICATION_JSON));
+        c.search(35.1, 126.9, 35.2, 126.8);
+        assertThatThrownBy(() -> c.search(35.1, 126.9, 35.2, 126.8))
+                .isInstanceOf(TransitException.class).extracting("code").isEqualTo("DAILY_LIMIT");
+        server.verify();
+    }
+
+    @Test
+    void fallsBackToMemoryWhenDatabaseFails() {
+        // 표가 아직 없거나 DB가 끊겨도 대중교통은 되고, 이 서버 메모리로 한도를 지킨다
+        OdsayCallCounter counter = mock(OdsayCallCounter.class);
+        when(counter.take(any(), anyInt()))
+                .thenThrow(new BadSqlGrammarException("take", "UPDATE odsay_call_count",
+                        new SQLException("Table 'odsay_call_count' doesn't exist")));
+        OdsayClient c = new OdsayClient(builder, "k", 1, clock, counter);
+        server.expect(ExpectedCount.once(), requestTo(Matchers.startsWith(OdsayClient.URL)))
+                .andRespond(withSuccess(PATH_JSON, MediaType.APPLICATION_JSON));
         c.search(35.1, 126.9, 35.2, 126.8);
         assertThatThrownBy(() -> c.search(35.1, 126.9, 35.2, 126.8))
                 .isInstanceOf(TransitException.class).extracting("code").isEqualTo("DAILY_LIMIT");
