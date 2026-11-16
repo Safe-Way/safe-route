@@ -139,6 +139,44 @@ class OriginStopsTests {
     }
 
     @Test
+    void aDongNameStopIsTheDongNotAShopThere() {
+        // 11-16 시험 43번: "서석동 갔다가"를 "포포케이크(서석동)" 가게로 골랐음 → 동 한가운데로
+        when(kakao.searchAddress("서석동")).thenReturn(List.of(
+                new Place(null, "전남광주통합특별시 동구 서석동", "전남광주통합특별시 동구 서석동", 35.1440, 126.9290, null)));
+        when(kakao.search(eq("서석동"), anyDouble(), anyDouble())).thenReturn(List.of(
+                new Place("30", "포포케이크", "광주 동구 서석동", 35.1445, 126.9285, 200)));
+        AssistantReply r = ask("서석동 갔다가 집 갈래");
+        assertThat(r.stops()).extracting(AssistantReply.Stop::name).containsExactly("동구 서석동");
+        assertThat(r.say()).contains("동구 서석동").doesNotContain("포포케이크");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void univShortNameGoesToTheUniversityWithStartAndStopKept() {
+        // 11-16 시험 44번: "조선대"를 찾으니 가까운 순으로 총동창회·식당만 와서 되묻고 출발지·푸른길이 빠졌음
+        when(kakao.search(eq("문화전당역"), anyDouble(), anyDouble())).thenReturn(List.of(
+                new Place("40", "문화전당역", "광주 동구 금남로", 35.1488, 126.9200, 300)));
+        when(kakao.search(eq("푸른길"), anyDouble(), anyDouble())).thenReturn(List.of(
+                new Place("41", "푸른길", "광주 동구 산수동", 35.1500, 126.9300, 500)));
+        when(kakao.search(eq("조선대"), anyDouble(), anyDouble())).thenReturn(List.of(
+                new Place("42", "조선대학교 총동창회", "광주 동구 서석동", 35.1430, 126.9310, 330),
+                new Place("43", "도야짬뽕 광주조선대점", "광주 동구 서석동", 35.1425, 126.9320, 110)));
+        when(kakao.search(eq("조선대학교"), isNull(), isNull())).thenReturn(List.of(
+                new Place("44", "조선대학교", "광주 동구 필문대로 309", 35.1402, 126.9338, null)));
+        AssistantReply r = ask("어.. 문화전당역에서 푸른길 갔다가 조선대로 갈께");
+        assertThat(r.say()).contains("출발", "푸른길").doesNotContain("곳을 찾았어요");
+        assertThat(((Map<String, Object>) r.pick().request().get("destination")).get("name")).isEqualTo("조선대학교");
+    }
+
+    @Test
+    void univIsOnlyForShortNamesEndingWithDae() {
+        assertThat(AssistantTools.univ("조선대")).isEqualTo("조선대학교");
+        assertThat(AssistantTools.univ("전남 대")).isEqualTo("전남대학교");
+        assertThat(AssistantTools.univ("조선대학교")).isNull();
+        assertThat(AssistantTools.univ("대")).isNull();
+    }
+
+    @Test
     void hesitationIsSkippedAndNearMeansNearTheLastStop() {
         // 음성 시험 (11-12): 뜸 들이는 말 + "갔다" + 근처 병원 = 시장 근처 병원
         when(kakao.search(eq("남광주시장"), anyDouble(), anyDouble())).thenReturn(List.of(

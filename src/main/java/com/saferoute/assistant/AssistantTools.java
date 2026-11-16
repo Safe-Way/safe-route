@@ -158,6 +158,16 @@ public class AssistantTools {
         if (!near && t.located() && found.stream().noneMatch(p -> com.saferoute.place.PlaceAlias.same(p.name(), q))) {
             found = withExact(found, q);
         }
+        // "조선대", "전남대"처럼 대학 줄임말이면 "○○대학교"가 광주에 있을 때 그곳 하나로 (11-16 시험 44번:
+        // 카카오가 "조선대학교 총동창회", "도야짬뽕 광주조선대점"만 줘서 되물었음)
+        String univ = univ(q);
+        if (!near && univ != null && found.stream().noneMatch(p -> com.saferoute.place.PlaceAlias.same(p.name(), univ))) {
+            List<com.saferoute.place.Place> withUniv = withExact(found, univ);
+            if (withUniv.size() > found.size()) {
+                com.saferoute.place.Place u = withUniv.get(0);
+                return decide(t, List.of(new Place(u.name(), u.address(), u.lat(), u.lon(), u.distanceM())), univ);
+            }
+        }
         // "남광주 시장"처럼 띄어 써서 광주에 맞는 곳이 없으면 붙여서 다시 (11-12 음성 인식 ④)
         String joined = q.replace(" ", "");
         if (!near && !joined.equals(q) && joined.length() >= 2
@@ -566,6 +576,14 @@ public class AssistantTools {
 
     static boolean looksLikeDong(String q) {
         return q != null && DONG.matcher(q.strip()).matches();
+    }
+
+    /** "조선대" → "조선대학교" (두~네 글자 + 대). 아니면 null */
+    private static final java.util.regex.Pattern UNIV = java.util.regex.Pattern.compile("^[가-힣]{2,4}대$");
+
+    static String univ(String q) {
+        String s = q == null ? "" : q.replace(" ", "");
+        return UNIV.matcher(s).matches() ? s + "학교" : null;
     }
 
     /** 주소로 찾는다. 광주 안 결과가 없으면 앞에 "광주"를 붙여 한 번 더. 그래도 없으면 null (장소 검색으로 넘어감) */
