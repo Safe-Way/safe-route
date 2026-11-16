@@ -12,6 +12,11 @@ final class OriginReader {
 
     /** 맨 앞 "○○에서 " (○○는 다섯 낱말·20자까지, "광주 동구 서석동 3에서"처럼 주소도) */
     private static final Pattern FROM = Pattern.compile("^\\s*(\\S+(?:\\s+\\S+){0,4}?)(?:에서부터|에서)\\s+(.+)$");
+    /**
+     * 들를 곳을 잇는 말 ("들렀다가", "갔다가", "들르고"). "다이소 들렀다가 편의점에서 택배 찾고"의 "…편의점에서"는
+     * 출발지가 아니라 들를 곳이다 (11-16 시험 38번: "다이소 들렀다가 편의점"을 출발지로 찾아 다이소가 빠짐)
+     */
+    private static final Pattern STOP_WORD = Pattern.compile("다가|들르|들러|들렀|찾고|사고");
     /** "여기서 문화전당 가자"처럼 지금 위치에서 간다는 말 */
     private static final Pattern HERE_FROM = Pattern.compile(
             "^\\s*(?:지금\\s*)?(?:여기서|여기에서|이곳에서|이 곳에서|(?:내|현재|지금)\\s*위치에서)(?:부터)?\\s+(.+)$");
@@ -46,7 +51,8 @@ final class OriginReader {
         String name = m.group(1).strip();
         String rest = m.group(2).strip();
         String flat = name.replace(" ", "");
-        if (flat.isEmpty() || flat.length() > 20 || flat.contains("어디") || flat.contains("거기")) {
+        if (flat.isEmpty() || flat.length() > 20 || flat.contains("어디") || flat.contains("거기")
+                || STOP_WORD.matcher(flat).find()) {
             return null;
         }
         // 뗀 나머지가 길 찾는 말이어야 출발지 ("학교에서 넘어졌어"는 아님)

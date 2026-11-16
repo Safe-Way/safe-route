@@ -193,6 +193,16 @@ class OriginStopsTests {
     }
 
     @Test
+    void stopBeforeEsoIsNotTheStart() {
+        // 11-16 시험 38번: "…편의점에서 택배 찾고"의 편의점은 들를 곳. "다이소 들렀다가 편의점"을 출발지로 보면 다이소가 빠졌다
+        assertThat(OriginReader.split("다이소 들렀다가 편의점에서 택배 찾고 집에 갈래")).isNull();
+        assertThat(OriginReader.split("약국 갔다가 편의점에서 택배 찾고 집에 갈래")).isNull();
+        // 맨 앞이 출발지면 그대로 (시험 42·44번)
+        assertThat(OriginReader.split("광주역에서 다이소 갔다가 문화전당으로 갈거야").origin()).isEqualTo("광주역");
+        assertThat(OriginReader.split("문화전당역에서 푸른길 갔다가 조선대로 갈게").origin()).isEqualTo("문화전당역");
+    }
+
+    @Test
     void wentToIsAStopOnlyWhenTheSentenceEndsWithGoing() {
         StopReader.Read r = StopReader.read("충장로에서 국립아시아문화전당 갔다가 광주역으로 갈거야".replace("충장로에서 ", ""));
         assertThat(r.stops()).extracting(Conversation.Stop::query).containsExactly("국립아시아문화전당");
