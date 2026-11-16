@@ -17,6 +17,7 @@ import org.springframework.dao.DataAccessResourceFailureException;
 
 import tools.jackson.databind.json.JsonMapper;
 
+import com.saferoute.route.data.PreferenceSource;
 import com.saferoute.route.api.RouteError;
 import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteRequest.Place;
@@ -355,7 +356,7 @@ class RouteServiceTests {
         }, facilities(List.of()), new com.saferoute.situation.NightJudge(), new com.saferoute.route.engine.score.RouteScorer(props()),
                 new com.saferoute.route.engine.explain.RouteResultAssembler(
                         new com.saferoute.route.engine.facility.FacilityCounter(props()), props()),
-                props(), java.time.Clock.fixed(at(12).toInstant(), at(12).getZone()));
+                props(), java.time.Clock.fixed(at(12).toInstant(), at(12).getZone()), PreferenceSource.NONE, null);
         // 출발은 서쪽 길 한가운데에서 북쪽으로 5m: 응답 첫 점은 요청 출발, 길 위 발이 geometry 1번
         double[] start = {126.93055, LAT + 15 / mLat};
 
@@ -397,7 +398,7 @@ class RouteServiceTests {
                 new com.saferoute.route.engine.score.RouteScorer(props()),
                 new com.saferoute.route.engine.explain.RouteResultAssembler(
                         new com.saferoute.route.engine.facility.FacilityCounter(props()), props()),
-                props(), java.time.Clock.fixed(at(12).toInstant(), at(12).getZone()));
+                props(), java.time.Clock.fixed(at(12).toInstant(), at(12).getZone()), PreferenceSource.NONE, null);
         double[] a = pts.get(0);
         double[] b = pts.get(pts.size() - 1);
 

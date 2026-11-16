@@ -8,6 +8,9 @@ import java.util.Map;
 import java.util.Set;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.boot.web.server.context.WebServerApplicationContext;
+import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -85,6 +88,24 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     public MysqlRoadGraphSource(JdbcTemplate jdbc, com.saferoute.route.RouteProperties props) {
         this.jdbc = jdbc;
         this.props = props;
+    }
+
+    /**
+     * 서버가 뜬 뒤 도로망을 미리 읽는다: 배포 뒤 첫 요청이 광주 전체를 읽느라 기다리지 않게. 그사이 온 요청은 {@link #network()}의
+     * 잠금에서 이 읽기를 기다렸다가 같은 것을 쓴다(두 번 읽지 않음). 실패해도 서버는 뜨고 첫 요청이 다시 읽는다.
+     * 웹 서버가 뜬 실행에서만 한다: 테스트(가짜 웹 환경)·적재 전용 실행은 도로망을 쓰지 않는다
+     */
+    @EventListener
+    public void warmUp(ApplicationReadyEvent event) {
+        if (!(event.getApplicationContext() instanceof WebServerApplicationContext)) {
+            return;
+        }
+        long started = System.nanoTime();
+        try {
+            log.info("도로망 미리 읽기 {}개 {}ms", network().edges().size(), (System.nanoTime() - started) / 1_000_000);
+        } catch (RuntimeException e) {
+            log.warn("도로망 미리 읽기 실패, 첫 요청 때 다시 읽음: {}", e.getMessage());
+        }
     }
 
     /** 도로망을 넣은 지역(길 전체를 감싼 사각형) 안인지 */

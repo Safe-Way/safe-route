@@ -80,13 +80,9 @@ public final class RoadGraph {
      * 도로망에는 다른 길과 이어지지 않은 조각(지하광장 계단 등)이 있어, 그 조각에 붙으면 경로를 못 찾는다.
      * 길 중간이면 그 길을 둘로 나눠 임시 노드를 넣는다 (예전엔 가장 가까운 노드에 붙여, 도착지를 지나쳐 길 끝까지 갔다
      * 되돌아오는 경로가 됐다. 해오름관 정류장 442m → 392m, 2026-11-09).
-     * 큰 길 건너편 길에는 붙이지 않는다 ({@link #nearest(double, double, Set, Predicate)})
+     * 큰 길 건너편 길에는 붙이지 않는다 ({@link #nearest(double, double, Set, Predicate)}).
+     * usable: 수직의 발을 찾을 길 (휠체어는 지날 수 있는 길만. 계단 중간에 붙으면 휠체어 길이 끊긴다)
      */
-    public Snap nearest(double lon, double lat) {
-        return nearest(lon, lat, e -> true);
-    }
-
-    /** usable: 수직의 발을 찾을 길 (휠체어는 지날 수 있는 길만. 계단 중간에 붙으면 휠체어 길이 끊긴다) */
     public Snap nearest(double lon, double lat, Predicate<RoadEdge> usable) {
         if (main == null) {
             main = largest(graph);

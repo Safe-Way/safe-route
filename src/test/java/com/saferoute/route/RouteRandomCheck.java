@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
+import com.saferoute.route.data.PreferenceSource;
 import com.saferoute.route.TestSupport.Out;
 import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteResult;
@@ -143,7 +144,7 @@ class RouteRandomCheck {
             for (int hour : HOURS) {
                 ZonedDateTime now = ZonedDateTime.of(2026, 11, 4, hour, 0, 0, 0, ZoneId.of("Asia/Seoul"));
                 RouteService service = new RouteService(roads, pois, new NightJudge(), scorer, assembler, props,
-                        java.time.Clock.fixed(now.toInstant(), now.getZone()));
+                        java.time.Clock.fixed(now.toInstant(), now.getZone()), PreferenceSource.NONE, null);
                 for (String mode : modes) {
                     String where = "쌍 %d %s %d시 (%.6f,%.6f)→(%.6f,%.6f)".formatted(i, mode, hour, from[1], from[0],
                             to[1], to[0]);
@@ -166,11 +167,11 @@ class RouteRandomCheck {
             ZonedDateTime now, String where, List<String> violations) {
         long started = System.nanoTime();
         RouteProperties.Profile profile = props.profile(mode);
-        Conditions cond = service.conditions(from, now, NightOption.AUTO, profile.nightLeadMin());
+        Conditions cond = service.conditions(from, now, NightOption.AUTO, profile.nightLeadMin(), false, "auto");
         RouteProperties.Phase phase = profile.phase(cond.night());
         RoadGraph graph = roads.load(BBox.around(List.of(from, to), props.searchMarginM()));
-        RoadGraph.Snap a = graph.nearest(from[0], from[1]);
-        RoadGraph.Snap b = graph.nearest(to[0], to[1]);
+        RoadGraph.Snap a = graph.nearest(from[0], from[1], e -> true);
+        RoadGraph.Snap b = graph.nearest(to[0], to[1], e -> true);
         if (a == null || b == null || a.distanceM() > props.snapMaxM() || b.distanceM() > props.snapMaxM()) {
             // 길에서 너무 먼 점. 서비스는 NO_ROUTE로 답한다. 점 자체가 노드라면 큰 덩어리와 이어지지 않은 조각에 있는 것
             noRoutes.add(where + ": 큰 연결 덩어리까지 출발 %.0fm·도착 %.0fm (한도 %.0fm), 읽은 길 %d개".formatted(
@@ -188,7 +189,7 @@ class RouteRandomCheck {
         RouteFinder.Found f;
         try {
             f = RouteFinder.find(graph, a.node(), b.node(), extra, profile.maxDetour(), profile::passable,
-                    profile.avoid());
+                    profile.avoid(), List.of(), RoadEdge::lengthM);
         } catch (RouteException e) {
             // 지날 수 있는 길로 두 점이 이어지지 않음. 읽은 범위(사각형 + 500m) 안에서만 찾으므로 범위 탓인지도 본다
             boolean anyRoad = dijkstra(graph, x -> true, a.node(), b.node()) < Double.MAX_VALUE;
