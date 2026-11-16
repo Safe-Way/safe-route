@@ -41,12 +41,13 @@ import tools.jackson.databind.json.JsonMapper;
 public class FacilityImporter implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(FacilityImporter.class);
-    private static final Path RAW = Path.of("data", "raw", "national");
     private static final int PAGE_SIZE = 1000;
     private static final int BATCH = 5000;
 
     private final JdbcTemplate jdbc;
     private final JsonMapper json = JsonMapper.builder().build();
+    /** 내려받은 파일 폴더 (data/raw). 테스트는 임시 폴더로 바꾼다 */
+    private Path raw = Path.of("data", "raw");
 
     public FacilityImporter(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -77,10 +78,16 @@ public class FacilityImporter implements ApplicationRunner {
         log.info("적재 끝");
     }
 
+    /** 내려받은 파일 폴더를 바꾼다 (테스트용) */
+    FacilityImporter rawRoot(Path root) {
+        this.raw = root;
+        return this;
+    }
+
     // ---------- API로 받은 JSON 페이지 ----------
 
     private void importApiDataset(FacilityDataset ds) throws IOException {
-        Path dir = RAW.resolve(ds.folder());
+        Path dir = raw.resolve("national").resolve(ds.folder());
         Path totalFile = dir.resolve("_total.txt");
         if (!Files.exists(totalFile)) {
             log.info("{}: 아직 받은 파일이 없어 건너뜀", ds.title());
@@ -168,7 +175,7 @@ public class FacilityImporter implements ApplicationRunner {
     // ---------- CCTV CSV (지방행정 인허가 데이터, CP949) ----------
 
     private void importCctvCsv() throws IOException {
-        Path file = RAW.resolve("cctv_national.csv");
+        Path file = raw.resolve("national").resolve("cctv_national.csv");
         if (!Files.exists(file)) {
             log.info("CCTV: 파일이 없어 건너뜀");
             return;
@@ -255,7 +262,7 @@ public class FacilityImporter implements ApplicationRunner {
                             "보호구역도로폭", "데이터기준일자", "제공기관명")));
 
     private void importRegionalCsv(RegionalCsv rc) throws IOException {
-        Path file = Path.of("data", "raw").resolve(rc.file());
+        Path file = raw.resolve(rc.file());
         if (!Files.exists(file)) {
             log.info("{}: 파일이 없어 건너뜀", rc.title());
             return;
