@@ -19,6 +19,7 @@ public class InMemoryRoadGraphSource implements RoadGraphSource {
 
     private final RoadGraph graph;
     private final List<UndergroundLinks.Exit> exits;
+    private final Map<Long, String> places;
     private final BBox area;
 
     public InMemoryRoadGraphSource(RoadGraph graph) {
@@ -27,9 +28,20 @@ public class InMemoryRoadGraphSource implements RoadGraphSource {
 
     /** exits: 지하 길의 역 출구. 비 올 때 붙일 지상 길에 잇는다 */
     public InMemoryRoadGraphSource(RoadGraph graph, List<UndergroundLinks.Exit> exits) {
+        this(graph, exits, Map.of());
+    }
+
+    /** places: 지하 시설 점 이름 (지하상가 통로 점, 역 대합실) */
+    public InMemoryRoadGraphSource(RoadGraph graph, List<UndergroundLinks.Exit> exits, Map<Long, String> places) {
         this.graph = graph;
         this.exits = exits;
+        this.places = places;
         this.area = BBox.around(graph.nodes().values().stream().toList(), 0);
+    }
+
+    @Override
+    public Map<Long, String> undergroundPlaces() {
+        return places;
     }
 
     @Override

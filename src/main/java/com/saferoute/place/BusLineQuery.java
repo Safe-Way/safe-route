@@ -12,6 +12,24 @@ public final class BusLineQuery {
     private BusLineQuery() {
     }
 
+    private static final Pattern ROUTE_HEAD = Pattern.compile("^(?:버스\\s*)?([가-힣]{0,4}\\d{1,4})\\s*(?:번)?\\s*(?:버스)?");
+    private static final java.util.List<String> ROUTE_WORDS = java.util.List.of("노선도", "지나가", "지나는", "지나요", "어디어디",
+            "거쳐", "서는곳", "서는정류장", "정류장목록", "정류장알려", "정류장보여", "노선보여", "노선알려");
+
+    /** "03번 노선도 보여줘", "03번 버스 어디어디 지나가?" → "03" (11-13). 번호로 시작하고 노선도·지나가 같은 말이 있을 때만 */
+    public static String routeMap(String text) {
+        if (text == null) {
+            return null;
+        }
+        String t = text.strip();
+        String bare = t.replaceAll("\\s+", "");
+        if (ROUTE_WORDS.stream().noneMatch(bare::contains)) {
+            return null;
+        }
+        Matcher m = ROUTE_HEAD.matcher(t);
+        return m.find() ? m.group(1) : null;
+    }
+
     public static String number(String text) {
         if (text == null) {
             return null;

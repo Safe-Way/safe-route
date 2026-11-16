@@ -807,6 +807,44 @@ public class AssistantTools {
 
     private com.saferoute.bus.BusLineStops lineStops;
 
+    static final int ROUTE_SAY = 6;
+
+    /**
+     * "03번 노선도 보여줘" (11-13): 기점 → 주요 정류장 → 종점, 정류장 몇 개. 말로는 6곳만 (처음·끝 + 사이 고르게).
+     * 전체 목록·좌표는 GET /api/bus/lines/stops?number=03
+     */
+    String busRouteMap(Turn t, String number) {
+        t.tools.add("find_nearby");
+        if (busLines == null) {
+            return null;
+        }
+        try {
+            List<com.saferoute.bus.BusLine> found = busLines.find(number);
+            if (found.isEmpty()) {
+                return number + "번 버스는 광주 버스 목록에서 찾지 못했어요. 번호를 다시 말씀해 주시겠어요?";
+            }
+            com.saferoute.bus.BusLine l = found.get(0);
+            List<com.saferoute.bus.LineStop> route = lineStops == null ? List.of() : lineStops.route(l.id(), l.to());
+            if (route.size() < 2) {
+                return l.name() + "번은 " + l.summary() + "예요. 중간에 서는 정류장 정보는 아직 준비 중이에요.";
+            }
+            int n = route.size();
+            int say = Math.min(ROUTE_SAY, n);
+            List<String> middle = new ArrayList<>();
+            for (int k = 1; k < say - 1; k++) {
+                middle.add(route.get((int) Math.round((double) k * (n - 1) / (say - 1))).name());
+            }
+            String from = route.get(0).name();
+            String to = route.get(n - 1).name();
+            return l.name() + "번은 " + from + "에서 출발해 "
+                    + (middle.isEmpty() ? "" : Josa.eul(String.join(", ", middle)) + " 지나 ")
+                    + to + "까지 가요. 정류장은 모두 " + n + "개예요.";
+        } catch (DataAccessException e) {
+            log.warn("비서 노선도 조회 실패: {}", e.getMostSpecificCause().getMessage());
+            return "지금은 버스 노선 정보를 불러오지 못했어요. 잠시 뒤에 다시 물어봐 주세요.";
+        }
+    }
+
     /** 노선마다 지나는 정류장 (DB 없는 테스트에서는 안 넣음 → 기점·종점으로만) */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setLineStops(com.saferoute.bus.BusLineStops lineStops) {

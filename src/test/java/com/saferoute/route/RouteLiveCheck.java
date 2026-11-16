@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 
+import com.saferoute.route.data.PreferenceSource;
 import com.saferoute.route.TestSupport.Out;
 import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteRequest;
@@ -88,7 +89,7 @@ class RouteLiveCheck {
         for (int hour : new int[] {12, 21}) {
             ZonedDateTime now = ZonedDateTime.of(2026, 11, 4, hour, 0, 0, 0, ZoneId.of("Asia/Seoul"));
             RouteService service = new RouteService(roads, pois, new NightJudge(), scorer, assembler, props,
-                    Clock.fixed(now.toInstant(), now.getZone()));
+                    Clock.fixed(now.toInstant(), now.getZone()), PreferenceSource.NONE, null);
             o.line("");
             o.line("■ %d시", hour);
             for (Trip t : TRIPS) {
@@ -125,7 +126,7 @@ class RouteLiveCheck {
         for (int hour : new int[] {12, 21}) {
             ZonedDateTime now = ZonedDateTime.of(2026, 11, 4, hour, 0, 0, 0, ZoneId.of("Asia/Seoul"));
             RouteService service = new RouteService(roads, pois, new NightJudge(), scorer, assembler, props,
-                    Clock.fixed(now.toInstant(), now.getZone()));
+                    Clock.fixed(now.toInstant(), now.getZone()), PreferenceSource.NONE, null);
             o.line("  %d시", hour);
             for (String mode : MODES) {
                 long started = System.nanoTime();
@@ -349,6 +350,6 @@ class RouteLiveCheck {
             RouteResultAssembler assembler, RouteProperties props, int hour) {
         ZonedDateTime now = ZonedDateTime.of(2026, 11, 4, hour, 0, 0, 0, ZoneId.of("Asia/Seoul"));
         return new RouteService(roads, pois, new NightJudge(), scorer, assembler, props,
-                Clock.fixed(now.toInstant(), now.getZone()));
+                Clock.fixed(now.toInstant(), now.getZone()), PreferenceSource.NONE, null);
     }
 }

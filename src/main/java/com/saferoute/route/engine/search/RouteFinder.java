@@ -41,48 +41,20 @@ public final class RouteFinder {
      *                     (조건부 제외가 없거나 최단에 피할 길이 없으면 최단과 같다)
      */
     public record Found(RoadPath shortest, RoadPath safe, boolean detourCapped, RoadPath avoidFree) {
-
-        public Found(RoadPath shortest, RoadPath safe, boolean detourCapped) {
-            this(shortest, safe, detourCapped, shortest);
-        }
     }
 
     private RouteFinder() {
     }
 
     /**
-     * @param extra       길마다 더하는 비용(m). null이면 선호가 없다
-     * @param maxDetour   안전 경로 길이 ÷ 최단 경로 길이의 한도. 0 이하면 한도 없음
-     * @param passable    지날 수 있는 길
-     * @param avoidStairs 계단 조건부 제외
-     */
-    public static Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
-            double maxDetour, Predicate<RoadEdge> passable, boolean avoidStairs) {
-        return find(graph, from, to, extra, maxDetour, passable, avoidStairs ? RouteFinder::isStairs : null);
-    }
-
-    /**
-     * @param avoid 조건부 제외할 길 (노인 계단, 휠체어 비포장). null이면 없음
-     */
-    public static Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
-            double maxDetour, Predicate<RoadEdge> passable, Predicate<RoadEdge> avoid) {
-        return find(graph, from, to, extra, maxDetour, passable, avoid, List.of());
-    }
-
-    /**
-     * @param avoid  조건부 제외할 길 (노인 계단, 휠체어 비포장). null이면 없음
-     * @param asides 그다음으로 차례로 조건부 제외할 길 묶음 (행사·돌발 둘레 하나, 피할 신고마다 하나, 2026-11-10).
-     *               한 Set으로 합치면 하나라도 못 피할 때 전부 안 피하게 된다
-     */
-    public static Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
-            double maxDetour, Predicate<RoadEdge> passable, Predicate<RoadEdge> avoid,
-            List<Predicate<RoadEdge>> asides) {
-        return find(graph, from, to, extra, maxDetour, passable, avoid, asides, RoadEdge::lengthM);
-    }
-
-    /**
-     * @param cost 길 기본 비용(m, 길이 이상). 보통 길이. 최단·피하기·안전 찾기 모두 이 비용으로 고르고, 우회 한도와 응답 거리는 실제 길이로 잰다.
-     *             휠체어가 인도 없는 골목을 넣어 다시 찾을 때 그 골목만 길이 × 배수 (2026-11-13)
+     * @param extra     길마다 더하는 비용(m). null이면 선호가 없다
+     * @param maxDetour 안전 경로 길이 ÷ 최단 경로 길이의 한도. 0 이하면 한도 없음
+     * @param passable  지날 수 있는 길
+     * @param avoid     조건부 제외할 길 (노인 계단, 휠체어 비포장). null이면 없음
+     * @param asides    그다음으로 차례로 조건부 제외할 길 묶음 (행사·돌발 둘레 하나, 피할 신고마다 하나, 2026-11-10).
+     *                  한 Set으로 합치면 하나라도 못 피할 때 전부 안 피하게 된다
+     * @param cost      길 기본 비용(m, 길이 이상). 보통 길이. 최단·피하기·안전 찾기 모두 이 비용으로 고르고, 우회 한도와 응답 거리는 실제 길이로 잰다.
+     *                  휠체어가 인도 없는 골목을 넣어 다시 찾을 때 그 골목만 길이 × 배수 (2026-11-13)
      */
     public static Found find(RoadGraph graph, long from, long to, ToDoubleFunction<RoadEdge> extra,
             double maxDetour, Predicate<RoadEdge> passable, Predicate<RoadEdge> avoid,
@@ -195,13 +167,31 @@ public final class RouteFinder {
         return e.penalty().get(Penalty.UNDERGROUND) >= 1;
     }
 
+    /**
+     * from에서 길 비용(cost)이 가장 적게 드는 targets 점 하나 (2026-11-16, 지하 시설에 들어가는 곳 고르기).
+     * 다익스트라 한 번으로 가까운 차례로 넓혀 가다 처음 닿는 target에서 멈춘다. 닿는 것이 없으면 null
+     */
+    public static Long closest(RoadGraph graph, long from, java.util.Set<Long> targets, Predicate<RoadEdge> passable,
+            ToDoubleFunction<RoadEdge> cost) {
+        var it = new org.jgrapht.traverse.ClosestFirstIterator<>(
+                new AsWeightedGraph<>(mask(graph, passable), cost::applyAsDouble, false, false), from);
+        while (it.hasNext()) {
+            Long v = it.next();
+            if (targets.contains(v)) {
+                return v;
+            }
+        }
+        return null;
+    }
+
     private static Graph<Long, RoadEdge> mask(RoadGraph graph, Predicate<RoadEdge> passable) {
         return new MaskSubgraph<>(graph.graph(), v -> false, e -> !passable.test(e));
     }
 
     private static RoadPath search(RoadGraph graph, Graph<Long, RoadEdge> usable, long from, long to,
             ToDoubleFunction<RoadEdge> cost) {
-        // 요청마다 비용을 덧씌운 보기만 만들고, 여러 요청이 함께 쓰는 그래프는 그대로 둔다
+        // 비용을 덧씌운 보기만 만들고 그래프는 그대로 둔다. 그래프는 요청마다 새로 읽고 출발·도착을 붙이며 길을 나누므로
+        // 요청 사이에 나눠 쓰거나 기억해 두면 안 된다
         var weighted = new AsWeightedGraph<>(usable, cost::applyAsDouble, false, false);
         // 비용은 길이보다 작아지지 않으므로 직선거리를 A* 추정값으로 쓸 수 있다.
         // 도로망 길이를 다른 지구 반지름으로 쟀을 수 있어 1% 낮춰 잡는다 (넘게 잡으면 최단을 놓친다)

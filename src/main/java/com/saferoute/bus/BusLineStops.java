@@ -106,6 +106,23 @@ public class BusLineStops {
         return stops.getOrDefault(lineId, List.of());
     }
 
+    /**
+     * 노선도 (11-13): 기점에서 종점(to)까지 가는 쪽 정류장만. 파일 목록은 갔다가 돌아오는 길까지 이어져 있어서
+     * 처음으로 종점 이름이 나오는 곳에서 자른다. 종점 이름을 못 찾으면 전부
+     */
+    public List<LineStop> route(int lineId, String to) {
+        List<LineStop> all = stopsOf(lineId);
+        if (to != null && !to.isBlank()) {
+            String end = to.replaceAll("\\s+", "");
+            for (int i = 1; i < all.size(); i++) {
+                if (all.get(i).name().replaceAll("\\s+", "").startsWith(end)) {
+                    return all.subList(0, i + 1);
+                }
+            }
+        }
+        return all;
+    }
+
     /** 그 노선이 서는 정류장 중 (lat, lon)에서 가장 가까운 곳. 없으면 null */
     public LineStop nearestStop(int lineId, double lat, double lon) {
         LineStop best = null;

@@ -165,7 +165,7 @@ class RainRouteTests {
         ZonedDateTime now = at(12);
         RouteService picky = new RouteService(new InMemoryRoadGraphSource(diamond(0.0007, ROOF)), TestRoutes.pois(List.of()),
                 new NightJudge(), new RouteScorer(p), new RouteResultAssembler(new FacilityCounter(p), p), p,
-                Clock.fixed(now.toInstant(), now.getZone()), id -> new UserPreferences(null, 1.1, null));
+                Clock.fixed(now.toInstant(), now.getZone()), id -> new UserPreferences(null, 1.1, null), null);
         RouteResult capped = picky.route(new RouteRequest(new Place(LAT, S_P[0], null), new Place(LAT, T_P[0], null),
                 "off", "adult", "guest-1", "on"));
         assertThat(north(capped)).isFalse();
