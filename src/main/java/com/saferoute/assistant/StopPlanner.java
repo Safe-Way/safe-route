@@ -85,6 +85,26 @@ public class StopPlanner {
         }
     }
 
+    /** 동 이름 들를 곳: 카카오 주소 검색으로 광주 안 그 동 한가운데 (없으면 앞에 "광주"를 붙여 한 번 더). 없으면 빈 목록 */
+    private List<Stop> dong(Conversation.Stop s) {
+        for (String q : List.of(s.query(), "광주 " + s.query())) {
+            List<com.saferoute.place.Place> found = kakao.searchAddress(q);
+            if (found == null) {
+                continue;
+            }
+            for (com.saferoute.place.Place p : found) {
+                Conversation.Place at = new Conversation.Place(AssistantTools.shortAddress(p.name()), p.address(), p.lat(), p.lon());
+                if (AssistantTools.inGwangju(at)) {
+                    return List.of(new Stop(s.label(), at.name(), p.address(), p.lat(), p.lon()));
+                }
+            }
+            if (s.query().startsWith("광주")) {
+                break;
+            }
+        }
+        return List.of();
+    }
+
     /** 들를 곳을 못 찾았을 때 failText 앞부분 (받아쓰기 다른 후보로 다시 볼지 정할 때 씀) */
     static final String NOT_FOUND = "가는 길에 들를 '";
 
@@ -96,7 +116,16 @@ public class StopPlanner {
         for (Conversation.Stop s : a.stops()) {
             List<Stop> c = new ArrayList<>();
             try {
-                for (com.saferoute.place.Place p : kakao.search(s.query(), midLat, midLon)) {
+                // "서석동"처럼 동 이름만 말했으면 그 동 가게가 아니라 동 자체로 (11-16 시험 43번: "포포케이크(서석동)"를 골랐음)
+                if (AssistantTools.looksLikeDong(s.query())) {
+                    try {
+                        c.addAll(dong(s));
+                    } catch (PlaceSearchException e) {
+                        log.info("들를 곳 동 주소 검색 실패, 장소 검색으로: {}", e.getMessage());
+                    }
+                }
+                for (com.saferoute.place.Place p : c.isEmpty() ? kakao.search(s.query(), midLat, midLon)
+                        : List.<com.saferoute.place.Place>of()) {
                     if (AssistantTools.inGwangju(new Conversation.Place(p.name(), null, p.lat(), p.lon()))) {
                         c.add(new Stop(s.label(), p.name(), p.address(), p.lat(), p.lon()));
                     }
