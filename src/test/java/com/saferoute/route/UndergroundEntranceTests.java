@@ -109,6 +109,10 @@ class UndergroundEntranceTests {
         assertThat(end(station)).containsExactly(xy(760, 20));
         assertThat(entrance(station)).containsExactly(
                 RouteResult.Note.info("entrance", "문화전당역 광주1호선은 문화전당역 5번 출구(계단)로 들어가요"));
+        RouteResult bare = route("문화전당역", "adult", "off");
+        assertThat(end(bare)).containsExactly(xy(760, 20));
+        assertThat(entrance(bare)).containsExactly(
+                RouteResult.Note.info("entrance", "문화전당역은 문화전당역 5번 출구(계단)로 들어가요"));
         // 서쪽 역은 지하상가를 지나 동쪽 역 출구로 가지 않고 그 역 출구(동쪽에서 더 가까운 XW1)
         RouteResult west = route("금남로4가역 광주1호선", "adult", "off");
         assertThat(end(west)).containsExactly(xy(60, 20));
@@ -118,7 +122,9 @@ class UndergroundEntranceTests {
 
     @Test
     void noOrOtherNameKeepsTheDestination() {
-        for (String name : new String[] {null, "스타벅스 금남로점"}) {
+        // 역 이름 뒤에 다른 말이 붙으면(출구·주차장) 사용자가 고른 그 좌표로 간다
+        for (String name : new String[] {null, "스타벅스 금남로점", "문화전당역 4번 출구", "문화전당역4번출구",
+                "문화전당역 공영주차장"}) {
             RouteResult r = route(name, "adult", "off");
             assertThat(end(r)).containsExactly(MALL);
             assertThat(entrance(r)).isEmpty();
@@ -145,6 +151,8 @@ class UndergroundEntranceTests {
     void placeNamesMatchWithoutSpacesOrByStation() {
         assertThat(RouteService.undergroundPlace("금남 지하상가", PLACES)).containsExactlyInAnyOrder(M1, M2);
         assertThat(RouteService.undergroundPlace("금남로4가역 광주1호선", PLACES)).containsExactly(CW);
+        assertThat(RouteService.undergroundPlace("문화전당역", PLACES)).containsExactly(CE);
+        assertThat(RouteService.undergroundPlace("문화전당역 4번 출구", PLACES)).isEmpty();
         assertThat(RouteService.undergroundPlace("금남로5가역", PLACES)).isEmpty();
         assertThat(RouteService.undergroundPlace(null, PLACES)).isEmpty();
     }

@@ -299,17 +299,19 @@ public class RouteService {
 
     /**
      * 도착지 이름에 맞는 지하 시설 점 (2026-11-16). 띄어쓰기를 빼고 시설 이름과 같으면("금남지하상가" 통로 점 6개),
-     * 또는 "X역"으로 시작하면(카카오 "문화전당역 광주1호선") "X역 대합실". 이름이 없거나 맞는 것이 없으면 빈 집합
+     * 또는 이름이 "X역"이나 카카오 "X역 광주1호선" 그대로면 "X역 대합실". "X역 4번 출구"·"X역 공영주차장"처럼 뒤에 다른 말이
+     * 붙으면 사용자가 고른 그 좌표로 가야 하므로 맞추지 않는다 (2026-11-16). 이름이 없거나 맞는 것이 없으면 빈 집합
      */
     static Set<Long> undergroundPlace(String name, java.util.Map<Long, String> places) {
         if (name == null) {
             return Set.of();
         }
         String n = name.replaceAll("\\s", "");
+        String station = n.replaceFirst("광주\\d+호선$", "") + "대합실";
         Set<Long> out = new java.util.HashSet<>();
         places.forEach((id, place) -> {
             String p = place.replaceAll("\\s", "");
-            if (p.equals(n) || p.endsWith("역대합실") && n.startsWith(p.substring(0, p.length() - "대합실".length()))) {
+            if (p.equals(n) || p.endsWith("역대합실") && p.equals(station)) {
                 out.add(id);
             }
         });
