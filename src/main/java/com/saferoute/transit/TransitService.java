@@ -444,6 +444,11 @@ public class TransitService {
                 } catch (RouteException e) {
                     // 너무 가까움(SAME_POINT)·길 없음 등: ODsay 걷기 값 그대로 쓴다
                     return Optional.empty();
+                } catch (RuntimeException e) {
+                    // 뜻밖의 오류(DB 끊김 등)도 이 걷는 구간만 ODsay 걷기 값으로 대신 쓴다 (2026-11-16).
+                    // 걷는 구간 하나 때문에 대중교통 결과 전체가 500으로 실패하고, 이미 쓴 ODsay 한 번이 날아가지 않게
+                    log.warn("대중교통: 걷는 구간 길찾기 실패, ODsay 걷기 값으로 대신함 {}", e.getClass().getSimpleName());
+                    return Optional.empty();
                 }
             }).orElse(null);
         }
