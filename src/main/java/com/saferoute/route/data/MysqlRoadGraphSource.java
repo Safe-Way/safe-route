@@ -52,6 +52,7 @@ import com.saferoute.route.engine.graph.UndergroundLinks;
  *       조건 없이 보통 평지 보도처럼 늘 넣는다(노인도 계단 없는 길로 봄, 사용자 결정 11-10). 휠체어는 쓰지 않는다
  *       ({@link Penalty#PLAZA}, route.yml wheelchair exclude): 높낮이를 모르는 선이라 높낮이가 다른 광장에서는 계단 양 끝을
  *       곧게 잇는 선이 있어 휠체어가 그 계단을 건너뛰게 된다 (11-10 확인, 광주 44줄, 문화전당 광장 포함. A파트 원래 메모대로).
+ *       단 사람이 평평하다고 확인해 tags.wheelchair = yes를 단 줄은 광장 표시 없이 보통 보도로 읽어 휠체어도 쓴다 (2026-11-16).
  *       번호는 지하 길과 같은 -(10억 + id)</li>
  *   <li>횡단보도 점 (2026-11-12, specs/014): poi kind = crosswalk. 응답 crossAt의 큰 길 건너는 자리에만 쓴다.
  *       신호등 점은 교차로 가운데라 쓰지 않는다</li>
@@ -185,12 +186,14 @@ public class MysqlRoadGraphSource implements RoadGraphSource {
     private Network read() {
         // 지하 길·광장 길 표에는 wheelchair_ramp(계단은 휠체어로 못 지남)·edge_stat(턱·육교 모름)이 없어 NULL로 읽는다.
         // 광장 길(plaza)은 지하 표시 0이라 늘 요청 도로망에 들어간다 (2026-11-10)
+        // 사람이 평평하다고 확인한 광장 길(tags.wheelchair = yes)은 광장 표시를 붙이지 않는다. 태그 없음(NULL)은 그대로 광장 (2026-11-16)
         // 보도 자료(edge_sidewalk)는 road_edge에만 있다 (2026-11-13)
         String sql = select("e", "e.id", "e.wheelchair_ramp", "0", "0", "s.curb", "s.footbridge_ok", "w")
                 + " FROM road_edge e LEFT JOIN edge_stat s ON s.edge_id = e.id LEFT JOIN edge_sidewalk w ON w.edge_id = e.id"
                 + " UNION ALL "
-                + select("x", "-(1000000000 + x.id)", "NULL", "x.reason = 'underground'", "x.reason = 'plaza'", "NULL", "NULL",
-                        null)
+                + select("x", "-(1000000000 + x.id)", "NULL", "x.reason = 'underground'",
+                        "x.reason = 'plaza' AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(x.tags, '$.wheelchair')), '') <> 'yes'",
+                        "NULL", "NULL", null)
                 + " FROM road_edge_excluded x WHERE x.reason IN ('underground', 'plaza')";
         double minEdgeM = props.sidewalkDataMinEdgeM();
         double narrowM = props.narrowSidewalkM();

@@ -36,10 +36,18 @@ public final class UndergroundLinks {
     /**
      * 출구마다 붙일 길을 나누고 연결 길을 더한 목록. 붙일 길이 목록에 없는 출구는 잇지 않는다 (막다른 점으로 남아 경로에 안 쓰임).
      * 한 길에 출구가 여럿이면(평동역 1·2번 출구가 같은 길) 길 처음에서 가까운 차례로 나눈다.
-     * 발이 길 끝 점이나 앞 발에서 {@link RoadGraph#SPLIT_MIN_M} 안이면 나누지 않고 그 점에 붙인다
+     * 발이 길 끝 점이나 앞 발에서 {@link RoadGraph#SPLIT_MIN_M} 안이면 나누지 않고 그 점에 붙인다.
+     * 출구 점이 이미 모든 모드가 쓰는 지상 길(계단·높낮이 모르는 광장 선이 아닌 길)의 끝이면 잇지 않는다 (2026-11-16)
      */
     public static List<RoadEdge> attach(List<RoadEdge> edges, List<Exit> exits) {
-        Map<Long, List<Exit>> byEdge = exits.stream().collect(Collectors.groupingBy(Exit::attachEdge));
+        // A파트가 광장 선을 출구 점에 그어 둔 문화전당역 4번 출구는 곧은 연결 길이 공사 신고 자리를 가로질렀다 (2026-11-16).
+        // 계단·광장 선만 닿은 출구는 휠체어가 못 나가므로 그대로 잇는다
+        java.util.Set<Long> joined = edges.stream()
+                .filter(e -> e.penalty().get(Penalty.UNDERGROUND) < 1 && e.penalty().get(Penalty.STAIRS) < 1
+                        && e.penalty().get(Penalty.PLAZA) < 1)
+                .flatMap(e -> java.util.stream.Stream.of(e.from(), e.to())).collect(Collectors.toSet());
+        Map<Long, List<Exit>> byEdge = exits.stream().filter(x -> !joined.contains(x.node()))
+                .collect(Collectors.groupingBy(Exit::attachEdge));
         List<RoadEdge> out = new ArrayList<>(edges.size() + 2 * exits.size());
         long node = NODE_BASE;
         long id = EDGE_BASE;

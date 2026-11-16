@@ -112,6 +112,7 @@ class MysqlRoadGraphSourceTests {
     @Test
     void plazaRowsAreReadAsPlainWalkways() {
         // 광장 길(w13)은 지하 길과 같은 표에서 읽되 지하 표시를 붙이지 않는다 (늘 요청 도로망에 들어감)
+        // wheelchair = yes로 확인된 줄은 광장 표시도 없다(휠체어가 씀). 태그 없음은 광장 그대로 (11-16)
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         new MysqlRoadGraphSource(jdbc, com.saferoute.route.RouteTestProps.load()).covers(126.92, 35.14);
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
@@ -119,7 +120,8 @@ class MysqlRoadGraphSourceTests {
         assertThat(sql.getAllValues().get(0))
                 .contains("x.reason IN ('underground', 'plaza')")
                 .contains("x.reason = 'underground' AS underground")
-                .contains("x.reason = 'plaza' AS plaza");
+                .contains("x.reason = 'plaza' AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(x.tags, '$.wheelchair')), '') <> 'yes'"
+                        + " AS plaza");
     }
 
     /** 도로망 읽기 첫 SQL의 한 줄을 읽은 길. cols에 없는 칸은 NULL (숫자는 0) */
