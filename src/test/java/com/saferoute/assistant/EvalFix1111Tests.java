@@ -97,6 +97,21 @@ class EvalFix1111Tests {
     }
 
     @Test
+    void eval2WheelchairWhyIsSaidOnlyOnce() {
+        // 11-12 기록: 제미나이가 앞 문장만 말했는데 서버가 두 문장을 다 붙여 "…빼고 골랐어요"가 두 번 나옴
+        AssistantReply.Pick walk = new AssistantReply.Pick("walk", java.util.Map.of(), "걸어서 23분", 23, "safe");
+        String said = "국립아시아문화전당까지 23분 걸려요. 휠체어가 못 지나는 것으로 확인된 길은 빼고 골랐어요. "
+                + "지난번 이런 날씨에도 걸어가셨어요.";
+        String out = AssistantService.mustSay(said, "wheelchair", walk);
+        assertThat(out).isEqualTo("국립아시아문화전당까지 23분 걸려요. 지난번 이런 날씨에도 걸어가셨어요. "
+                + AssistantService.WHEELCHAIR_WHY);
+        assertThat(out.split("못 지나는", -1)).hasSize(2); // 한 번만
+        // 두 문장을 다 말했으면 그대로
+        String full = "23분 걸려요. " + AssistantService.WHEELCHAIR_WHY;
+        assertThat(AssistantService.mustSay(full, "wheelchair", walk)).isEqualTo(full);
+    }
+
+    @Test
     void eval11SeniorAnswerAlwaysTellsHowToFindARestPlace() {
         AssistantReply.Pick transit = new AssistantReply.Pick("transit", java.util.Map.of(), "16분", 16, null);
         AssistantReply.Pick walk = new AssistantReply.Pick("walk", java.util.Map.of(), "걸어서 12분", 12, "safe");
