@@ -84,10 +84,15 @@ public final class RoadGraph {
      * usable: 수직의 발을 찾을 길 (휠체어는 지날 수 있는 길만. 계단 중간에 붙으면 휠체어 길이 끊긴다)
      */
     public Snap nearest(double lon, double lat, Predicate<RoadEdge> usable) {
+        return nearest(lon, lat, usable, at -> true);
+    }
+
+    /** clear: 점에서 그 발까지 곧은 줄로 이어도 되는지 ({@link #nearest(double, double, Set, Predicate, Predicate)}) */
+    public Snap nearest(double lon, double lat, Predicate<RoadEdge> usable, Predicate<double[]> clear) {
         if (main == null) {
             main = largest(graph);
         }
-        return nearest(lon, lat, main, usable);
+        return nearest(lon, lat, main, usable, clear);
     }
 
     /**
@@ -137,6 +142,14 @@ public final class RoadGraph {
      * 붙어 크게 도는 것을 막으려던 것이다. 없으면 null. 길을 나눠 생긴 새 노드도 within에 넣는다
      */
     public Snap nearest(double lon, double lat, Set<Long> within, Predicate<RoadEdge> usable) {
+        return nearest(lon, lat, within, usable, at -> true);
+    }
+
+    /**
+     * clear가 false인 발(점에서 그 발까지 곧은 줄이 피할 신고·행사 반경을 지남, 2026-11-16)은 후보에서 뺀다. 노드로 찾을 때도 같다.
+     * shortcut: 길마다 가장 가까운 발 하나만 보므로 그 발이 막히면 같은 길의 다른 자리는 보지 않는다, 막힌 길에 꼭 붙어야 하는 사례가 나오면 길 위를 따라 찾기
+     */
+    public Snap nearest(double lon, double lat, Set<Long> within, Predicate<RoadEdge> usable, Predicate<double[]> clear) {
         double[] p = {lon, lat};
         RoadEdge best = null;
         Foot bestFoot = null;
@@ -145,24 +158,25 @@ public final class RoadGraph {
                 continue;
             }
             Foot f = closest(p, e);
-            if (f.m() <= (bestFoot == null ? SNAP_CANDIDATE_M : bestFoot.m()) && !crossesBigRoad(p, f.at(e), e)) {
+            if (f.m() <= (bestFoot == null ? SNAP_CANDIDATE_M : bestFoot.m()) && clear.test(f.at(e))
+                    && !crossesBigRoad(p, f.at(e), e)) {
                 best = e;
                 bestFoot = f;
             }
         }
         if (best == null) {
-            return nearestByNode(p, within, usable);
+            return nearestByNode(p, within, usable, clear);
         }
         return snapOn(p, best, bestFoot, within);
     }
 
     /** 30m 안 후보가 없을 때의 예전 방식: 가장 가까운 노드와 그 노드에 이어진 길 */
-    private Snap nearestByNode(double[] p, Set<Long> within, Predicate<RoadEdge> usable) {
+    private Snap nearestByNode(double[] p, Set<Long> within, Predicate<RoadEdge> usable, Predicate<double[]> clear) {
         Long near = null;
         double nearM = Double.MAX_VALUE;
         for (Map.Entry<Long, double[]> n : nodes.entrySet()) {
             double m = Geo.distance(p, n.getValue());
-            if (m < nearM && within.contains(n.getKey())) {
+            if (m < nearM && within.contains(n.getKey()) && clear.test(n.getValue())) {
                 near = n.getKey();
                 nearM = m;
             }
@@ -177,7 +191,7 @@ public final class RoadGraph {
                 continue;
             }
             Foot f = closest(p, e);
-            if (f.m() < (bestFoot == null ? nearM : bestFoot.m())) {
+            if (f.m() < (bestFoot == null ? nearM : bestFoot.m()) && clear.test(f.at(e))) {
                 best = e;
                 bestFoot = f;
             }

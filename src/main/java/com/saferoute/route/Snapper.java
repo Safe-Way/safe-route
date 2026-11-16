@@ -27,10 +27,13 @@ final class Snapper {
     }
 
     /** 가장 가까운 길 노드. 너무 멀면 길 위가 아니라고 본다. surface가 있으면(지하를 넣은 도로망) 그 안 지상 길에만 붙인다 */
-    RoadGraph.Snap snap(RoadGraph graph, double[] p, RouteProperties.Profile profile, Set<Long> surface) {
+    RoadGraph.Snap snap(RoadGraph graph, double[] p, RouteProperties.Profile profile, Set<Long> surface,
+            java.util.function.Predicate<double[]> clear) {
         // 인도 없는 골목에도 붙인다: 그 골목 안에서 출발·도착하면 골목을 따라 나간다 (endAlleys, 2026-11-13)
-        RoadGraph.Snap s = surface == null ? graph.nearest(p[0], p[1], e -> profile.passable(e, true))
-                : graph.nearest(p[0], p[1], surface, e -> profile.passable(e, true) && !RouteFinder.isUnderground(e));
+        java.util.function.Function<java.util.function.Predicate<double[]>, RoadGraph.Snap> near = c -> surface == null
+                ? graph.nearest(p[0], p[1], e -> profile.passable(e, true), c)
+                : graph.nearest(p[0], p[1], surface, e -> profile.passable(e, true) && !RouteFinder.isUnderground(e), c);
+        RoadGraph.Snap s = clearFirst(near, clear, x -> x.distanceM() <= props.snapMaxM());
         if (s == null || s.distanceM() > props.snapMaxM()) {
             throw new RouteException(RouteError.NO_ROUTE);
         }
@@ -40,7 +43,11 @@ final class Snapper {
         if (at.stream().anyMatch(RouteFinder::isNoSidewalkAlley) && at.stream().noneMatch(profile::passable)) {
             java.util.function.Predicate<RoadEdge> base = e -> profile.passable(e)
                     && !(surface != null && RouteFinder.isUnderground(e));
-            RoadGraph.Snap b = graph.nearest(p[0], p[1], graph.mainPart(base), base);
+            // 골목 점까지 곧은 줄이 막히지 않았으면 막힌 길 점으로 옮기지 않는다
+            RoadGraph.Snap b = clear.test(graph.point(s.node()))
+                    ? graph.nearest(p[0], p[1], graph.mainPart(base), base, clear)
+                    : clearFirst(c -> graph.nearest(p[0], p[1], graph.mainPart(base), base, c), clear,
+                            x -> x.distanceM() - s.distanceM() <= props.passableSnapExtraM());
             if (b != null && b.distanceM() - s.distanceM() <= props.passableSnapExtraM()) {
                 return b;
             }
@@ -87,15 +94,28 @@ final class Snapper {
      * 붙이지 않는다 (2026-11-04, 출발·도착점 2026-11-13)
      */
     Placed place(RoadGraph graph, double[] p, RoadGraph.Snap any, Set<Long> part,
-            java.util.function.Predicate<RoadEdge> passable, double extraM) {
+            java.util.function.Predicate<RoadEdge> passable, double extraM, java.util.function.Predicate<double[]> clear) {
         if (part.contains(any.node())) {
             return new Placed(any, false);
         }
-        RoadGraph.Snap s = graph.nearest(p[0], p[1], part, passable);
+        RoadGraph.Snap s = clearFirst(c -> graph.nearest(p[0], p[1], part, passable, c), clear,
+                x -> x.distanceM() - any.distanceM() <= extraM);
         if (s == null || s.distanceM() - any.distanceM() > extraM) {
             throw new RouteException(RouteError.NO_ROUTE);
         }
         return new Placed(s, true);
+    }
+
+    /**
+     * 붙일 곳 고르기 (2026-11-16 사용자 확정): 점에서 곧은 줄로 잇는 구간은 길이 아니라 신고·행사를 피하지 못한다
+     * (문화전당역 5번 → 4번 출구 휠체어가 59m 곧은 줄로 13m 옆 공사 신고를 지났다). 그래서 그 줄이 이 모드가 피할 곳의 반경을
+     * 지나지 않는 후보(clear)로 먼저 붙이고, 그런 후보가 없거나 거리 한도(ok)를 넘으면 지금처럼 붙인다 (RouteService.throughNotes가 알림)
+     */
+    private static RoadGraph.Snap clearFirst(
+            java.util.function.Function<java.util.function.Predicate<double[]>, RoadGraph.Snap> near,
+            java.util.function.Predicate<double[]> clear, java.util.function.Predicate<RoadGraph.Snap> ok) {
+        RoadGraph.Snap s = near.apply(clear);
+        return s != null && ok.test(s) ? s : near.apply(at -> true);
     }
 
     /** 옆 길에 붙였으면 남은 거리를 알린다. 계단·등산로로만 드나드는 곳이라 그 길(way: "휠체어로" 등)이 확인되지 않은 구간이다 */

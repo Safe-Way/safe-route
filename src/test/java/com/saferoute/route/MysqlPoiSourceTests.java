@@ -38,6 +38,7 @@ class MysqlPoiSourceTests {
         assertThat(found).allMatch(p -> box.contains(p.lon(), p.lat()));
         assertThat(found).allMatch(p -> p.count() >= 1);
         assertThat(source.holidays()).isNotEmpty(); // schema.sql에 공휴일이 들어 있다
+        assertThat(source.reports(box)).allMatch(r -> box.contains(r.lon(), r.lat())); // 신고 표시 쿼리·뷰가 실제 DB에서 돈다
         assumeTrue(!found.isEmpty(), "시설 데이터가 없는 DB (CI)");
         assertThat(byKind.getOrDefault("light", 0L)).isPositive();
         assertThat(byKind.getOrDefault("cctv", 0L)).isPositive();
