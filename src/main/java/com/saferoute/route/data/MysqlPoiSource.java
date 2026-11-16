@@ -25,7 +25,7 @@ import com.saferoute.route.engine.geo.BBox;
  * A파트의 poi 표(광주 정제 시설), holiday 표, data_source 표를 읽는다.
  * 시각은 TIME_TO_SEC로 분 단위로 읽는다 (24:00은 1440으로 들어온다).
  * 공휴일과 데이터 기준일은 처음 한 번 읽어 둔다 (적재가 바뀌면 서버를 다시 켠다).
- * 행사·돌발상황(road_event)은 자주 바뀌어 요청마다 읽는다. 신고(road_report_active 뷰)는 60초 기억한다.
+ * 행사·돌발상황(road_event)은 자주 바뀌어 요청마다 읽는다. 신고(road_report_active 뷰)는 기억해 두고 표가 바뀔 때만 다시 읽는다.
  */
 @Component
 public class MysqlPoiSource implements PoiSource {
@@ -33,16 +33,27 @@ public class MysqlPoiSource implements PoiSource {
     private static final Logger log = LoggerFactory.getLogger(MysqlPoiSource.class);
 
     /**
-     * 신고 뷰를 다시 읽는 간격. 뷰가 읽을 때마다 전체 신고를 다시 계산하고(재귀 CTE·신고끼리 거리), 대중교통·비서는 한 요청에
-     * 엔진을 여러 번 부른다. 유효 기간이 날짜 단위라 1분 늦게 보는 것은 상관없다
+     * 신고 뷰를 바뀐 표시가 같아도 다시 읽는 간격. 표시가 못 잡는 변경(DB에서 손으로 위치를 고친 것 등)의 안전망이다.
+     * 뷰는 읽을 때마다 전체 신고를 다시 계산하고(재귀 CTE·신고끼리 거리), 대중교통·비서는 한 요청에 엔진을 여러 번 부른다
      */
     static final long REPORTS_TTL_NANOS = 60_000_000_000L;
+
+    /**
+     * 신고 뷰의 바뀐 표시. 서버가 두 대(app-1, app-2)라 신고를 받은 서버의 기억만 지우면 다른 서버는 모르므로, 요청마다 표를 직접 본다.
+     * 숨기지 않은 신고의 개수·번호 합(추가·삭제·숨김 모두 바뀜)과 오늘 날짜(뷰가 ends_on >= CURDATE()로 거름).
+     * 상태 색인(idx_road_report_status)만 읽어 표를 열지 않는다
+     */
+    static final String REPORTS_STAMP = "SELECT CONCAT(CURDATE(), ' ', COUNT(*), ' ', COALESCE(SUM(id), 0))"
+            + " FROM road_report WHERE status <> 'hidden'";
+
+    /** 읽어 둔 신고와 그때의 표시·시각. 한 덩어리로 바꿔야 다른 요청이 새 표시에 옛 목록을 짝지어 보지 않는다 */
+    private record CachedReports(List<RoadReport> all, String stamp, long at) {
+    }
 
     private final JdbcTemplate jdbc;
     private volatile Set<LocalDate> holidays;
     private volatile LocalDate dataDate;
-    private volatile List<RoadReport> reports;
-    private volatile long reportsAt;
+    private volatile CachedReports reports;
 
     public MysqlPoiSource(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -116,31 +127,34 @@ public class MysqlPoiSource implements PoiSource {
     }
 
     /**
-     * 뷰 전체를 읽어 60초 기억하고 범위는 자바에서 거른다 (뷰라 공간 색인을 못 쓴다).
-     * shortcut: 서버 한 대 안에서만 기억한다. 신고가 수천 곳으로 늘어 전체 읽기가 느려지면 뷰를 범위로 읽거나 표로 바꾼다
+     * 뷰 전체를 읽어 기억하고 범위는 자바에서 거른다 (뷰라 공간 색인을 못 쓴다).
+     * 요청마다 바뀐 표시(REPORTS_STAMP)를 먼저 읽어, 방금 들어온 신고가 '다시 찾기'에 바로 반영되게 한다 (어느 서버로 가도 같다).
+     * shortcut: 신고가 수천 곳으로 늘어 전체 읽기가 느려지면 뷰를 범위로 읽거나 표로 바꾼다
      */
     @Override
     public List<RoadReport> reports(BBox box) {
-        List<RoadReport> all = reports;
-        if (all == null || System.nanoTime() - reportsAt > REPORTS_TTL_NANOS) {
-            try {
-                all = jdbc.query("SELECT spot_id, report_type, lon, lat, ends_on, avoid_modes, cost_modes"
+        CachedReports cached = reports;
+        try {
+            String stamp = jdbc.queryForObject(REPORTS_STAMP, String.class);
+            if (cached == null || !cached.stamp().equals(stamp) || System.nanoTime() - cached.at() > REPORTS_TTL_NANOS) {
+                List<RoadReport> all = jdbc.query("SELECT spot_id, report_type, lon, lat, ends_on, avoid_modes, cost_modes"
                         + " FROM road_report_active",
                         (rs, n) -> new RoadReport(rs.getLong("spot_id"), rs.getString("report_type"),
                                 rs.getDouble("lon"), rs.getDouble("lat"), rs.getObject("ends_on", LocalDate.class),
                                 modes(rs.getString("avoid_modes")), modes(rs.getString("cost_modes"))));
-                reportsAt = System.nanoTime();
-                reports = all;
-            } catch (DataAccessException e) {
-                // 신고는 덧붙이는 것이라 못 읽어도 경로는 준다 (행사와 같다). 이미 읽어 둔 목록이 있으면 낡아도 그것을 써서
-                // DB가 잠깐 끊긴 사이 피하던 신고가 사라지지 않게 한다. 기억 시각은 그대로라 다음 요청에 다시 읽는다
-                log.warn("신고를 읽지 못함: {}", e.getMostSpecificCause().getMessage());
-                if (all == null) {
-                    return List.of();
-                }
+                // 표시를 뷰보다 먼저 읽었으니 그 사이 신고가 들어와도 다음 요청에 표시가 달라 다시 읽는다
+                cached = new CachedReports(all, stamp, System.nanoTime());
+                reports = cached;
+            }
+        } catch (DataAccessException e) {
+            // 신고는 덧붙이는 것이라 못 읽어도 경로는 준다 (행사와 같다). 이미 읽어 둔 목록이 있으면 낡아도 그것을 써서
+            // DB가 잠깐 끊긴 사이 피하던 신고가 사라지지 않게 한다. 기억은 그대로라 다음 요청에 다시 읽는다
+            log.warn("신고를 읽지 못함: {}", e.getMostSpecificCause().getMessage());
+            if (cached == null) {
+                return List.of();
             }
         }
-        return all.stream().filter(r -> box.contains(r.lon(), r.lat())).toList();
+        return cached.all().stream().filter(r -> box.contains(r.lon(), r.lat())).toList();
     }
 
     /** 뷰의 쉼표 목록 ("senior,wheelchair", 빈 글자면 없음) */
