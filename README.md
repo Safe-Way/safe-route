@@ -238,7 +238,7 @@ src/main/resources/
   application.yml   설정 (키는 .env에서 읽음)
   route.yml         모드별 가중치·우회 한도
   db/schema.sql     DB 표 전체
-  db/migration/     DB 변경 기록 (001~034)
+  db/migration/     DB 변경 기록 (001~035)
 docs/
   assistant/        비서 설계 (동의 문구, 도구 고르기, 시험 질문 41개, 사용성 점검표)
   route-weights.md  가중치 기준

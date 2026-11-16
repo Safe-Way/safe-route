@@ -1287,3 +1287,10 @@ CREATE TABLE IF NOT EXISTS edge_sidewalk (
     source      VARCHAR(20)  NULL     COMMENT '판단에 쓴 자료: ngii_line, ngii_area, both',
     PRIMARY KEY (edge_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '우리 길마다 옆 인도 (034, scripts/load_sidewalk.py)';
+
+-- 035 ODsay 하루 부른 수 (서버 두 대가 같이 셈). 표가 없으면 서버는 메모리로 센다
+CREATE TABLE IF NOT EXISTS odsay_call_count (
+    day    DATE NOT NULL COMMENT '한국 날짜',
+    calls  INT  NOT NULL DEFAULT 0 COMMENT '그날 ODsay를 부른 수 (두 서버 합)',
+    PRIMARY KEY (day)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = 'ODsay 하루 부른 수 (서버 두 대가 같이 셈)';

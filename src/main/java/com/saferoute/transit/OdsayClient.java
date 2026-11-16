@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -26,6 +27,8 @@ import tools.jackson.databind.JsonNode;
  * 키는 ODSAY_API_KEY: 배포 서버는 Server 키(학교 서버 IP 등록), 노트북 .env 는 Android 키.
  * 주소에 키와 좌표가 들어가므로 주소·오류 내용은 로그에 남기지 않는다 (NFR-07).
  * 하루 부를 수 있는 수가 적어서 서버가 직접 세고, 넘으면 부르지 않는다.
+ * 세는 곳은 DB 표(odsay_call_count)라 서버 두 대가 합쳐 세고 재시작해도 이어진다 (2026-11-16).
+ * 표가 없거나 DB를 못 쓰면 그 서버 메모리로 센다 (예전 방식).
  */
 @Component
 public class OdsayClient {
@@ -39,21 +42,29 @@ public class OdsayClient {
     private final String key;
     private final int dailyLimit;
     private final Clock clock;
+    /** DB로 세는 곳. null이면 메모리로만 센다 (테스트) */
+    private final OdsayCallCounter counter;
     private LocalDate countDay;
     private int countToday;
 
     @Autowired
     public OdsayClient(@Value("${api-keys.odsay:}") String key,
-                       @Value("${transit.odsay-daily-limit:30}") int dailyLimit, Clock clock) {
-        this(RestClient.builder().requestFactory(timeoutFactory()), key, dailyLimit, clock);
+                       @Value("${transit.odsay-daily-limit:30}") int dailyLimit, Clock clock,
+                       OdsayCallCounter counter) {
+        this(RestClient.builder().requestFactory(timeoutFactory()), key, dailyLimit, clock, counter);
     }
 
-    /** 테스트에서 가짜 ODsay 서버를 붙일 때 쓴다 */
+    /** 테스트에서 가짜 ODsay 서버를 붙일 때 쓴다 (메모리로만 셈) */
     OdsayClient(RestClient.Builder builder, String key, int dailyLimit, Clock clock) {
+        this(builder, key, dailyLimit, clock, null);
+    }
+
+    OdsayClient(RestClient.Builder builder, String key, int dailyLimit, Clock clock, OdsayCallCounter counter) {
         this.rest = builder.build();
         this.key = key;
         this.dailyLimit = dailyLimit;
         this.clock = clock;
+        this.counter = counter;
     }
 
     /**
@@ -77,9 +88,28 @@ public class OdsayClient {
         return toPaths(res);
     }
 
-    /** 오늘 부른 수를 하나 올린다. 한도를 넘으면 부르지 않고 DAILY_LIMIT */
-    private synchronized void takeOne() {
+    /**
+     * 오늘 부른 수를 하나 올린다. 한도를 넘으면 부르지 않고 DAILY_LIMIT.
+     * DB로 먼저 세고, DB를 못 쓰면 메모리로 센다 (DB가 잠깐 끊겨도 대중교통 길찾기는 된다)
+     */
+    private void takeOne() {
         LocalDate today = LocalDate.now(clock);
+        // DB 한 문장이 동시에 와도 한도를 지키므로 잠그지 않는다 (DB가 느릴 때 다른 요청까지 기다리지 않게)
+        if (counter != null) {
+            try {
+                if (!counter.take(today, dailyLimit)) {
+                    throw TransitException.dailyLimit();
+                }
+                return;
+            } catch (DataAccessException e) {
+                log.warn("ODsay 부른 수를 DB에서 못 셈, 이 서버 메모리로 셈: {}", e.getMostSpecificCause().getMessage());
+            }
+        }
+        takeOneInMemory(today);
+    }
+
+    /** 이 서버 메모리로 센다 (DB를 못 쓸 때, 테스트) */
+    private synchronized void takeOneInMemory(LocalDate today) {
         if (!today.equals(countDay)) {
             countDay = today;
             countToday = 0;
