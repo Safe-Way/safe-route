@@ -19,3 +19,4 @@ data/raw/
 
 # build_plazas.py 가 만드는 SQL (약 1MB, 다시 만들 수 있음)
 scripts/plaza_edges.sql
+scripts/ngii_1000.sql
