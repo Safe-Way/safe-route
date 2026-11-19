@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""road_report_active 뷰 규칙 시험 (결정 57, A파트 2026-11-10). 뷰는 가장 최근 정의(033)로 계산.
+"""road_report_active 뷰 규칙 시험 (결정 57, A파트 2026-11-10). 뷰는 가장 최근 정의(036)로 계산.
 
 학교 DB에 꾸민 신고를 넣지 않는다(넣으면 앱 지도에 바로 보임). 032 SQL의 base 부분(@@BASE@@~@@END@@)을
-아래 꾸민 신고 줄로 바꾸고, CURDATE()(@@TODAY@@)를 정한 날짜로 바꿔 같은 SQL을 학교 DB에서 계산만 한다.
+아래 꾸민 신고 줄로 바꾸고, CURDATE()(@@TODAY@@)·NOW()(@@NOW@@)를 정한 날짜·시각으로 바꿔
+같은 SQL을 학교 DB에서 계산만 한다. 036: 차·오토바이 사진(photo_label 'vehicle')인 막는 물건은 3시간만.
 
 실행: python3 scripts/check_report_active.py   (틀린 것이 있으면 끝 상태 1)
 """
@@ -13,7 +14,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SQL = os.path.join(ROOT, "src", "main", "resources", "db", "migration", "033_road_report_reporter.sql")
+SQL = os.path.join(ROOT, "src", "main", "resources", "db", "migration", "036_road_report_photo_label.sql")
 
 # 꾸민 신고: (번호, 종류, 위도, 경도, 날짜, 상태[, 신고자 해시]). 시험마다 위치를 멀리 둬서 서로 안 묶이게 함
 R = [
@@ -54,6 +55,19 @@ R = [
     # M 서로 다른 두 사람 → confirmed 1
     (1301, "curb", 35.2200, 126.9000, "2026-11-10", "open", "aaaa"),
     (1302, "curb", 35.2200, 126.9000, "2026-11-11", "open", "bbbb"),
+    # (036) 뒤 두 칸: 사진 분류(photo_label), 올린 시각
+    # N 차량 막음 10:00 → 13:00 전까지만
+    (1401, "obstacle", 35.2300, 126.9000, "2026-11-20", "open", None, "vehicle", "10:00"),
+    # O 밤 11시 차량 → 자정에 안 끊기고 다음 날 02:00 전까지 (날짜는 다음 날로 셈)
+    (1501, "obstacle", 35.2400, 126.9000, "2026-11-20", "open", None, "vehicle", "23:00"),
+    # P 같은 곳 차량 10:00 + 차량 아닌 막는 물건 11:00 → 차량이 빠져도 그날 내내 남음
+    (1601, "obstacle", 35.2500, 126.9000, "2026-11-22", "open", None, "vehicle", "10:00"),
+    (1602, "obstacle", 35.2500, 126.9000, "2026-11-22", "open", None, None, "11:00"),
+    # Q 같은 곳 차량 다시 신고 12:00 → 12:00부터 3시간 (묶음 번호는 남은 신고 1702)
+    (1701, "obstacle", 35.2600, 126.9000, "2026-11-23", "open", None, "vehicle", "10:00"),
+    (1702, "obstacle", 35.2600, 126.9000, "2026-11-23", "open", None, "vehicle", "12:00"),
+    # S vehicle 라벨이라도 막는 물건이 아니면(공사) 그대로 7일
+    (1801, "construction", 35.2700, 126.9000, "2026-11-20", "open", None, "vehicle", "10:00"),
 ]
 
 # (오늘, 묶음 번호, 기대: None = 안 보임, 또는 (시작, 끝, 건수, confirmed))
@@ -81,6 +95,19 @@ EXPECT = [
     ("2026-11-12", 1101, ("2026-11-10", "2026-12-09", 1, 1)),
     ("2026-11-12", 1201, ("2026-11-10", "2026-12-09", 2, 0)),
     ("2026-11-12", 1301, ("2026-11-10", "2026-12-09", 2, 1)),
+    # 036 차량 3시간 ('오늘'에 시각을 붙이면 NOW() 도 그 시각, 안 붙이면 12:00)
+    ("2026-11-20 12:59", 1401, ("2026-11-20", "2026-11-20", 1, 0)),
+    ("2026-11-20 13:00", 1401, None),
+    ("2026-11-21 01:00", 1501, ("2026-11-21", "2026-11-21", 1, 0)),
+    ("2026-11-21 02:00", 1501, None),
+    ("2026-11-22 11:30", 1601, ("2026-11-22", "2026-11-22", 2, 1)),
+    ("2026-11-22 15:00", 1601, None),
+    ("2026-11-22 15:00", 1602, ("2026-11-22", "2026-11-22", 1, 0)),
+    ("2026-11-22 23:59", 1602, ("2026-11-22", "2026-11-22", 1, 0)),
+    ("2026-11-23 14:00", 1701, None),
+    ("2026-11-23 14:00", 1702, ("2026-11-23", "2026-11-23", 1, 0)),
+    ("2026-11-23 15:00", 1702, None),
+    ("2026-11-26 18:00", 1801, ("2026-11-20", "2026-11-26", 1, 0)),
 ]
 
 
@@ -95,26 +122,40 @@ def read_env():
     return env
 
 
-def fake_base(today):
-    """그날까지 들어온 꾸민 신고만 (미래 신고는 아직 없음)"""
+def split_now(now):
+    """'2026-11-20' 또는 '2026-11-20 12:59' → (날짜, 'YYYY-MM-DD HH:MM:SS')"""
+    day = now[:10]
+    hm = now[11:] or "12:00"
+    return day, f"{day} {hm}:00"
+
+
+def fake_base(now):
+    """그 시각까지 들어온 꾸민 신고만 (미래 신고는 아직 없음)"""
+    _day, at = split_now(now)
     rows = []
     for r in R:
         i, t, lat, lon, d, st = r[:6]
-        who = f"'{r[6]}'" if len(r) > 6 else "NULL"
-        if d > today:
+        who = f"'{r[6]}'" if len(r) > 6 and r[6] else "NULL"
+        label = f"'{r[7]}'" if len(r) > 7 and r[7] else "NULL"
+        created = f"{d} {r[8] if len(r) > 8 else '09:00'}:00"
+        if created > at:
             continue
         rows.append(f"SELECT {i} AS id, '{t}' AS report_type, {lat} AS lat, {lon} AS lon, "
                     f"ST_SRID(POINT({lon}, {lat}), 0) AS geom, NULL AS edge_id, NULL AS accuracy_m, NULL AS memo, "
-                    f"'{st}' AS status, {who} AS reporter_hash, TIMESTAMP('{d} 09:00:00') AS created_at, DATE('{d}') AS d, 0 AS photos")
+                    f"'{st}' AS status, {who} AS reporter_hash, {label} AS photo_label, "
+                    f"TIMESTAMP('{created}') AS created_at, DATE('{d}') AS d, 0 AS photos")
     # 실제 base 처럼 숨긴 신고는 뺀다
     return "SELECT * FROM (\n" + "\nUNION ALL ".join(rows) + "\n) f WHERE f.status <> 'hidden'"
 
 
-def query_for(today):
+def query_for(now):
+    day, at = split_now(now)
     sql = open(SQL, encoding="utf-8").read()
     q = sql[sql.index("WITH RECURSIVE"):].rstrip().rstrip(";")
-    q = re.sub(r"-- @@BASE@@.*?-- @@END@@", lambda _: fake_base(today), q, flags=re.S)
-    q = q.replace("CURDATE()   -- @@TODAY@@", f"DATE('{today}')")
+    q = re.sub(r"-- @@BASE@@.*?-- @@END@@", lambda _: fake_base(now), q, flags=re.S)
+    assert "CURDATE()   -- @@TODAY@@" in q and "NOW()   -- @@NOW@@" in q
+    q = q.replace("CURDATE()   -- @@TODAY@@", f"DATE('{day}')")
+    q = q.replace("NOW()   -- @@NOW@@", f"TIMESTAMP('{at}')")
     return q + ";"
 
 

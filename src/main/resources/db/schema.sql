@@ -881,6 +881,7 @@ CREATE TABLE IF NOT EXISTS road_report (
     edge_id     BIGINT       NULL     COMMENT '가장 가까운 길 road_edge.id (나중에 경로에 반영할 때 씀, 비어도 됨)',
     status      VARCHAR(10)  NOT NULL DEFAULT 'open' COMMENT 'open 지도에 보임, confirmed 확인됨, hidden 숨김(잘못 올림·얼굴·차량 번호)',
     reporter_hash CHAR(64)   NULL     COMMENT '같은 사람 판단용: HMAC-SHA256(서버 비밀값, 게스트 번호) 16진수. 원래 번호는 저장 안 함, 없으면 NULL (033)',
+    photo_label VARCHAR(20)  NULL     COMMENT '신고 사진 분류 결과 (036): vehicle 차·오토바이 → 막는 물건이면 3시간만. 모르면 NULL',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '올린 시각 (학교 DB는 한국 시각)',
     PRIMARY KEY (id),
     KEY idx_road_report_status (status),
@@ -1196,25 +1197,40 @@ CREATE TABLE IF NOT EXISTS assistant_knowledge (
     FULLTEXT INDEX ft_assistant_knowledge (keywords, body) WITH PARSER ngram
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '비서 지식 조각 (앱에 대한 설명, 증강검색)';
 
--- 032·033 지금 유효한 신고 지점 (결정 57: 같은 곳 묶기·종류별 기간·공사 마지막 날 연장, 033에서 confirmed 는 서로 다른 사람 2명). 시험 scripts/check_report_active.py
+-- 032·033·036 지금 유효한 신고 지점 (결정 57: 같은 곳 묶기·종류별 기간·공사 마지막 날 연장, 033에서 confirmed 는 서로 다른 사람 2명,
+-- 036에서 차·오토바이 사진인 막는 물건은 3시간만). 시험 scripts/check_report_active.py
 CREATE OR REPLACE VIEW road_report_active AS
 WITH RECURSIVE
 base AS (
     -- @@BASE@@
-    SELECT r.id, r.report_type, r.lat, r.lon, r.geom, r.edge_id, r.accuracy_m, r.memo, r.status, r.reporter_hash, r.created_at,
+    SELECT r.id, r.report_type, r.lat, r.lon, r.geom, r.edge_id, r.accuracy_m, r.memo, r.status, r.reporter_hash,
+           r.photo_label, r.created_at,
            DATE(r.created_at) AS d,
            (SELECT COUNT(*) FROM road_report_photo ph WHERE ph.report_id = r.id) AS photos
     FROM road_report r
     WHERE r.status <> 'hidden'
     -- @@END@@
 ),
+live AS (
+    -- 036: 차·오토바이가 막은 신고는 3시간만
+    SELECT b.id, b.report_type, b.lat, b.lon, b.geom, b.edge_id, b.accuracy_m, b.memo, b.status, b.reporter_hash,
+           b.photo_label, b.created_at,
+           CASE WHEN b.report_type = 'obstacle' AND b.photo_label = 'vehicle'
+                THEN DATE(DATE_ADD(b.created_at, INTERVAL 3 HOUR)) ELSE b.d END AS d,
+           b.photos
+    FROM base b
+    -- photo_label 이 NULL 이면 '=' 비교가 NULL 이 되어 NOT 이 행을 지우므로 COALESCE 로 빈 글자로 바꿔 비교한다
+    WHERE NOT (b.report_type = 'obstacle' AND COALESCE(b.photo_label, '') = 'vehicle'
+               AND DATE_ADD(b.created_at, INTERVAL 3 HOUR) <= NOW()   -- @@NOW@@
+              )
+),
 spotted AS (
     SELECT b.*,
-           (SELECT MIN(o.id) FROM base o
+           (SELECT MIN(o.id) FROM live o
             WHERE o.report_type = b.report_type AND ST_Distance_Sphere(o.geom, b.geom) <= 30) AS spot_id,
            CASE b.report_type WHEN 'obstacle' THEN 1 WHEN 'accident' THEN 1 WHEN 'construction' THEN 7
                               WHEN 'curb' THEN 30 WHEN 'steep' THEN 30 WHEN 'broken' THEN 30 ELSE 7 END AS days
-    FROM base b
+    FROM live b
 ),
 spot_days AS (
     SELECT spot_id, report_type, days, d, ROW_NUMBER() OVER (PARTITION BY spot_id ORDER BY d) AS rn
