@@ -22,9 +22,10 @@ XML = """<?xml version="1.0" encoding="utf-8"?>
   <version>1.1</version>
   <image id="0" name="frame_a.jpg" width="400" height="200">
     <box label="barricade" occluded="0" xtl="10" ytl="20" xbr="110" ybr="120" z_order="0"></box>
-    <box label="car" occluded="1" xtl="200" ytl="50" xbr="300" ybr="150" z_order="0"></box>
+    <box label="traffic_sign" occluded="1" xtl="200" ytl="50" xbr="300" ybr="150" z_order="0"></box>
     <box label="bollard" occluded="0" xtl="0" ytl="0" xbr="10" ybr="10" z_order="0"></box>
     <box label="pole" occluded="0" xtl="300" ytl="0" xbr="390" ybr="190" z_order="0"></box>
+    <box label="car" occluded="0" xtl="250" ytl="0" xbr="390" ybr="190" z_order="0"></box>
   </image>
   <image id="1" name="frame_b.jpg" width="400" height="200">
     <polygon label="sidewalk" occluded="0" points="50,60;150,60;150,180;50,180" z_order="0">
@@ -114,7 +115,8 @@ class EndToEndTest(unittest.TestCase):
         got = sorted((r["image"], r["class"], r["label"]) for r in rows)
         self.assertEqual(got, sorted([
             ("frame_a.jpg", "construction", "barricade"),
-            ("frame_a.jpg", "none", "car"),               # 가려져도 기본은 씀
+            ("frame_a.jpg", "none", "traffic_sign"),      # 가려져도 기본은 씀
+            ("frame_a.jpg", "vehicle", "car"),            # 차·오토바이는 따로
             ("frame_b.jpg", "broken", "sidewalk:damaged"),  # 폴리곤 + 속성
             ("frame_c.jpg", "none", "person"),
             ("frame_c.jpg", "none", "(사진 전체)"),        # 신고 대상이 없는 사진은 전체도 한 장
@@ -154,7 +156,7 @@ class EndToEndTest(unittest.TestCase):
     def test_options(self):
         mc.main([self.src, "--out", self.out, "--skip-occluded", "--min-box", "5"])
         labels = sorted(r["label"] for r in self.rows())
-        self.assertNotIn("car", labels)        # 가려진 차 빠짐
+        self.assertNotIn("traffic_sign", labels)  # 가려진 표지판 빠짐
         self.assertIn("bollard", labels)       # 작은 박스 기준을 낮추면 들어옴
 
     def test_refuses_to_overwrite_without_flag(self):

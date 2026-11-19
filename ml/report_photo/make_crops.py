@@ -15,11 +15,13 @@
 
 하는 일
   1. 라벨을 우리 신고 종류(ReportType 코드)로 바꾼다: CLASS_MAP. 'label:속성값' 이 'label' 보다 먼저.
-     construction 공사 · broken 보도 파손 · obstacle 막는 물건 · none 관계없음. curb(턱)는 이 데이터에 없음.
+     construction 공사 · broken 보도 파손 · obstacle 막는 물건 · vehicle 차량·오토바이 · none 관계없음.
+     curb(턱)는 이 데이터에 없음. vehicle 은 신고 종류가 아니라 '막는 물건' 중 금방 치워지는 것을 가리려는 칸.
      IGNORE 에 적은 라벨(기둥·나무 등 신고인지 애매한 것)은 쓰지 않는다.
   2. 박스(폴리곤은 감싸는 사각형) 둘레를 CONTEXT 배 넓혀 정사각형으로 잘라 SIZE px 로 줄여 저장한다.
      실제 신고 사진은 물건만 찍히지 않고 길이 함께 찍히므로 주변을 넉넉히 넣는다.
-  3. 신고 대상 라벨이 하나도 없는 사진은 사진 전체(가운데 정사각형)를 none 으로 한 장 넣는다.
+  3. 신고 대상 라벨(construction·broken·obstacle·curb)이 하나도 없는 사진은 사진 전체(가운데 정사각형)를
+     none 으로 한 장 넣는다. 멀리 지나가는 차만 있는 거리 사진은 '문제없는 길'이다.
   4. 같은 원본 사진에서 나온 조각은 모두 같은 묶음(train 80 · val 10 · test 10)에 들어가게
      사진 이름의 해시로 나눈다(같은 장면이 학습·시험에 섞이지 않게).
   결과: OUT/{train,val,test}/{종류}/*.jpg 와 OUT/manifest.csv (어느 원본의 어느 박스인지)
@@ -62,21 +64,24 @@ CLASS_MAP = {
     "kiosk": "obstacle",
     "bollard": "obstacle",           # 휠체어에는 실제로 막는 물건
     "scooter": "obstacle",           # 세워 둔 킥보드
+    # 차량·오토바이: 인도를 막은 차는 '막는 물건' 신고로 들어오지만 금방 치워지므로 따로 나눈다.
+    # 서버가 '막는 물건 + 사진이 vehicle' 이면 하루 대신 몇 시간만 막는 데 쓰려고 (사용자 요청 2026-11-19).
+    # 막았는지 여부는 신고한 사람이 판단한다(신고했다는 것 자체). 모델은 '차·오토바이 사진인지'만 본다.
+    "car": "vehicle",
+    "truck": "vehicle",
+    "bus": "vehicle",
+    "motorcycle": "vehicle",
     # 관계없음: 신고 대상이 아닌 것
-    "car": "none",
-    "truck": "none",
-    "bus": "none",
     "person": "none",
     "traffic_light": "none",
     "traffic_sign": "none",
-    "motorcycle": "none",
 }
 # 신고인지 애매해서 학습에 안 쓰는 라벨 (--list-labels 에서 '안 씀'으로 보임)
 IGNORE = {
     "pole", "tree_trunk", "fire_hydrant", "bench", "parking_meter", "power_controller",
     "traffic_light_controller", "stop", "bicycle", "stroller", "wheelchair", "dog", "cat",
 }
-CLASSES = ("construction", "broken", "obstacle", "curb", "none")
+CLASSES = ("construction", "broken", "obstacle", "vehicle", "curb", "none")
 POSITIVE = {"construction", "broken", "obstacle", "curb"}
 
 IMAGE_EXT = (".jpg", ".jpeg", ".png")
