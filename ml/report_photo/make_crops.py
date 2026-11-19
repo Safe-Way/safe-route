@@ -55,6 +55,7 @@ CLASS_MAP = {
     # 보도 파손 (Surface 노면 라벨)
     "sidewalk:damaged": "broken",
     "braille_guide_blocks:damaged": "broken",
+    "alley:damaged": "broken",       # 골목 바닥 파손
     # 막는 물건: 길 위에 놓여 지나가기 어렵게 하는 것
     "movable_signage": "obstacle",   # 입간판
     "potted_plant": "obstacle",
