@@ -51,7 +51,8 @@ from PIL import Image
 CLASS_MAP = {
     # 공사
     "barricade": "construction",
-    "caution_zone:repair_zone": "construction",
+    # caution_zone:repair_zone 은 '공사 중'이 아니라 덧대 고친 보도(색 다른 블록·메운 아스팔트)라 공사로 안 씀
+    # (11-19 Surface_2 새 사진 26장을 열어 보고 확인). 그런 사진은 다른 신고 라벨이 없으면 사진 전체가 none.
     # 보도 파손 (Surface 노면 라벨)
     "sidewalk:damaged": "broken",
     "braille_guide_blocks:damaged": "broken",
