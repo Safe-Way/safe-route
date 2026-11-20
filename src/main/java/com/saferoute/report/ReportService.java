@@ -19,6 +19,8 @@ import org.springframework.web.multipart.MultipartFile;
  * 로그인이 없어서 누가 올렸는지는 모른다. 앱 번호(guestId)가 오면 비밀값을 섞은 해시(reporter_hash, 033)만 남겨
  * 같은 사람이 여러 번 올린 신고를 한 명으로 센다(뷰 reporter_count·confirmed). 원래 번호는 남기지 않는다.
  * 신고 좌표는 표에 남지만 서버 로그에는 남기지 않는다 (NFR-07).
+ * 사진이 있으면 서버 안에서 사진 종류를 판단해(PhotoClassifier) 차·오토바이로 확신하면 photo_label = vehicle 로 남긴다 (036).
+ * 판단이 안 되거나 실패해도 신고는 그대로 받는다 (결정 57).
  */
 @Service
 public class ReportService {
@@ -35,14 +37,20 @@ public class ReportService {
 
     private final ReportRepository repo;
     private final ReporterHash reporter;
+    private final PhotoClassifier photoKind;
 
     @Autowired
-    public ReportService(ReportRepository repo, ReporterHash reporter) {
+    public ReportService(ReportRepository repo, ReporterHash reporter, PhotoClassifier photoKind) {
         this.repo = repo;
         this.reporter = reporter;
+        this.photoKind = photoKind;
     }
 
-    /** 신고자 해시 없이 (시험용) */
+    public ReportService(ReportRepository repo, ReporterHash reporter) {
+        this(repo, reporter, PhotoClassifier.off());
+    }
+
+    /** 신고자 해시·사진 판단 없이 (시험용) */
     public ReportService(ReportRepository repo) {
         this(repo, new ReporterHash(""));
     }
@@ -117,7 +125,27 @@ public class ReportService {
         for (NewReport.Photo p : r.photos()) {
             repo.insertPhoto(id, seq++, p);
         }
+        labelPhotos(id, r.photos());
         return new ReportCreated(id, "open", r.photos().size());
+    }
+
+    /**
+     * 사진 종류 판단 → photo_label (036). 확신 95% 이상 vehicle 일 때만 칸을 채우고, 아니면 비워 둔다(NULL = 지금처럼 하루).
+     * 무엇이 잘못돼도 신고 저장은 막지 않는다.
+     */
+    private void labelPhotos(long id, List<NewReport.Photo> photos) {
+        if (photos.isEmpty() || !photoKind.ready()) {
+            return;
+        }
+        String label = photoKind.vehicleLabel(photos);
+        if (label == null) {
+            return;
+        }
+        try {
+            repo.setPhotoLabel(id, label);
+        } catch (DataAccessException e) {
+            log.warn("신고 사진 종류 저장 실패 (신고는 저장됨): {}", e.getMostSpecificCause().getMessage());
+        }
     }
 
     /**

@@ -1,0 +1,1 @@
+{"labels": ["construction", "broken", "obstacle", "vehicle", "unrelated"], "mean": [0.5, 0.5, 0.5], "std": [0.25, 0.25, 0.25], "input_size": 224}
