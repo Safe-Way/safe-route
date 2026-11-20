@@ -9,8 +9,8 @@
 
 | 파일 | 무엇 | 언제 쓰나 |
 | --- | --- | --- |
-| `safe_route_full_erd.png` | **표 50개 전체** (2026-11-20, schema.sql 기준). 묶음별 색, 실선 = 실제 외래 키 4개, 점선 = 칸 값 연결, `guest_id`(UUID) 표시 | README·발표 |
-| `full_erd.py` | 위 그림을 schema.sql에서 다시 그림 (`.venv/bin/python docs/erd/full_erd.py`). 새 표는 스크립트의 COLS·GROUP·DESC·REL에 넣기 | 표가 바뀌었을 때 |
+| `safe_route_full_erd.png` | **표 50개 전체** (2026-11-20, schema.sql 기준). 표·칸마다 **논리명(한글 뜻)과 물리명(DB 이름)**, 자료형. 묶음별 색, 실선 = 실제 외래 키 4개, 점선 = 칸 값 연결, `guest_id`(UUID 36글자) 표시. 맨 위에 읽는 법·자료형 뜻 | README·발표 |
+| `full_erd.py` | 위 그림을 schema.sql에서 다시 그림 (`.venv/bin/python docs/erd/full_erd.py`). 새 표는 COLS·GROUP·DESC(표 논리명)·REL에, 새 칸의 논리명은 D(표마다 다르면 O)에 넣기 | 표가 바뀌었을 때 |
 | `route_core_erd.png` | 경로 계산에 쓰는 표 8개의 관계 그림. 선마다 ①~⑦ 번호와 왜 연결되는지 짧게 적음 | 발표·문서 (요구사항 8.2에 같은 그림과 ①~⑦ 설명 표) |
 | `route_core_erd.mmd` | 위 그림의 mermaid 원본 | 그림을 고칠 때 |
 | `safe_route_erd_nofk.sql` | 표 32개, 외래 키 없음 (실제 DB 그대로) | ERD 도구에 실제 구조를 넣을 때 |
