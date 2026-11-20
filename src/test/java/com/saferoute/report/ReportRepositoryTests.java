@@ -87,6 +87,7 @@ class ReportRepositoryTests {
         repo.within(126.92, 35.13, 126.94, 35.15, 10);
         assertThat(repo.photo(1, 1)).isNull();
 
-        assertThat(sqls).hasSize(2).allSatisfy(sql -> assertThat(sql).contains(ReportRepository.stillKept(0)));
+        // 목록·사진은 036 차량 3시간 규칙까지 (지우기 SQL 은 위 PHOTO_DUE·ROW_DUE 그대로)
+        assertThat(sqls).hasSize(2).allSatisfy(sql -> assertThat(sql).contains(ReportRepository.stillKept(0, true)));
     }
 }

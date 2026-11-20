@@ -39,6 +39,9 @@ api-keys:
 # 비어 있으면 해시를 안 남긴다(신고마다 다른 사람으로 셈). 값은 .env·GitHub Secrets 에만
 report:
   hash-secret: ${REPORT_HASH_SECRET:}
+  # 신고 사진 종류 판단 모델 폴더 (model.onnx + labels.json). 비우면 jar 안 models/report_photo/ 를 쓰고,
+  # 거기도 없으면 판단 없이 신고만 받는다 (photo_label 은 NULL = 지금처럼 하루)
+  photo-model-dir: ${REPORT_PHOTO_MODEL_DIR:}
 
 # 길찾기 비서 (C 파트, POST /api/assistant). 제미나이 키(GEMINI_API_KEY)가 없으면 규칙만으로 답한다
 assistant:

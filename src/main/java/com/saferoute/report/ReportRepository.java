@@ -30,6 +30,12 @@ public class ReportRepository {
     /** 033(reporter_hash 칸·reporter_count 뷰)이 DB에 있는지. 없다고 한 번 확인되면 서버를 다시 켤 때까지 예전 방식 */
     private volatile boolean hasReporterColumns = true;
 
+    /** 036(photo_label 칸)이 DB에 있는지. 없다고 한 번 확인되면 서버를 다시 켤 때까지 예전처럼(차량도 하루) */
+    private volatile boolean hasPhotoLabel = true;
+
+    /** 차·오토바이로 판단된 '막는 물건' 신고는 몇 시간만 유효한지 — 036 뷰 road_report_active 와 같음 */
+    static final int VEHICLE_HOURS = 3;
+
     /** 종류별 신고 기간(일) — 결정 57, 뷰 road_report_active·scripts/review_reports.py 와 같음 */
     private static String days(String t) {
         return "CASE " + t + ".report_type WHEN 'obstacle' THEN 1 WHEN 'accident' THEN 1 WHEN 'construction' THEN 7"
@@ -42,10 +48,23 @@ public class ReportRepository {
      * keep = 0 이면 "아직 기간 안"이라는 뜻이라 지도 목록·사진에도 같은 조건을 쓴다.
      */
     static String stillKept(int keep) {
+        return stillKept(keep, false);
+    }
+
+    /**
+     * stillKept + 차량 3시간 규칙(036). vehicle3h 가 참이면 photo_label = 'vehicle' 인 '막는 물건' 신고는
+     * 날짜 대신 올린 뒤 3시간까지만 유효하다고 본다. 지도 목록·사진(keep = 0)에만 쓴다 —
+     * 사진·줄 지우기(keep 7·30)는 scripts/review_reports.py 와 글자 그대로 맞춰 두려고 바꾸지 않는다.
+     */
+    static String stillKept(int keep, boolean vehicle3h) {
+        String byDate = "DATE_ADD(DATE(n.created_at), INTERVAL (" + days("n") + ") - 1 + " + keep + " DAY) >= CURDATE()";
+        String period = !vehicle3h ? byDate
+                : "(CASE WHEN n.report_type = 'obstacle' AND n.photo_label = 'vehicle'"
+                + " THEN DATE_ADD(n.created_at, INTERVAL " + VEHICLE_HOURS + " HOUR) > NOW() ELSE " + byDate + " END)";
         return "EXISTS (SELECT 1 FROM road_report n WHERE (n.status <> 'hidden' OR n.id = r.id)"
                 + " AND n.report_type = r.report_type"
                 + " AND ST_Distance_Sphere(n.geom, r.geom) <= 30"
-                + " AND DATE_ADD(DATE(n.created_at), INTERVAL (" + days("n") + ") - 1 + " + keep + " DAY) >= CURDATE())";
+                + " AND " + period + ")";
     }
 
     /** 사진을 지울 신고: 숨긴 신고, 또는 둘레 신고까지 모두 '기간 끝 + 7일'이 지난 신고 (결정 59 PHOTO_DUE) */
@@ -130,6 +149,23 @@ public class ReportRepository {
         return key.getKey().longValue();
     }
 
+    /**
+     * 사진 종류 판단 결과 남기기 (036 photo_label). 칸이 아직 없으면(036 전) 남기지 않고 넘어간다.
+     *
+     * @param label 지금은 "vehicle" 만 (확신 없으면 부르지 않아 NULL 로 남음)
+     */
+    public void setPhotoLabel(long reportId, String label) {
+        if (!hasPhotoLabel) {
+            return;
+        }
+        try {
+            jdbc.update("UPDATE road_report SET photo_label = ? WHERE id = ?", label, reportId);
+        } catch (BadSqlGrammarException e) {
+            hasPhotoLabel = false;
+            log.warn("photo_label 칸이 없어 사진 종류를 안 남겨요 (036 반영 전): {}", e.getMostSpecificCause().getMessage());
+        }
+    }
+
     /** 사진 한 장 넣기 (seq 는 1부터) */
     public void insertPhoto(long reportId, int seq, NewReport.Photo p) {
         jdbc.update("INSERT INTO road_report_photo (report_id, seq, content_type, size_bytes, data) VALUES (?, ?, ?, ?, ?)",
@@ -154,13 +190,26 @@ public class ReportRepository {
 
     /** 지도 범위 안 신고 (숨긴 것 빼고), 최근 순으로 limit 개까지 */
     public List<ReportItem> within(double west, double south, double east, double north, int limit) {
+        if (hasPhotoLabel) {
+            try {
+                return withinRows(west, south, east, north, limit, true);
+            } catch (BadSqlGrammarException e) {
+                hasPhotoLabel = false;
+                log.warn("photo_label 칸이 없어 차량 신고도 하루로 보여요 (036 반영 전): {}", e.getMostSpecificCause().getMessage());
+            }
+        }
+        return withinRows(west, south, east, north, limit, false);
+    }
+
+    private List<ReportItem> withinRows(double west, double south, double east, double north, int limit,
+                                        boolean vehicle3h) {
         List<ReportItem> out = new ArrayList<>();
         jdbc.query("SELECT r.id, r.report_type, r.mode, r.memo, r.lat, r.lon, r.status,"
                         + " DATE_FORMAT(r.created_at, '%Y-%m-%dT%H:%i') AS created,"
                         + " (SELECT COUNT(*) FROM road_report_photo p WHERE p.report_id = r.id) AS photos"
                         + " FROM road_report r WHERE r.status IN ('open', 'confirmed')"
                         + " AND MBRContains(ST_GeomFromText(?, 0), r.geom)"
-                        + " AND " + stillKept(0)
+                        + " AND " + stillKept(0, vehicle3h)
                         + " ORDER BY r.created_at DESC, r.id DESC LIMIT ?",
                 rs -> {
                     long id = rs.getLong("id");
@@ -259,9 +308,21 @@ public class ReportRepository {
 
     /** 사진 한 장. 신고가 없거나 숨긴 신고면 null */
     public NewReport.Photo photo(long reportId, int seq) {
+        if (hasPhotoLabel) {
+            try {
+                return photoRow(reportId, seq, true);
+            } catch (BadSqlGrammarException e) {
+                hasPhotoLabel = false;
+                log.warn("photo_label 칸이 없어 차량 신고 사진도 하루로 보여요 (036 반영 전): {}", e.getMostSpecificCause().getMessage());
+            }
+        }
+        return photoRow(reportId, seq, false);
+    }
+
+    private NewReport.Photo photoRow(long reportId, int seq, boolean vehicle3h) {
         List<NewReport.Photo> found = jdbc.query(
                 "SELECT p.content_type, p.data FROM road_report_photo p JOIN road_report r ON r.id = p.report_id"
-                        + " WHERE p.report_id = ? AND p.seq = ? AND r.status <> 'hidden' AND " + stillKept(0),
+                        + " WHERE p.report_id = ? AND p.seq = ? AND r.status <> 'hidden' AND " + stillKept(0, vehicle3h),
                 (rs, n) -> new NewReport.Photo(rs.getString("content_type"), rs.getBytes("data")), reportId, seq);
         return found.isEmpty() ? null : found.get(0);
     }

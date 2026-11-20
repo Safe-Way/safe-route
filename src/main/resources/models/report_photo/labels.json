@@ -1,0 +1,36 @@
+{
+  "classes": [
+    "construction",
+    "broken",
+    "obstacle",
+    "vehicle",
+    "curb",
+    "none"
+  ],
+  "names": {
+    "construction": "공사",
+    "broken": "보도 파손",
+    "obstacle": "막는 물건",
+    "vehicle": "차량·오토바이",
+    "curb": "턱",
+    "none": "관계없음"
+  },
+  "input": [
+    1,
+    3,
+    224,
+    224
+  ],
+  "layout": "NCHW RGB 0~1",
+  "mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "output": "logits (softmax 하면 확률)"
+}
