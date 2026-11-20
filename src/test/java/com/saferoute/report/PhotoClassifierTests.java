@@ -91,7 +91,7 @@ class PhotoClassifierTests {
 
     @Test
     void realModelInJarLoads() throws IOException {
-        // src/main/resources/models/report_photo/ (A파트 v4 모델). 단색 사진은 차량이 아니어야 함
+        // src/main/resources/models/report_photo/ (A파트 v6 모델). 단색 사진은 차량이 아니어야 함
         try (PhotoClassifier real = new PhotoClassifier("")) {
             assertTrue(real.ready());
             PhotoClassifier.Guess g = real.guess(jpg(Color.GRAY, 1200, 900));

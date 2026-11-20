@@ -46,7 +46,8 @@ public class PhotoClassifier implements AutoCloseable {
     static final String VEHICLE = "vehicle";
     /**
      * 이 확률보다 낮으면 확신이 없다고 보고 쓰지 않는다. 차량으로 잘못 보면 막는 물건 신고가 3시간 만에 풀려 위험해서 높게 잡음.
-     * A파트 v4 모델, 처음 보는 장소 사진: 0.8 → 차량 84% 잡고 막는 물건을 차량으로 2.2%, 0.95 → 68%·0.3% (11-20 결정 0.95).
+     * A파트 v6 모델(차가 덮은 사진을 뺀 학습), 처음 보는 장소 사진 8,470장 기준 0.95 → 진짜 차량 75% 잡고 막는 물건 2,550장 중
+     * 15장을 차량으로 봄(눈으로 보면 대부분 차가 주인공인 라벨 잡음, 진짜 오판 4~5장). v4 는 68%·3장 (11-20 결정 v6·0.95).
      */
     static final double MIN_PROB = 0.95;
     static final String CLASSPATH_DIR = "models/report_photo/";
