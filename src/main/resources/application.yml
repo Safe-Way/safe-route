@@ -83,3 +83,12 @@ management:
 # 보호자 위치 공유 (C 파트, /api/guardian/shares, 029 표). 보호자 링크 = public-url + /s/{공유 번호}
 guardian:
   public-url: ${GUARDIAN_PUBLIC_URL:https://safe-route.java21.net}
+
+# 앱 업데이트 안내 (C 파트, GET /api/app/version). 숫자는 앱 build.gradle.kts의 versionCode.
+# 새 APK를 내면 latest를 올리고, 옛 앱을 꼭 바꾸게 하려면 min도 올린다. download-url이 비면 창이 안 뜬다.
+app-update:
+  latest-version-code: ${APP_LATEST_VERSION_CODE:1}
+  latest-version-name: ${APP_LATEST_VERSION_NAME:1.0}
+  min-version-code: ${APP_MIN_VERSION_CODE:1}
+  message: ${APP_UPDATE_MESSAGE:새 버전이 나왔어요. 업데이트하고 더 안전한 길을 안내받으세요.}
+  download-url: ${APP_DOWNLOAD_URL:}
