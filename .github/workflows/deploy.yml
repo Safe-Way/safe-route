@@ -134,3 +134,22 @@ jobs:
         run: |
           sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -p "$SSH_PORT" "$SSH_ID@$SSH_ADDRESS" \
             "bash ~/safe-route/deploy.sh '$APP_PORT'"
+
+      # 배포가 끝나면 앱 저장소의 앱·서버 연결 검사(safe-route-android contract.yml)를 바로 부른다.
+      # 새 서버 응답을 앱의 진짜 읽기 코드로 읽어 보는 검사라, 앱이 읽는 이름이 바뀌었으면 그쪽 실행이 빨갛게 되고
+      # 'contract-broken' 이슈가 열린다. 이 단계는 부르기만 하고 결과를 기다리지 않는다 (배포는 이미 끝남).
+      # 다른 저장소의 워크플로를 부르려면 토큰이 필요하다: safe-route-android 에 Actions 쓰기 권한만 준
+      # fine-grained 토큰을 Secrets 의 APP_REPO_TOKEN 에 넣는다. 없으면 건너뛰고, 앱 쪽은 매일 아침 9시 10분에 스스로 돈다.
+      - name: 앱·서버 연결 검사 부르기
+        env:
+          GH_TOKEN: ${{ secrets.APP_REPO_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::APP_REPO_TOKEN 이 없어 앱·서버 연결 검사를 부르지 않았어요 (앱 저장소에서 매일 아침 돌아요)"
+            exit 0
+          fi
+          # 서버가 새 버전으로 다 바뀐 뒤 부르도록 잠깐 기다린다
+          sleep 30
+          gh workflow run contract.yml -R Safe-Way/safe-route-android --ref main \
+            && echo "앱·서버 연결 검사를 불렀어요: https://github.com/Safe-Way/safe-route-android/actions/workflows/contract.yml" \
+            || echo "::warning::앱·서버 연결 검사를 부르지 못했어요 (토큰 권한 확인). 배포는 끝났어요"
