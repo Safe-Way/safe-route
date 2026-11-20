@@ -1,4 +1,5 @@
-"""schema.sql → 전체 ERD 그림 (docs/erd/safe_route_full_erd.png). 칸마다 논리명(한글 뜻)·물리명(DB 칸 이름)·자료형.
+"""schema.sql → 전체 ERD 그림 (docs/erd/safe_route_full_erd.png).
+칸마다 논리명(한글 뜻)·물리명(DB 칸 이름)·자료형, 표마다 인덱스, 관계선은 IE 표기(실선 식별·점선 비식별, 세발 표기).
 
   .venv/bin/python docs/erd/full_erd.py            # 기본: src/main/resources/db/schema.sql → docs/erd/safe_route_full_erd.png
   .venv/bin/python docs/erd/full_erd.py <schema.sql> <out.png>
@@ -14,26 +15,37 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else 'docs/erd/safe_route_full_erd.png'
 
 
 def read_schema(path):
+    """표마다 칸 [이름, 자료형, 설명, NULL 허용], PK, 인덱스 [(종류, 이름, 칸들)]"""
     src = open(path, encoding='utf-8').read()
     src = re.sub(r'/\*.*?\*/', '', src, flags=re.S)
     tables = {}
     for m in re.finditer(r'CREATE TABLE (?:IF NOT EXISTS )?`?(\w+)`?\s*\((.*?)\)\s*(?:ENGINE|COMMENT|DEFAULT|;)', src, re.S | re.I):
         name, body = m.group(1), m.group(2)
-        lines = [l.strip() for l in body.split('\n')]
-        lines = [re.sub(r'\s*--.*$', '', l) for l in lines]
-        cols, pk = [], []
+        lines = [re.sub(r'\s*--.*$', '', l.strip()) for l in body.split('\n')]
+        cols, pk, idx = [], [], []
         for l in lines:
             if not l: continue
             mm = re.match(r'PRIMARY KEY\s*\(([^)]*)\)', l, re.I)
             if mm: pk += [c.strip(' `') for c in mm.group(1).split(',')]; continue
-            if re.match(r'(UNIQUE|KEY|INDEX|SPATIAL|FULLTEXT|CONSTRAINT|FOREIGN|CHECK)\b', l, re.I): continue
+            mm = re.match(r'(UNIQUE\s+(?:KEY|INDEX)|KEY|INDEX|SPATIAL\s+(?:KEY|INDEX)|FULLTEXT\s+(?:KEY|INDEX))\s+`?(\w+)`?\s*\(', l, re.I)
+            if mm:
+                k = mm.group(1).split()[0].upper(); depth, j = 1, mm.end()
+                while depth and j < len(l):
+                    depth += {'(': 1, ')': -1}.get(l[j], 0); j += 1
+                idx.append(({'UNIQUE': 'UQ', 'SPATIAL': 'SP', 'FULLTEXT': 'FT'}.get(k, 'IX'), mm.group(2),
+                            [c.strip(' `') for c in re.split(r',(?![^(]*\))', l[mm.end():j - 1])]))
+                continue
+            if re.match(r'(CONSTRAINT|FOREIGN|CHECK)\b', l, re.I): continue
             mm = re.match(r'`?(\w+)`?\s+([A-Za-z]+(?:\([^)]*\))?)', l)
-            if not mm: continue
+            if not mm or mm.group(1).upper() in ('WHEN', 'REFERENCES', 'END', 'CASE'): continue
             c, t = mm.group(1), mm.group(2)
             cm = re.search(r"COMMENT\s+'((?:[^']|'')*)'", l)
             if 'PRIMARY KEY' in l.upper(): pk.append(c)
-            cols.append([c, t.lower(), (cm.group(1) if cm else '')])
-        tables[name] = {'cols': cols, 'pk': pk}
+            cols.append([c, t.lower(), (cm.group(1) if cm else ''), 'NOT NULL' not in l.upper()])
+        tables[name] = {'cols': cols, 'pk': pk, 'idx': idx}
+    m = re.search(r'CREATE TABLE (?:IF NOT EXISTS )?(\w+) LIKE (\w+)', src)
+    for m in re.finditer(r'CREATE TABLE (?:IF NOT EXISTS )?`?(\w+)`? LIKE `?(\w+)`?', src):
+        tables[m.group(1)] = dict(tables[m.group(2)], like=m.group(2))
     return tables
 
 
@@ -187,49 +199,78 @@ GROUP.update({t: 'tr' for t in ['subway_station','subway_entrance','subway_timet
               'subway_exit_place','bus_stop','bus_line','lowfloor_bus','odsay_call_count']})
 GROUP.update({t: 'etc' for t in ['assistant_unmet','assistant_knowledge','holiday']})
 
-# (출발 표, 칸, 도착 표, 칸, 실제 외래 키?)
+# (자식 표, 자식 칸들, 부모 표, 부모 칸, 실제 외래 키?). 식별/비식별·끝 표시는 schema.sql의 PK·NULL로 계산
 REL = [
- ('road_edge','from_node','road_node','id',0), ('road_edge','to_node','road_node','id',0),
- ('edge_stat','edge_id','road_edge','id',0), ('edge_sidewalk','edge_id','road_edge','id',0),
- ('edge_stat_excluded','edge_id','road_edge_excluded','edge_id',0),
- ('edge_poi','edge_id','road_edge','id',0), ('edge_poi','poi_id','poi','id',0),
- ('road_report','edge_id','road_edge','id',0), ('road_report_photo','report_id','road_report','id',1),
- ('walk_profile','guest_id','user_profile','guest_id',0), ('walk_speed_sample','guest_id','walk_profile','guest_id',1),
- ('trip_log','guest_id','user_profile','guest_id',1), ('user_map_layer','guest_id','user_profile','guest_id',1),
- ('user_map_layer','layer','map_layer','layer',0), ('guardian_share','guest_id','user_profile','guest_id',0),
- ('subway_entrance','station_id','subway_station','station_id',0),
+ ('road_edge',('from_node',),'road_node','id',0), ('road_edge',('to_node',),'road_node','id',0),
+ ('edge_stat',('edge_id',),'road_edge','id',0), ('edge_sidewalk',('edge_id',),'road_edge','id',0),
+ ('edge_stat_excluded',('edge_id',),'road_edge_excluded','edge_id',0),
+ ('edge_poi',('edge_id',),'road_edge','id',0), ('edge_poi',('poi_id',),'poi','id',0),
+ ('road_report',('edge_id',),'road_edge','id',0), ('road_report_photo',('report_id',),'road_report','id',1),
+ ('walk_profile',('guest_id',),'user_profile','guest_id',0),
+ ('walk_speed_sample',('guest_id','mode'),'walk_profile','guest_id',1),
+ ('trip_log',('guest_id',),'user_profile','guest_id',1), ('user_map_layer',('guest_id',),'user_profile','guest_id',1),
+ ('user_map_layer',('layer',),'map_layer','layer',0), ('guardian_share',('guest_id',),'user_profile','guest_id',0),
+ ('subway_entrance',('station_id',),'subway_station','station_id',0),
 ]
+def nullable(t, c): return any(x[0] == c and x[3] for x in T[t]['cols'])
+def rel_kind(child, cols):
+    pk = set(T[child]['pk'])
+    ident = set(cols) <= pk                     # 부모 키가 자식 PK 안에 들어가면 식별 관계
+    child_end = 'one_opt' if set(cols) == pk else 'many_opt'   # 자식 쪽: 0..1 / 0..N
+    parent_end = 'one_opt' if any(nullable(child, c) for c in cols) else 'one'   # 부모 쪽: 0..1 / 꼭 1
+    if child in PARENT_MAYBE_MISSING: parent_end = 'one_opt'
+    return ident, child_end, parent_end
+# 칸은 NOT NULL이지만 부모 줄이 없을 수 있는 것: walk_profile(025)이 user_profile(027)보다 먼저 생겨 외래 키가 없고,
+# 첫 설정 없이 길안내만 쓴 게스트는 user_profile 줄이 없다
+PARENT_MAYBE_MISSING = {'walk_profile'}
 NOTE = {('poi','sources'): '← 시설 원본 표들', ('facility_unlocated','tbl'): '어느 시설 표',
         ('road_report','reporter_hash'): 'UUID의 HMAC', ('guardian_share','token'): '서버가 만든 무작위'}
 UUID = {(t, 'guest_id') for t in ['user_profile','walk_profile','walk_speed_sample','trip_log','user_map_layer','guardian_share']}
-FK_SRC = {(a, b): (c, r) for a, b, c, d, r in REL}
+FK_SRC = {(a, c): (b, r, i == 0) for a, cs, b, _, r in REL for i, c in enumerate(cs)}
 
 def short(t): return t.split('(')[0].replace(' unsigned', '')
+IDX_NAME = {'UQ': '유니크', 'IX': '인덱스', 'SP': '공간', 'FT': '전문'}
+def idx_rows(t):
+    """표 아래 인덱스 칸: (보일 글, 인덱스 이름, 'idx:종류', 칸 목록). PK는 따로 안 적음(PK 자체가 인덱스)"""
+    if t == '__common__' or not T.get(t, {}).get('idx'): return []
+    out = [('인덱스', '', 'idxhead', None)]
+    for k, name, cols in T[t]['idx']:
+        out.append((name, '', 'idx:' + k, cols))
+    return out
+def idx_text(t, cols):
+    """('주소(앞 20자) + 이름', '(address(20), name)')"""
+    lg = []
+    for c in cols:
+        m = re.match(r'(\w+)\((\d+)\)', c)
+        lg.append(logical(lt(t), m.group(1)) + '(앞 %s자)' % m.group(2) if m else logical(lt(t), c))
+    return ' + '.join(lg), '(' + ', '.join(cols) + ')'
 def rows_of(t):
     if t == '__common__':
         return [(c, short(dict((x[0], x[1]) for x in T['streetlight']['cols'])[c]), 'pk' if c == 'id' else None, None) for c in COMMON]
     if t == 'edge_stat_excluded':
-        return [('edge_id', 'bigint', 'lk', '→ road_edge_excluded'), ('… edge_stat 칸 27개 그대로', '', 'note', None)]
+        return [('edge_id', 'bigint', 'pk+lk', '→ road_edge_excluded'), ('… edge_stat 칸 27개 그대로', '', 'note', None),
+                ('인덱스', '', 'idxhead', None), ('edge_stat과 같음 (LIKE로 만듦)', '', 'note', None)]
     cols = [c for c in T[t]['cols'] if c[0] not in ('WHEN', 'REFERENCES', 'END', 'CASE')]
     pk = set(T[t]['pk']); out = []
     if t in FAC:
         out.append(('공통 칸 12개 (왼쪽 위)', '', 'note', None)); cols = [c for c in cols if c[0] not in COMMON]
-        if not cols: return out
+        if not cols: return out + idx_rows(t)
     if t == 'road_edge_excluded':
         keep = ['id', 'edge_id', 'reason', 'excluded_at']
         out = [(c[0], short(c[1]), 'pk' if c[0] in pk else None, None) for c in cols if c[0] in keep[:2]]
         out.append(('… road_edge 칸 그대로', '', 'note', None))
         out += [(c[0], short(c[1]), None, None) for c in cols if c[0] in keep[2:]]
-        return out
-    for c, ty, _ in cols:
+        return out + idx_rows(t)
+    for c, ty, *_ in cols:
         k = 'pk' if c in pk else None; note = NOTE.get((t, c))
         if (t, c) in FK_SRC:
-            dst, real = FK_SRC[(t, c)]; k = (k + '+' if k else '') + ('fk' if real else 'lk'); note = '→ ' + dst
+            dst, real, first = FK_SRC[(t, c)]; k = (k + '+' if k else '') + ('fk' if real else 'lk')
+            if first: note = '→ ' + dst
         if (t, c) in UUID: note = (note + ' · ' if note else '') + 'UUID 36글자'
         out.append((c, short(ty), k, note))
-    return out
+    return out + idx_rows(t)
 
-PAD, RH, HH, GAP, GUT, TOP = 10 * SC, 21 * SC, 46 * SC, 16 * SC, 92 * SC, 214 * SC
+PAD, RH, HH, GAP, GUT, TOP = 10 * SC, 21 * SC, 46 * SC, 16 * SC, 140 * SC, 262 * SC
 tmp = ImageDraw.Draw(Image.new('RGB', (10, 10)))
 def tw(s, f): return tmp.textlength(s, font=f)
 def lt(t): return 'streetlight' if t == '__common__' else t
@@ -239,6 +280,9 @@ def head_of(t):
 def box_w(t):
     w = max(tw(head_of(t)[0], f_head), tw(head_of(t)[1], f_sub)) + 2 * PAD
     for n, ty, k, note in rows_of(t):
+        if k and k.startswith('idx:'):
+            a, b = idx_text(t, note); w = max(w, 34 * SC + tw(a, f_row) + 8 * SC + tw(b, f_phys) + 3 * PAD); continue
+        if k == 'idxhead': continue
         lw = tw(n, f_type) if k == 'note' else tw(logical(lt(t), n), f_rowb) + 8 * SC + tw(n, f_phys)
         w = max(w, 34 * SC + lw + (tw('  ' + note, f_type) if note else 0) + tw(ty, f_type) + 3 * PAD)
     return w
@@ -262,29 +306,7 @@ img = Image.new('RGB', (W, H), '#FFFFFF'); d = ImageDraw.Draw(img)
 d.text((40 * SC, 28 * SC), '세잎지도 DB 전체 ERD', font=f_title, fill='#111')
 d.text((40 * SC, 66 * SC), '표 50개 · 2026-11-20 schema.sql 기준 · 실제 DB에는 외래 키 4개뿐이고 나머지는 칸 값으로 이어짐 (데이터 갱신 때 표를 통째로 다시 넣기 때문)',
        font=f_leg, fill='#555')
-lx = W - 40 * SC
-items = [(G[k][0], G[k][1]) for k in G]
-def legend_item(x, label, color, kind):
-    if kind == 'box': d.rectangle([x, 96 * SC, x + 16 * SC, 112 * SC], fill=color)
-    elif kind == 'solid': d.line([x, 104 * SC, x + 30 * SC, 104 * SC], fill='#333', width=2 * SC)
-    else:
-        for s in range(0, 30, 8): d.line([x + s * SC, 104 * SC, x + min(s + 4, 30) * SC, 104 * SC], fill='#333', width=2 * SC)
-    w0 = 16 * SC if kind == 'box' else 30 * SC
-    d.text((x + w0 + 6 * SC, 95 * SC), label, font=f_leg, fill='#333')
-    return x + w0 + 6 * SC + tw(label, f_leg) + 22 * SC
-x = 40 * SC
-for c, n in items: x = legend_item(x, n, c, 'box')
-x = legend_item(x + 20 * SC, '실제 외래 키 (FK)', None, 'solid')
-x = legend_item(x, '칸 값으로 이어짐 (→)', None, 'dash')
-HOW = [
-    ('읽는 법', '상자 하나 = 표 하나 (위: 한글 이름, 아래: DB 이름)  ·  줄 하나 = 칸 하나: 왼쪽 검은 글씨 = 논리명(뜻), 회색 영문 = 물리명(DB에 실제로 쓰는 이름), 오른쪽 = 자료형'),
-    ('표시', 'PK = 표에서 한 줄을 콕 집어 가리키는 칸(같은 값이 두 번 없음)  ·  FK·실선 = DB가 직접 지키는 연결  ·  →·점선 = 같은 값을 적어 이어 둔 연결  ·  UUID = 앱이 처음 켤 때 만든 36글자 무작위 번호(사람을 알아볼 수 없음)'),
-    ('자료형', 'int·bigint·smallint = 정수  ·  tinyint = 작은 정수(0/1이면 예·아니오)  ·  decimal·double = 소수  ·  varchar·char = 글자  ·  date = 날짜  ·  datetime = 날짜+시각  ·  time = 시각  ·  point·linestring·geometry = 위치·선·면  ·  json·set = 여러 값 묶음  ·  mediumblob = 파일(사진)'),
-]
-for i, (k, v) in enumerate(HOW):
-    yy = (128 + i * 24) * SC
-    d.text((40 * SC, yy), k, font=F(13, 6), fill='#222')
-    d.text((100 * SC, yy), v, font=f_leg, fill='#444')
+
 
 def dashed(p, q, color, wdt):
     (x1, y1), (x2, y2) = p, q; L = max(abs(x2 - x1), abs(y2 - y1)); step = 7 * SC
@@ -292,12 +314,56 @@ def dashed(p, q, color, wdt):
     for i in range(0, n + 1, 2):
         a, b = i / max(n, 1), min((i + 1) / max(n, 1), 1)
         d.line([x1 + (x2 - x1) * a, y1 + (y2 - y1) * a, x1 + (x2 - x1) * b, y1 + (y2 - y1) * b], fill=color, width=wdt)
-def poly(pts, real, color):
+def end_mark(p, u, kind, color):
+    """상자 가장자리 p에서 바깥쪽(u = +1 오른쪽, -1 왼쪽)으로 세발 표기"""
+    x, y = p; w = 2 * SC; h = 7 * SC
+    def bar(dd): d.line([(x + u * dd * SC, y - h), (x + u * dd * SC, y + h)], fill=color, width=w)
+    def ring(dd):
+        cx = x + u * dd * SC; r = 4.5 * SC
+        d.ellipse([cx - r, y - r, cx + r, y + r], fill='#FFFFFF', outline=color, width=w)
+    if kind == 'one': bar(8); bar(14)
+    elif kind == 'one_opt': bar(8); ring(19)
+    else:  # many_opt: 세발 + 동그라미
+        tip = x + u * 13 * SC
+        for dy in (-h, 0, h): d.line([(tip, y), (x, y + dy)], fill=color, width=w)
+        ring(20)
+def rel_line(pts, ident, real, child_end, parent_end):
+    color = '#222222' if real else '#9A9A9A'
     for p, q in zip(pts, pts[1:]):
-        if real: d.line([p, q], fill=color, width=2 * SC)
-        else: dashed(p, q, color, int(1.6 * SC))
-    (x1, y1), (x2, y2) = pts[-2], pts[-1]; s = 1 if x2 > x1 else -1; a = 8 * SC
-    d.polygon([(x2, y2), (x2 - s * a, y2 - a * 0.55), (x2 - s * a, y2 + a * 0.55)], fill=color)
+        if ident: d.line([p, q], fill=color, width=2 * SC)
+        else: dashed(p, q, color, 2 * SC)
+    u0 = 1 if pts[1][0] > pts[0][0] else -1
+    u1 = 1 if pts[-2][0] > pts[-1][0] else -1
+    end_mark(pts[0], u0, child_end, color)
+    end_mark(pts[-1], u1, parent_end, color)
+
+items = [(G[k][0], G[k][1]) for k in G]
+x = 40 * SC
+for c, n in items:
+    d.rectangle([x, 96 * SC, x + 16 * SC, 112 * SC], fill=c)
+    d.text((x + 22 * SC, 95 * SC), n, font=f_leg, fill='#333'); x += 22 * SC + tw(n, f_leg) + 22 * SC
+HOW = [
+    ('읽는 법', [('t', '상자 하나 = 표 하나 (위: 한글 이름, 아래: DB 이름)  ·  줄 하나 = 칸 하나: 왼쪽 검은 글씨 = 논리명(뜻), 회색 영문 = 물리명(DB에 실제로 쓰는 이름), 오른쪽 = 자료형  ·  맨 아래 = 그 표의 인덱스')]),
+    ('선 (IE)', [('solid', '#222'), ('t', '식별 관계: 부모 키가 자식 PK 안에 들어감'), ('dash', '#222'), ('t', '비식별 관계: 자식은 자기 PK가 따로 있음'),
+                 ('solid', '#999'), ('t', '회색 선 = DB 외래 키 없이 같은 값으로만 이어짐 (진한 선 = 실제 외래 키, 칸 앞에 FK)')]),
+    ('끝 표시', [('end', 'one'), ('t', '꼭 하나'), ('end', 'one_opt'), ('t', '없거나 하나'), ('end', 'many_opt'), ('t', '없거나 여러 개'),
+                ('t', '   읽는 법: 부모 쪽 끝 = 자식 한 줄이 가리키는 부모 수, 자식 쪽 끝 = 부모 한 줄에 붙는 자식 수 (세발 = 여러 개)')]),
+    ('표시', [('t', 'PK = 표에서 한 줄을 콕 집어 가리키는 칸(같은 값 두 번 없음, 그 자체로 인덱스)  ·  FK = DB가 지키는 외래 키  ·  → = 같은 값을 적어 이어 둔 칸  ·  UUID = 앱이 처음 켤 때 만든 36글자 무작위 번호(사람을 알아볼 수 없음)')]),
+    ('인덱스', [('t', 'UQ 유니크 = 같은 값 두 번 못 넣음 + 빨리 찾기  ·  IX 일반 = 빨리 찾기  ·  SP 공간 = 지도 범위·거리로 찾기  ·  FT 전문 = 글 속 낱말로 찾기  ·  주소(앞 20자) = 글자 앞부분만 인덱스에 넣음')]),
+    ('자료형', [('t', 'int·bigint·smallint = 정수  ·  tinyint = 작은 정수(0/1이면 예·아니오)  ·  decimal·double = 소수  ·  varchar·char = 글자  ·  date = 날짜  ·  datetime = 날짜+시각  ·  time = 시각  ·  point·linestring·geometry = 위치·선·면  ·  json·set = 여러 값 묶음  ·  mediumblob = 파일(사진)')]),
+]
+for i, (k, parts) in enumerate(HOW):
+    yy = (128 + i * 22) * SC; x = 104 * SC
+    d.text((40 * SC, yy), k, font=F(13, 6), fill='#222')
+    for kind, v in parts:
+        if kind == 't':
+            d.text((x, yy), v, font=f_leg, fill='#444'); x += tw(v, f_leg) + 18 * SC
+        elif kind in ('solid', 'dash'):
+            p, q = (x, yy + 9 * SC), (x + 36 * SC, yy + 9 * SC)
+            (d.line([p, q], fill=v, width=2 * SC) if kind == 'solid' else dashed(p, q, v, 2 * SC)); x += 44 * SC
+        else:
+            d.line([(x, yy + 9 * SC), (x + 34 * SC, yy + 9 * SC)], fill='#222', width=2 * SC)
+            end_mark((x, yy + 9 * SC), 1, v, '#222'); x += 42 * SC
 
 # 표 상자
 for t, (x0, y0, x1, y1, ci) in pos.items():
@@ -312,6 +378,15 @@ for t, (x0, y0, x1, y1, ci) in pos.items():
         ry = y0 + HH + i * RH + 3 * SC
         if i % 2: d.rectangle([x0 + 2 * SC, ry - 1 * SC, x1 - 2 * SC, ry + RH - 1 * SC], fill='#F6F7F9')
         cx = x0 + PAD
+        if k == 'idxhead':
+            d.line([(x0 + 2 * SC, ry - 1 * SC), (x1 - 2 * SC, ry - 1 * SC)], fill=col, width=1 * SC)
+            d.text((cx, ry + 1 * SC), '인덱스', font=F(11.5, 6), fill=col); continue
+        if k and k.startswith('idx:'):
+            kk = k[4:]; a, b = idx_text(t, note)
+            d.text((cx, ry + 3 * SC), kk, font=F(10, 6), fill={'UQ': '#B8860B', 'SP': '#00838F', 'FT': '#6A1B9A'}.get(kk, '#555'))
+            d.text((cx + 26 * SC, ry), a, font=f_row, fill='#1A1A1A')
+            d.text((cx + 26 * SC + tw(a, f_row) + 8 * SC, ry + 1 * SC), b, font=f_phys, fill='#8A8A8A')
+            continue
         if k and 'pk' in k: d.text((cx, ry + 3 * SC), 'PK', font=F(10, 6), fill='#B8860B')
         elif k and 'fk' in k: d.text((cx, ry + 3 * SC), 'FK', font=F(10, 6), fill='#333')
         elif k and 'lk' in k: d.text((cx + 3 * SC, ry + 1 * SC), '→', font=f_rowb, fill='#777')
@@ -327,23 +402,34 @@ for t, (x0, y0, x1, y1, ci) in pos.items():
             d.text((nx + 8 * SC, ry + 1 * SC), note, font=f_type, fill=nc)
         if ty: d.text((x1 - PAD - tw(ty, f_type), ry + 1 * SC), ty, font=f_type, fill='#8A8A8A')
 
-# 연결선: 같은 열이면 오른쪽 틈, 옆 열이면 그 사이 틈. 틈마다 차선을 나눠 겹치지 않게
+# 연결선: 같은 열이면 오른쪽 틈, 옆 열이면 그 사이 틈. 틈마다 차선을 나눠 겹치지 않게. 끝 표시 자리로 상자에서 32 띄움
+def side(a, b):
+    ia, ib = pos[a][4], pos[b][4]
+    return 'L' if ib == ia + 1 else 'R'
+# 한 부모 칸에 같은 쪽으로 여러 선이 들어오면 끝 표시가 겹치므로 도착점을 위아래로 벌린다 (상자 안에서)
+arrive = {}
+for a, cas, b, cb, real in REL: arrive.setdefault((b, cb, side(a, b)), []).append(a)
+def arrive_y(a, b, cb):
+    lst = arrive[(b, cb, side(a, b))]; k = len(lst); i = lst.index(a)
+    y = rowy[(b, cb)] + (i - (k - 1) / 2) * 18 * SC
+    return min(max(y, pos[b][1] + 12 * SC), pos[b][3] - 12 * SC)
 lanes = {}
-for a, ca, b, cb, real in REL:
+for a, cas, b, cb, real in REL:
+    ident, ce, pe = rel_kind(a, cas)
     xa0, _, xa1, _, ia = pos[a]; xb0, _, xb1, _, ib = pos[b]
-    ya, yb = rowy[(a, ca)], rowy[(b, cb)]
-    color = '#333333' if real else '#7A7A7A'
+    ya, yb = rowy[(a, cas[0])], arrive_y(a, b, cb)
     if ia == ib:
-        g = ia; n = lanes.get(g, 0); lanes[g] = n + 1; lx = xa1 + (12 + n * 11) * SC
-        poly([(xa1, ya), (lx, ya), (lx, yb), (xb1, yb)], real, color)
+        g = ia; n = lanes.get(g, 0); lanes[g] = n + 1; lx = xa1 + (32 + n * 10) * SC
+        pts = [(xa1, ya), (lx, ya), (lx, yb), (xb1, yb)]
     elif ib == ia + 1:
-        g = ia; n = lanes.get(g, 0); lanes[g] = n + 1; lx = xa1 + (12 + n * 11) * SC
-        poly([(xa1, ya), (lx, ya), (lx, yb), (xb0, yb)], real, color)
+        g = ia; n = lanes.get(g, 0); lanes[g] = n + 1; lx = xa1 + (32 + n * 10) * SC
+        pts = [(xa1, ya), (lx, ya), (lx, yb), (xb0, yb)]
     elif ib == ia - 1:
-        g = ib; n = lanes.get(g, 0); lanes[g] = n + 1; lx = xb1 + (GUT / SC - 12 - n * 11) * SC
-        poly([(xa0, ya), (lx, ya), (lx, yb), (xb1, yb)], real, color)
+        g = ib; n = lanes.get(g, 0); lanes[g] = n + 1; lx = xb1 + (GUT / SC - 32 - n * 10) * SC
+        pts = [(xa0, ya), (lx, ya), (lx, yb), (xb1, yb)]
     else:
         raise SystemExit('멀리 떨어진 연결: %s → %s' % (a, b))
+    rel_line(pts, ident, real, ce, pe)
 img = img.resize((W // SC * 3 // 2, H // SC * 3 // 2), Image.LANCZOS)  # 1.5배로 저장 (선명함·용량 사이)
 img = img.convert('RGB').quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)  # 글자는 그대로, 용량 약 40%
 img.save(OUT, optimize=True)
