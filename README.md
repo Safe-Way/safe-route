@@ -8,7 +8,7 @@
 - 서비스: https://safe-route.java21.net (학교 서버, `main`에 머지하면 자동 배포)
 - 데이터 범위: 광주광역시 전체 · 시연 지역: 국립아시아문화전당 일대
 - 앱: [safe-route-android](https://github.com/Safe-Way/safe-route-android) (안드로이드, Kotlin)
-- 요구사항: [safe-route-docs](https://github.com/Safe-Way/safe-route-docs)의 [requirements.md](https://github.com/Safe-Way/safe-route-docs/blob/main/requirements.md) (결정 59건, 변경 이력 [CHANGELOG.md](https://github.com/Safe-Way/safe-route-docs/blob/main/CHANGELOG.md))
+- 요구사항: [safe-route-docs](https://github.com/Safe-Way/safe-route-docs)의 [requirements.md](https://github.com/Safe-Way/safe-route-docs/blob/main/requirements.md) (결정 60건, 변경 이력 [CHANGELOG.md](https://github.com/Safe-Way/safe-route-docs/blob/main/CHANGELOG.md))
 - 비서 설계 문서: [docs/assistant/](docs/assistant/) (동의 문구, 도구 고르기, 시험 질문, 사용성 점검표)
 - 현장 비교 시험: [docs/field-test/](docs/field-test/2026-11-11.md) (11-11 우리 앱 vs 네이버·카카오 도보, 찾은 문제와 고칠 사람)
 
@@ -60,7 +60,7 @@
 | 3 | 상황 판단 | 밤에는 가로등·CCTV가 많은 밝은 길, 비가 오면 지붕 있는 길과 지하 길(역 대합실·금남지하상가), 행사·공사·사고는 피함 |
 | 4 | 이유 설명 | "계단 2곳을 피해 210m 더 가요"처럼 최단 길과의 차이를 말함. 대중교통은 "정류장까지 5분, 버스 12분, 내려서 3분"처럼 구간 순서대로 |
 | 5 | 걷기와 대중교통 비교 | 걷기와 버스·지하철(저상버스 도착 포함)을 날씨·몸 상태·기록으로 비교해 하나를 추천. 들를 곳은 걷기 3곳·대중교통 1곳까지 |
-| 6 | 신고된 곳 | 앱 사진 신고·말 신고를 같은 곳(같은 종류·30m)으로 묶어 1건부터 피함. 종류별 1·7·30일 유지, 끝난 신고·사진은 매일 정리 (결정 57·59) |
+| 6 | 신고된 곳 | 앱 사진 신고·말 신고를 같은 곳(같은 종류·30m)으로 묶어 1건부터 피함. 종류별 1·7·30일 유지, 끝난 신고·사진은 매일 정리 (결정 57·59). 인도를 막은 물건 신고의 사진을 서버의 작은 분류 모델이 보고 차·오토바이라고 95% 이상 확신하면 하루 대신 3시간만 피함 (차는 금방 빠지므로, 036) |
 | 7 | 보호자 위치 공유·급한 말 | 마지막 한 점만 공유하고 도착하면 링크를 닫음. "누가 따라와" 같은 말에는 112·보호자·가까운 파출소 버튼 |
 | 8 | 기억하기 | 로그인 없이 앱이 만든 무작위 번호로 모드·설정을 기억. 다닌 기록은 동의한 사람만 남기고 위치는 약 100m로 반올림 |
 
@@ -85,7 +85,7 @@ Spring Boot 서버 (학교 서버, 두 대가 번갈아 받음)
    ├─ /api/assistant   비서: 규칙 → 제미나이(도구 고르기) → 우리 도구가 계산
    ├─ /api/route       걷기 길찾기 ── 경로 엔진 (OSM 도로망 그래프, A*)
    ├─ /api/transit     대중교통 (ODsay, 광주 버스 도착)
-   ├─ /api/reports     신고 (사진은 DB에)
+   ├─ /api/reports     신고 (사진은 DB에, 사진 종류는 ONNX 분류 모델로 판단)
    └─ /api/places · /api/pois · /api/events · /api/guardian/shares · /api/me · /api/ai/* …
    ▼
 MySQL 8 (공간 인덱스) — 시설·도로망·길별 점수·신고·내 정보
@@ -111,10 +111,11 @@ MySQL 8 (공간 인덱스) — 시설·도로망·길별 점수·신고·내 정
 | 서버 | Java 21, Spring Boot 4.1, Maven, JGraphT(A*) |
 | DB | MySQL 8 (공간 인덱스, `ST_Distance_Sphere`, 뷰) |
 | AI | Google Gemini (함수 호출). 규칙으로 답할 수 있는 말은 부르지 않고, 필요한 도구만 보내 입력 토큰 약 55% 줄임 |
+| 신고 사진 분류 | PyTorch로 MobileNetV3-Small 학습(`ml/report_photo/`) → ONNX(6MB) → 서버는 ONNX Runtime(Java)으로 판단 |
 | 앱 | Android (Kotlin, Jetpack Compose, 카카오맵 SDK) |
 | 외부 API | 카카오 로컬(장소), 기상청·에어코리아, ODsay(대중교통), 광주 버스 도착, TMAP 보행자(비교용) |
 | 도로망 | OpenStreetMap (광주 81,709구간) |
-| 배포 | GitHub Actions → Docker → 학교 서버 (`main` 머지 = 배포, 서버 상태 감시) |
+| 배포 | GitHub Actions → Docker → 학교 서버 (`main` 머지 = 배포, 서버 상태 감시, 배포 뒤 앱·서버 연결 검사) |
 | 데이터 스크립트 | Python 3 (표준 라이브러리만) |
 
 ## 데이터
@@ -144,9 +145,24 @@ MySQL 8 (공간 인덱스) — 시설·도로망·길별 점수·신고·내 정
 
 생활안전지도 데이터는 **공공누리 4유형**(출처표시 · 상업적 이용 금지 · 변경 금지)입니다.
 
+신고 사진 분류 모델은 AI Hub **인도보행 영상**(한국지능정보사회진흥원, dataSetSn 189)의 상자·면 라벨로 사진 조각을 잘라 학습했습니다. 원본은 git에 올리지 않습니다.
+
+| 모델 | 처음 보는 장소 사진 8,470장 | 기준 0.95에서 진짜 차량 잡음 | 막는 물건 2,550장 중 차량으로 봄 |
+|---|---|---|---|
+| v4 | 정확도 92.0% · 공사 63% | 68% | 3장 |
+| **v6 (서버 사용, 11-20)** | 정확도 93.1% · 공사 76% | **75%** | 15장 (대부분 차가 주인공인 사진, 진짜 오판 4~5장) |
+
+v6는 차·오토바이가 크게 덮은 '막는 물건' 학습 사진을 빼고 학습했습니다. 모델이 확신하지 못하면(95% 미만) 예전처럼 하루 피합니다.
+
 ## DB 표
 
-원본 시설은 종류마다 표 하나씩 있습니다. 길찾기는 이를 정제한 `poi`·`edge_stat`(길별 점수)·`edge_poi`(길별 주변 시설)를 씁니다. 전체 표는 [ERD](docs/erd)와 `db/schema.sql`에 있습니다. 모든 표에 공통 칸이 있고, 종류마다 필요한 칸이 붙습니다.
+원본 시설은 종류마다 표 하나씩 있습니다. 길찾기는 이를 정제한 `poi`·`edge_stat`(길별 점수)·`edge_poi`(길별 주변 시설)를 씁니다. 표 정의의 원본은 `db/schema.sql`이고, 그림 파일은 [docs/erd](docs/erd)에 있습니다.
+
+전체 ERD (표 50개, 2026-11-20). 실선은 실제 외래 키(4개), 점선은 칸 값으로 이어지는 관계입니다. 게스트 표들은 앱이 처음 실행 때 만든 무작위 번호(UUID) `guest_id`로 이어지고, 신고에는 이 번호의 HMAC만 남깁니다.
+
+[![세잎지도 DB 전체 ERD](docs/erd/safe_route_full_erd.png)](docs/erd/safe_route_full_erd.png)
+
+아래는 시설 원본 표입니다. 모든 표에 공통 칸이 있고, 종류마다 필요한 칸이 붙습니다.
 
 | 표 | 내용 | 종류별 칸 |
 |---|---|---|
@@ -278,13 +294,15 @@ src/main/resources/
   application.yml   설정 (키는 .env에서 읽음)
   route.yml         모드별 가중치·우회 한도
   db/schema.sql     DB 표 전체
-  db/migration/     DB 변경 기록 (001~035)
+  db/migration/     DB 변경 기록 (001~036)
+  models/report_photo/  신고 사진 분류 모델 (model.onnx, labels.json)
 docs/
   assistant/        비서 설계 (동의 문구, 도구 고르기, 시험 질문 41개, 사용성 점검표)
   route-weights.md  가중치 기준
-  erd/              ERD
+  erd/              ERD (전체 그림 safe_route_full_erd.png, 다시 그리기 full_erd.py)
   field-test/       현장 비교 시험 기록
   presentation/     본선 발표 영상·자료 (mp4, pdf, pptx)
+ml/report_photo/    신고 사진 분류 학습 (make_crops.py 사진 자르기, train.py 학습·ONNX 내보내기)
 scripts/            데이터 받기·넣기·점검 스크립트 (refresh_data.py, eval_assistant.py, review_reports.py …)
 data/raw/           내려받은 원본·점검 기록 (git에 올리지 않음)
 ```
@@ -299,6 +317,8 @@ python3 scripts/check_report_retention.py     # 신고 보관 규칙 시험
 python3 scripts/review_reports.py             # 새 신고·사진 확인, --hide로 숨기기
 ```
 
+앱·서버 연결 검사: 앱 저장소 [safe-route-android](https://github.com/Safe-Way/safe-route-android)의 `contract.yml`이 매일 오전 9시 10분과 이 저장소 배포 뒤(저장소 비밀값 `APP_REPO_TOKEN`이 있을 때)에 운영 서버 응답 11개를 받아 앱 코드로 읽어 봅니다. 앱이 읽는 이름(약 150개)이 빠지거나 값이 이상하면 `contract-broken` 이슈가 열립니다.
+
 ## 진행 상황
 
 - [x] 공공데이터 수집·정제, 광주 도로망 (지하 길·광장 길 포함)
@@ -311,9 +331,12 @@ python3 scripts/review_reports.py             # 새 신고·사진 확인, --hid
 - [x] 현장 비교: 카카오·네이버와 같은 코스를 걸으며 비교하고 고치기 (11-11~13, 문화전당 일대)
 - [x] 국토지리정보원 인도·1:1,000 수치지도 반영, 엘리베이터 출구 안내
 - [x] 본선 발표 ([영상·자료](docs/presentation/))
+- [x] 신고 사진 차량 판단 (MobileNetV3, v6) → 차가 막은 길은 3시간만 피하기
+- [x] 앱·서버 연결 자동 검사 (매일·배포 뒤)
 - [ ] 인도 폭·재질로 좁은 인도 피하기 (지금은 폭을 안내에만 씀)
 - [ ] 건물 출입구·엘리베이터 위치, 경사 데이터
 - [ ] 실제 보행 약자와 함께 걷는 시험
+- [ ] 실제 폰으로 찍은 신고 사진으로 사진 분류 모델 다시 확인
 - [ ] 유모차 모드 (추후)
 
 ### 정직하게 밝히는 한계
