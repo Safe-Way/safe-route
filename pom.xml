@@ -60,6 +60,13 @@
             <version>3.11</version>
         </dependency>
 
+        <!-- 신고 사진 종류 판단 (036 photo_label). A파트 모델(model.onnx)을 서버 CPU에서 돌린다. 사진은 밖으로 안 나감 -->
+        <dependency>
+            <groupId>com.microsoft.onnxruntime</groupId>
+            <artifactId>onnxruntime</artifactId>
+            <version>1.22.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
