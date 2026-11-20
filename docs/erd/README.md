@@ -1,13 +1,16 @@
 # ERD
 
-학교 DB(`cf_u34_d3`)의 표 32개를 그린 ERD 파일이다. 2026-11-03에 학교 DB의 `information_schema`에서 만들었다.
+학교 DB(`cf_u34_d3`)의 ERD 파일이다. 전체 그림(`safe_route_full_erd.png`)은 2026-11-20 `schema.sql`의 표 50개로 그렸다.
+아래 `.sql`·`.dbml` 파일은 2026-11-03에 학교 DB의 `information_schema`에서 만든 표 32개 판이다(그 뒤 생긴 신고·게스트·인도 등 표는 없음).
 표 정의의 원본은 `src/main/resources/db/schema.sql`이고, 이 폴더는 그림용이다.
 
-실제 DB에는 **외래 키가 없다.** 데이터를 갱신할 때 표를 통째로 지우고 다시 넣기 때문이다.
+실제 DB의 외래 키는 **4개뿐이다**(신고 사진 → 신고, 걷기 측정 → 걷기 속도, 이동 기록·내 지도 설정 → 내 정보). 공공데이터 표는 갱신할 때 통째로 지우고 다시 넣기 때문에 외래 키를 두지 않는다.
 대신 경로 계산 표들은 칸 값으로 이어진다(`road_edge.from_node` = `road_node.id` 등).
 
 | 파일 | 무엇 | 언제 쓰나 |
 | --- | --- | --- |
+| `safe_route_full_erd.png` | **표 50개 전체** (2026-11-20, schema.sql 기준). 묶음별 색, 실선 = 실제 외래 키 4개, 점선 = 칸 값 연결, `guest_id`(UUID) 표시 | README·발표 |
+| `full_erd.py` | 위 그림을 schema.sql에서 다시 그림 (`.venv/bin/python docs/erd/full_erd.py`). 새 표는 스크립트의 COLS·GROUP·DESC·REL에 넣기 | 표가 바뀌었을 때 |
 | `route_core_erd.png` | 경로 계산에 쓰는 표 8개의 관계 그림. 선마다 ①~⑦ 번호와 왜 연결되는지 짧게 적음 | 발표·문서 (요구사항 8.2에 같은 그림과 ①~⑦ 설명 표) |
 | `route_core_erd.mmd` | 위 그림의 mermaid 원본 | 그림을 고칠 때 |
 | `safe_route_erd_nofk.sql` | 표 32개, 외래 키 없음 (실제 DB 그대로) | ERD 도구에 실제 구조를 넣을 때 |
