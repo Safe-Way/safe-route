@@ -63,6 +63,24 @@ class ReportServiceTests {
     }
 
     @Test
+    void notANumberCoordinateIsBad() {
+        assertThatThrownBy(() -> service.check("curb", Double.NaN, 126.93, null, null, null, null))
+                .isInstanceOf(ReportException.class).hasMessageContaining("lat");
+        assertThatThrownBy(() -> service.check("curb", 35.14, Double.POSITIVE_INFINITY, null, null, null, null))
+                .isInstanceOf(ReportException.class).hasMessageContaining("lat");
+    }
+
+    @Test
+    void notANumberMapIsBadAndNeverReachesDb() {
+        assertThatThrownBy(() -> service.within(Double.NaN, 35.0, 127.0, 35.2))
+                .isInstanceOf(ReportException.class).hasMessageContaining("bbox");
+        assertThatThrownBy(() -> service.active(126.9, 35.1, 126.95, Double.NaN))
+                .isInstanceOf(ReportException.class).hasMessageContaining("bbox");
+        verify(repo, never()).within(anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyInt());
+        verify(repo, never()).active(anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyInt());
+    }
+
+    @Test
     void unknownModeIsBad() {
         assertThatThrownBy(() -> service.check("curb", 35.14, 126.93, "women", null, null, null))
                 .isInstanceOf(ReportException.class).hasMessageContaining("mode");

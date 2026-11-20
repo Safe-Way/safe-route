@@ -61,7 +61,8 @@ public class ReportService {
         if (!ReportType.known(type)) {
             throw ReportException.bad("type 은 " + String.join(", ", ReportType.NAMES.keySet()) + " 중 하나여야 해요");
         }
-        if (lat == null || lon == null || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+        // NaN·Infinity 는 비교가 늘 false 라 범위 검사를 그냥 통과해서 DB 오류(503)가 났다 → 먼저 막는다
+        if (lat == null || lon == null || !finite(lat, lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
             throw ReportException.bad("lat, lon 이 필요해요");
         }
         String m = blankToNull(mode);
@@ -177,6 +178,14 @@ public class ReportService {
         return repo.insert(r, edge, "voice", reporter.of(guestId));
     }
 
+    /** 숫자가 모두 보통 수인지 (NaN·Infinity 아님) */
+    static boolean finite(double... values) {
+        for (double v : values) {
+            if (!Double.isFinite(v)) return false;
+        }
+        return true;
+    }
+
     /** 유형 코드의 이름 ("construction" → "공사") */
     public static String typeName(String type) {
         return ReportType.name(type);
@@ -184,7 +193,7 @@ public class ReportService {
 
     /** 지도 범위 안 신고 */
     public ReportsResponse within(double west, double south, double east, double north) {
-        if (west >= east || south >= north) {
+        if (!finite(west, south, east, north) || west >= east || south >= north) {
             throw ReportException.bad("bbox 는 서쪽경도,남쪽위도,동쪽경도,북쪽위도 순서예요");
         }
         if (east - west > MAX_SPAN_DEG || north - south > MAX_SPAN_DEG) {
@@ -197,7 +206,7 @@ public class ReportService {
 
     /** 지도 범위 안 지금 유효한 신고 지점 (같은 곳 묶음, 기간 안) */
     public ActiveSpotsResponse active(double west, double south, double east, double north) {
-        if (west >= east || south >= north) {
+        if (!finite(west, south, east, north) || west >= east || south >= north) {
             throw ReportException.bad("bbox 는 서쪽경도,남쪽위도,동쪽경도,북쪽위도 순서예요");
         }
         if (east - west > MAX_SPAN_DEG || north - south > MAX_SPAN_DEG) {
