@@ -71,6 +71,8 @@ final class Turn {
     /** "○○ 가는 버스"에서 맨 앞에 말한 노선 (정류장 파일에 그 노선이 있을 때만) */
     com.saferoute.bus.BusLine busLine;
     String spotMessage;
+    /** "3시까지 …"처럼 말한 도착 시각. 길을 고르면 출발 시각을 알려 준다 (2026-11-23). 없으면 null */
+    java.time.LocalDateTime arriveBy;
     /** 저장 전 확인 질문 (이게 있으면 답은 이 질문) */
     String confirm;
     /** 저장한 뒤 알릴 말 */
