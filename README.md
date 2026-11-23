@@ -115,7 +115,7 @@ MySQL 8 (공간 인덱스) — 시설·도로망·길별 점수·신고·내 정
 | 앱 | Android (Kotlin, Jetpack Compose, 카카오맵 SDK) |
 | 외부 API | 카카오 로컬(장소), 기상청·에어코리아, ODsay(대중교통), 광주 버스 도착, TMAP 보행자(비교용) |
 | 도로망 | OpenStreetMap (광주 81,709구간) |
-| 배포 | GitHub Actions → Docker → 학교 서버 (`main` 머지 = 배포, 서버 상태 감시, 배포 뒤 앱·서버 연결 검사) |
+| 배포 | GitHub Actions → Docker → 학교 서버 (`main` 머지 = 배포, 서버 상태 감시) |
 | 데이터 스크립트 | Python 3 (표준 라이브러리만) |
 
 ## 데이터
@@ -317,7 +317,7 @@ python3 scripts/check_report_retention.py     # 신고 보관 규칙 시험
 python3 scripts/review_reports.py             # 새 신고·사진 확인, --hide로 숨기기
 ```
 
-앱·서버 연결 검사: 앱 저장소 [safe-route-android](https://github.com/Safe-Way/safe-route-android)의 `contract.yml`이 매일 오전 9시 10분과 이 저장소 배포 뒤(저장소 비밀값 `APP_REPO_TOKEN`이 있을 때)에 운영 서버 응답 11개를 받아 앱 코드로 읽어 봅니다. 앱이 읽는 이름(약 150개)이 빠지거나 값이 이상하면 `contract-broken` 이슈가 열립니다.
+앱·서버 연결 검사: 앱 저장소 [safe-route-android](https://github.com/Safe-Way/safe-route-android)의 `contract.yml`이 매일 오전 9시 10분에 운영 서버 응답 11개를 받아 앱 코드로 읽어 봅니다. 앱이 읽는 이름(약 150개)이 빠지거나 값이 이상하면 `contract-broken` 이슈가 열립니다.
 
 ## 진행 상황
 
@@ -332,7 +332,7 @@ python3 scripts/review_reports.py             # 새 신고·사진 확인, --hid
 - [x] 국토지리정보원 인도·1:1,000 수치지도 반영, 엘리베이터 출구 안내
 - [x] 본선 발표 ([영상·자료](docs/presentation/))
 - [x] 신고 사진 차량 판단 (MobileNetV3, v6) → 차가 막은 길은 3시간만 피하기
-- [x] 앱·서버 연결 자동 검사 (매일·배포 뒤)
+- [x] 앱·서버 연결 자동 검사 (매일 아침)
 - [ ] 인도 폭·재질로 좁은 인도 피하기 (지금은 폭을 안내에만 씀)
 - [ ] 건물 출입구·엘리베이터 위치, 경사 데이터
 - [ ] 실제 보행 약자와 함께 걷는 시험
