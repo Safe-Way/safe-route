@@ -177,6 +177,24 @@ class AssistantServiceTests {
     }
 
     @Test
+    void walkAnswerTellsEngineNotes() {
+        // 엔진 알림(출구·횡단보도 없음)을 걷는 길 답 끝에 한두 개 붙인다 (11-23)
+        wheelchairUser();
+        when(kakao.search(eq("국립아시아문화전당"), any(), any())).thenReturn(List.of(
+                new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
+        Trip walk = new Trip("walk", 9, 600, 0, 0, "걸어서 9분, 600m", Map.of(), "safe", Map.of(), List.of(), false,
+                null);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of()), WeatherDust.unknown(), false, null, null, List.of(
+                        RouteResult.Note.info("alley", "골목길 약 120m를 지납니다"),
+                        RouteResult.Note.warn("crossing", "횡단보도 없이 길을 건너요"),
+                        RouteResult.Note.info("entrance", "국립아시아문화전당은 2번 출구로 들어가요"))));
+        AssistantReply r = ask(A, "문화전당 가자", null);
+        assertThat(r.say()).endsWith("국립아시아문화전당은 2번 출구로 들어가요. 횡단보도 없이 길을 건너요.");
+        assertThat(r.say()).doesNotContain("골목길");
+    }
+
+    @Test
     void voiceReportAsksFirstThenSends() {
         wheelchairUser();
         AssistantReply first = ask(A, "여기 공사 중이라 못 지나가", null);

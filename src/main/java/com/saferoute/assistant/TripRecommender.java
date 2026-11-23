@@ -96,7 +96,20 @@ public class TripRecommender {
      * @param why 엔진이 고른 걷는 길(safe)의 이유 한 줄 (explanation.summary, 예 "인도가 있는 길로 갑니다"). 없으면 null.
      *            비서가 "왜 이 길이야?"에 그대로 말한다 (11-13 원일님 부탁)
      */
-    public record Plan(TripScorer.Scored scored, WeatherDust weather, boolean night, String failText, String why) {
+    /**
+     * @param notes 엔진이 걷는 길(safe)에 단 알림 (explanation.notes, 예 "횡단보도 없이 길을 건너요", "○○은 3번 출구로 들어가요").
+     *              비서가 걷는 길 답 끝에 한두 개 붙인다 ({@link Sentences#withNotes}). 없으면 빈 목록
+     */
+    public record Plan(TripScorer.Scored scored, WeatherDust weather, boolean night, String failText, String why,
+            List<RouteResult.Note> notes) {
+        public Plan {
+            notes = notes == null ? List.of() : List.copyOf(notes);
+        }
+
+        public Plan(TripScorer.Scored scored, WeatherDust weather, boolean night, String failText, String why) {
+            this(scored, weather, night, failText, why, List.of());
+        }
+
         public Plan(TripScorer.Scored scored, WeatherDust weather, boolean night, String failText) {
             this(scored, weather, night, failText, null);
         }
@@ -116,21 +129,24 @@ public class TripRecommender {
         boolean personal = speed != null && speed.personal();
         String failText = null;
         String why = null;
+        List<RouteResult.Note> notes = List.of();
 
         // 1. 걷는 길 (원일님 엔진): 최단·맞춤 중 피할 것이 적은 길을 걷기 후보로
         try {
             RouteResult r = routes.route(req);
             night = r.conditions() != null && r.conditions().night();
-            Map<String, Integer> near = reportsNear(r.routes());
+            List<ReportItem> items = reportItems(r.routes());
+            Map<String, Integer> near = reportsNear(r.routes(), items);
             RouteResult.Route w = bestWalk(r.routes(), near);
             if (w != null) {
                 int minutes = personal ? (int) Math.ceil(w.distanceM() / speed.speedMMin()) : w.durationMin();
                 Map<String, Integer> diff = r.explanation() == null || r.explanation().diff() == null
                         ? Map.of() : r.explanation().diff();
                 why = engineWhy(r, w);
+                notes = engineNotes(r, w);
                 trips.add(new Trip("walk", minutes, w.distanceM(), 0, near.getOrDefault(w.kind(), 0),
                         minutes + "분, " + String.format("%,d", w.distanceM()) + "m",
-                        request(req), w.kind(), diff, w.events() == null ? List.of() : w.events(), false, null,
+                        request(req), w.kind(), diff, vehicleEvents(w, items), false, null,
                         w.counts() == null ? null : w.counts().get("rest"), List.of(), w));
                 // 최단 길이 피할 행사를 지나면 이유에 "○○ 피함"을 쓰려고 후보로만 남긴다 (점수에서 밀림)
                 for (RouteResult.Route o : r.routes()) {
@@ -139,7 +155,7 @@ public class TripRecommender {
                         trips.add(new Trip("walk", m, o.distanceM(), 0, near.getOrDefault(o.kind(), 0),
                                 m + "분, " + String.format("%,d", o.distanceM()) + "m",
                                 request(req),
-                                o.kind(), Map.of(), o.events(), false, null,
+                                o.kind(), Map.of(), vehicleEvents(o, items), false, null,
                                 o.counts() == null ? null : o.counts().get("rest"), List.of(), o));
                     }
                 }
@@ -179,7 +195,7 @@ public class TripRecommender {
         Profile pf = a.profile();
         TripScorer.Context ctx = new TripScorer.Context(a.mode(), w.rain(), w.heat(), w.cold(), w.dustBad(), night,
                 personal, pf == null ? null : pf.preferTransit(), habit(a.guestId(), w), a.bodyNote());
-        return new Plan(scorer.score(trips, ctx), w, night, null, why);
+        return new Plan(scorer.score(trips, ctx), w, night, null, why, notes);
     }
 
     /** 엔진 설명(explanation.summary)은 safe 길을 고른 이유라서, 걷기 후보가 safe 길일 때만 쓴다 */
@@ -189,6 +205,14 @@ public class TripRecommender {
         }
         String s = r.explanation().summary();
         return s == null || s.isBlank() ? null : s.strip();
+    }
+
+    /** 엔진 알림(explanation.notes)도 safe 길에 대한 것이라 걷기 후보가 safe 길일 때만 쓴다 */
+    static List<RouteResult.Note> engineNotes(RouteResult r, RouteResult.Route w) {
+        if (r.explanation() == null || r.explanation().notes() == null || w == null || !"safe".equals(w.kind())) {
+            return List.of();
+        }
+        return r.explanation().notes();
     }
 
     /** 날씨가 같았던 지난 이동에서 더 많이 고른 것 (transit, walk). 기록이 없거나 같으면 null */
@@ -316,28 +340,11 @@ public class TripRecommender {
 
     /** 길마다 reportNearM 안에 있는 불편 신고 수 (숨긴 신고 제외). DB가 안 되면 모두 0 */
     Map<String, Integer> reportsNear(List<RouteResult.Route> list) {
+        return reportsNear(list, reportItems(list));
+    }
+
+    Map<String, Integer> reportsNear(List<RouteResult.Route> list, List<ReportItem> items) {
         Map<String, Integer> out = new LinkedHashMap<>();
-        double west = 180, south = 90, east = -180, north = -90;
-        for (RouteResult.Route r : list) {
-            out.put(r.kind(), 0);
-            for (double[] p : r.geometry()) {
-                west = Math.min(west, p[0]);
-                east = Math.max(east, p[0]);
-                south = Math.min(south, p[1]);
-                north = Math.max(north, p[1]);
-            }
-        }
-        if (west > east) {
-            return out;
-        }
-        double pad = 0.0005; // 약 50m. 길 바로 옆 신고도 범위에 들게
-        List<ReportItem> items;
-        try {
-            items = reports.within(west - pad, south - pad, east + pad, north + pad, MAX_REPORTS);
-        } catch (DataAccessException e) {
-            log.warn("비서 불편 신고 조회 실패: {}", e.getMostSpecificCause().getMessage());
-            return out;
-        }
         for (RouteResult.Route r : list) {
             int n = 0;
             for (ReportItem it : items) {
@@ -348,5 +355,74 @@ public class TripRecommender {
             out.put(r.kind(), n);
         }
         return out;
+    }
+
+    /** 차가 막은 길 신고를 비서가 따로 말할 때 쓰는 이름 ({@link Sentences#VEHICLE_SAY}) */
+    static final String VEHICLE_TITLE = "차량";
+
+    /**
+     * 엔진이 준 '막는 물건' 신고 중 사진으로 차·오토바이라고 판단된 것(036 photo_label = vehicle)은 이름을 {@link #VEHICLE_TITLE}로
+     * 바꾼다 (11-23). 엔진 신고 구간 가운데에서 reportNearM 안의 막는 물건 신고가 모두 차량일 때만 (하나라도 아니면 그대로)
+     */
+    List<RouteResult.Event> vehicleEvents(RouteResult.Route route, List<ReportItem> items) {
+        if (route.events() == null) {
+            return List.of();
+        }
+        List<RouteResult.Event> out = new ArrayList<>();
+        for (RouteResult.Event e : route.events()) {
+            out.add(vehicle(e, route.geometry(), items) ? new RouteResult.Event(e.kind(), VEHICLE_TITLE, e.place(),
+                    e.message(), e.endsAt(), e.fromM(), e.toM(), e.avoid(), e.near()) : e);
+        }
+        return out;
+    }
+
+    private boolean vehicle(RouteResult.Event e, List<double[]> line, List<ReportItem> items) {
+        if (!Sentences.REPORT.equals(e.kind()) || !"막는 물건".equals(e.title()) || line == null || line.isEmpty()) {
+            return false;
+        }
+        // 엔진 fromM~toM 은 신고 영향 반경에 들어갔다 나온 구간이라 가운데가 신고 자리와 가장 가깝다
+        double[] at = pointAt(line, (e.fromM() + e.toM()) / 2);
+        List<ReportItem> here = items.stream().filter(it -> "obstacle".equals(it.type()))
+                .filter(it -> Geo.distance(new double[] {it.lon(), it.lat()}, at) <= reportNearM).toList();
+        return !here.isEmpty() && here.stream().allMatch(ReportItem::vehicle);
+    }
+
+    /** 선을 따라 m미터 간 지점 (선보다 길면 끝점) */
+    static double[] pointAt(List<double[]> line, int m) {
+        double left = Math.max(0, m);
+        for (int i = 1; i < line.size(); i++) {
+            double[] a = line.get(i - 1);
+            double[] b = line.get(i);
+            double d = Geo.distance(a, b);
+            if (d >= left && d > 0) {
+                double f = left / d;
+                return new double[] {a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f};
+            }
+            left -= d;
+        }
+        return line.get(line.size() - 1);
+    }
+
+    /** 길들이 지나는 범위(약 50m 넓혀)의 불편 신고. DB가 안 되면 빈 목록 */
+    List<ReportItem> reportItems(List<RouteResult.Route> list) {
+        double west = 180, south = 90, east = -180, north = -90;
+        for (RouteResult.Route r : list) {
+            for (double[] p : r.geometry()) {
+                west = Math.min(west, p[0]);
+                east = Math.max(east, p[0]);
+                south = Math.min(south, p[1]);
+                north = Math.max(north, p[1]);
+            }
+        }
+        if (west > east) {
+            return List.of();
+        }
+        double pad = 0.0005; // 약 50m. 길 바로 옆 신고도 범위에 들게
+        try {
+            return reports.within(west - pad, south - pad, east + pad, north + pad, MAX_REPORTS);
+        } catch (DataAccessException e) {
+            log.warn("비서 불편 신고 조회 실패: {}", e.getMostSpecificCause().getMessage());
+            return List.of();
+        }
     }
 }
