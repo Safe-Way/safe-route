@@ -103,6 +103,8 @@ jobs:
           put DB_URL "jdbc:mysql://${DB_ADDRESS}:${DB_PORT}/${DB_NAME}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
           put DB_USERNAME "$DB_USERNAME"
           put DB_PASSWORD "$DB_PASSWORD"
+          # 앱이 뜰 때 db/flyway 의 새 V 파일을 학교 DB에 적용한다. 처음 한 번은 36으로 baseline 표시만 (2026-11-23)
+          put FLYWAY_ENABLED "true"
           put KAKAO_REST_KEY "$KAKAO_REST_KEY"
           put DATA_GO_KR_KEY "$DATA_GO_KR_KEY"
           put ODSAY_API_KEY "$ODSAY_API_KEY"
