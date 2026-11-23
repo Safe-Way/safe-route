@@ -823,6 +823,129 @@ public class AssistantTools {
         }
     }
 
+    private com.saferoute.subway.SubwayRepository subway;
+
+    /** 지하철 표 (DB 없는 테스트에서는 안 넣음) */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setSubway(com.saferoute.subway.SubwayRepository subway) {
+        this.subway = subway;
+    }
+
+    /** 장소에서 가장 가까운 지하철 출구를 찾는 반경 (출구 표에 장소가 없을 때) */
+    static final int EXIT_NEAR_M = 600;
+
+    /** 출구 주변 장소 표에서 이보다 멀면 "꽤 멀어요"를 붙인다 */
+    static final int EXIT_FAR_M = 1000;
+
+    /**
+     * "문화전당역에서 ○○ 가려면 몇 번 출구로 나가요?" (11-23).
+     * ① 광주교통공사 출구 주변 장소 표(2021)에 있으면 그 출구 ② 없으면 카카오로 장소를 찾아 가장 가까운 출구(OSM).
+     * "5번 출구에 뭐 있어?"는 그 출구 주변 장소, "28번 버스는 몇 번 출구?"는 출구 연계 버스 표(2021).
+     * 휠체어·어르신이면 그 역의 엘리베이터 출구도 말한다. 지하철 표가 없으면 null
+     */
+    String subwayExit(Turn t, com.saferoute.subway.SubwayExitQuery.Ask a) {
+        t.tools.add("find_nearby");
+        if (subway == null) {
+            return null;
+        }
+        try {
+            if (a.place() != null) {
+                return exitForPlace(t, a);
+            }
+            if (a.bus() != null) {
+                List<com.saferoute.subway.SubwayRepository.ExitBus> buses = subway.exitBuses(a.station(), a.bus());
+                String st = stationName(buses.isEmpty() ? a.station() : buses.get(0).station());
+                if (buses.isEmpty()) {
+                    return st + "역 출구 자료에 " + a.bus() + "번 버스는 없어요.";
+                }
+                String exits = String.join("·", buses.stream().map(com.saferoute.subway.SubwayRepository.ExitBus::exitNo)
+                        .distinct().toList());
+                return st + "역에서 " + a.bus() + "번 버스는 " + exits + "번 출구 쪽에서 타요. " + old(null)
+                        + elevatorTip(t, st, null);
+            }
+            List<com.saferoute.subway.SubwayRepository.ExitPlace> at = subway.placesAtExit(a.station(), a.exitNo(), 3);
+            String st = stationName(at.isEmpty() ? a.station() : at.get(0).station());
+            if (at.isEmpty()) {
+                return st + "역 " + a.exitNo() + "번 출구 주변 장소 정보는 없어요.";
+            }
+            String names = String.join(", ", at.stream().map(com.saferoute.subway.SubwayRepository.ExitPlace::place).toList());
+            return st + "역 " + a.exitNo() + "번 출구 근처에는 " + Josa.iGa(names) + " 있어요. " + old(at.get(0).baseDate())
+                    + elevatorTip(t, st, a.exitNo());
+        } catch (DataAccessException e) {
+            log.warn("비서 지하철 출구 조회 실패: {}", e.getMostSpecificCause().getMessage());
+            return "지금은 지하철 출구 정보를 불러오지 못했어요. 잠시 뒤에 다시 물어봐 주세요.";
+        }
+    }
+
+    private String exitForPlace(Turn t, com.saferoute.subway.SubwayExitQuery.Ask a) {
+        List<com.saferoute.subway.SubwayRepository.ExitPlace> rows = subway.exitPlaces(a.place(), a.station(), 3);
+        String alias = com.saferoute.place.PlaceAlias.of(a.place());
+        if (rows.isEmpty() && !alias.equals(a.place())) {
+            rows = subway.exitPlaces(alias, a.station(), 3);
+        }
+        rows = rows.stream().filter(r -> r.exitNo() != null && !r.exitNo().isBlank()).toList();
+        if (!rows.isEmpty()) {
+            com.saferoute.subway.SubwayRepository.ExitPlace r = rows.get(0);
+            String st = stationName(r.station());
+            String how = r.walkMin() != null && r.walkMin() > 0 ? "(걸어서 약 " + r.walkMin() + "분)"
+                    : r.distanceM() != null && r.distanceM() > 0 ? "(약 " + r.distanceM() + "m)" : "";
+            StringBuilder sb = new StringBuilder(Josa.eun(r.place()) + " " + st + "역 " + r.exitNo() + "번 출구로 나가시면 돼요"
+                    + how + ".");
+            if (r.distanceM() != null && r.distanceM() > EXIT_FAR_M) {
+                // 표에 2km(걸어서 31분)인 곳도 있다 (학교 DB 11-23)
+                sb.append(" 출구에서 꽤 멀어서 버스나 택시가 나을 수 있어요.");
+            }
+            if (a.station() == null) {
+                rows.stream().skip(1).filter(o -> !o.station().equals(r.station())).findFirst().ifPresent(o -> sb
+                        .append(" ").append(stationName(o.station())).append("역 ").append(o.exitNo())
+                        .append("번 출구로도 갈 수 있어요."));
+            }
+            return sb.append(" ").append(old(r.baseDate())).append(elevatorTip(t, st, r.exitNo())).toString();
+        }
+        Place p = firstPlace(t, a.place());
+        if (p == null) {
+            return "'" + a.place() + "'을(를) 찾지 못했어요. 다른 이름으로 말씀해 주시겠어요?";
+        }
+        com.saferoute.subway.SubwayRepository.Entrance e = subway.nearestEntrance(p.lat(), p.lon(), EXIT_NEAR_M);
+        if (e == null) {
+            return p.name() + " 근처 " + EXIT_NEAR_M + "m 안에는 지하철 출구가 없어요. '" + p.name() + " 가자'라고 말씀하시면 가는 길을 찾아 드려요.";
+        }
+        String st = stationName(e.station());
+        String ev = Boolean.TRUE.equals(e.elevator()) && elevatorMode(t) ? " 그 출구에 엘리베이터가 있어요." : "";
+        return p.name() + "에서 가장 가까운 지하철 출구는 " + st + "역 " + e.exitNo() + "번 출구예요(약 " + e.distanceM() + "m)."
+                + (ev.isEmpty() ? elevatorTip(t, st, e.exitNo()) : ev);
+    }
+
+    /** 공공데이터 출구 표는 2021년 자료라 바뀌었을 수 있다고 한마디 */
+    private static String old(java.time.LocalDate base) {
+        int year = base == null ? 2021 : base.getYear();
+        return year + "년 자료라 지금과 다를 수 있어요.";
+    }
+
+    /** "문화전당(구도청)" → "문화전당" */
+    static String stationName(String name) {
+        return name == null ? "" : name.replaceAll("\\s*\\(.*\\)", "").strip();
+    }
+
+    private static boolean elevatorMode(Turn t) {
+        return "wheelchair".equals(t.mode()) || "senior".equals(t.mode());
+    }
+
+    /** 휠체어·어르신이면 그 역의 엘리베이터 출구. exitNo가 그중 하나면 "그 출구에 엘리베이터가 있어요" */
+    private String elevatorTip(Turn t, String station, String exitNo) {
+        if (!elevatorMode(t) || station.isEmpty()) {
+            return "";
+        }
+        List<String> ev = subway.elevatorExits(station);
+        if (ev.isEmpty()) {
+            return "";
+        }
+        if (exitNo != null && ev.contains(exitNo)) {
+            return " 그 출구에 엘리베이터가 있어요.";
+        }
+        return " 엘리베이터는 " + String.join("·", ev) + "번 출구에 있어요.";
+    }
+
     private com.saferoute.bus.BusLineStops lineStops;
 
     static final int ROUTE_SAY = 6;

@@ -89,6 +89,21 @@ class RuleBrain {
             tools.findNearby(t, "elevator");
             return Outcome.say(Sentences.spot(t));
         }
+        // "문화전당역에서 ○○ 가려면 몇 번 출구로 나가요?", "5번 출구에 뭐 있어?" (11-23). 버스 번호 말보다 먼저
+        com.saferoute.subway.SubwayExitQuery.Ask exit = com.saferoute.subway.SubwayExitQuery.read(t.text);
+        if (exit != null) {
+            if (exit.place() == null && exit.exitNo() == null && exit.bus() == null) {
+                return Outcome.ask(exit.station() + "역에서 어디 가시는지 함께 말씀해 주세요. 예: '" + exit.station()
+                        + "역에서 ○○ 가려면 몇 번 출구야?'");
+            }
+            if (exit.place() == null && exit.station() == null) {
+                return Outcome.ask("어느 역인지 함께 말씀해 주세요. 예: '문화전당역에서 " + exit.bus() + "번 버스 타려면 몇 번 출구야?'");
+            }
+            String said = tools.subwayExit(t, exit);
+            if (said != null) {
+                return Outcome.say(said);
+            }
+        }
         // "택시 타는 곳", "근처 택시 승강장": 카카오에 있는 택시 승강장 중 가장 가까운 곳 (11-13).
         // "택시 불러 줘"는 부르기라 아래 못 하는 일 그대로 (점검 32번)
         // "근처 버스", "가까운 버스 정류장": DB 정류장 표에서 가장 가까운 곳 (11-13, 카카오는 '버스' 든 가게가 섞임)
