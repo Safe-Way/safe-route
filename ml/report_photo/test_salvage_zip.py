@@ -43,7 +43,9 @@ class SalvageTest(unittest.TestCase):
         return tar_path
 
     def test_keeps_only_complete_files(self):
-        out = os.path.join(self.tmp, "out")
+        # out을 tmp 두 단계 아래에 둬야 '../../evil.txt'가 빠져나갈 때 tmp/evil.txt에 떨어져 아래 검사에 걸린다
+        # (예전 tmp/out이면 tmp의 부모로 가서, 빠져나가도 이 검사를 통과했다)
+        out = os.path.join(self.tmp, "a", "out")
         ok, skipped, _total, cut = sz.salvage(self.make_tar(0.85), out)
         self.assertEqual(skipped, 0)
         self.assertEqual(cut, "Surface_002/b.jpg")   # 마지막 파일은 잘려서 버림

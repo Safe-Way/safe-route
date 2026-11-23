@@ -292,14 +292,18 @@ class RouteServiceTests {
 
     @Test
     void extraMinutesAlwaysMatchDurationDifference() {
-        // 여러 우회 정도에서 카드의 "(n분) 더"와 두 경로 시간 차가 같아야 한다
+        // 여러 우회 정도에서 카드의 "(n분) 더"와 두 경로 시간 차가 같아야 한다.
+        // 시설이 없으면 안전 경로가 최단과 같아 길이 1개만 나오므로, 밝은 쪽 시설을 두고 실제로 2개 나온 경우를 센다
+        int checked = 0;
         for (double north : new double[] {0.0003, 0.0004, 0.0005, 0.0006, 0.0007}) {
-            RouteResult r = TestRoutes.service(diamond(north), facilities(List.of()), 21).route(request("on"));
+            RouteResult r = TestRoutes.service(diamond(north), facilities(brightSideFacilities()), 21).route(request("on"));
             if (r.routes().size() == 2) {
-                assertThat(r.explanation().extraMin())
+                assertThat(r.explanation().extraMin()).as("north " + north)
                         .isEqualTo(r.routes().get(1).durationMin() - r.routes().get(0).durationMin());
+                checked++;
             }
         }
+        assertThat(checked).as("두 경로가 나온 경우").isGreaterThanOrEqualTo(3);
     }
 
     @Test
