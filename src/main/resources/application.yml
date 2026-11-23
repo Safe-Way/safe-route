@@ -92,3 +92,21 @@ app-update:
   min-version-code: ${APP_MIN_VERSION_CODE:1}
   message: ${APP_UPDATE_MESSAGE:새 버전이 나왔어요. 업데이트하고 더 안전한 길을 안내받으세요.}
   download-url: ${APP_DOWNLOAD_URL:}
+
+# 게스트 본인 확인 (2026-11-23, 공개 배포 준비 1-1, com.saferoute.guest.GuestAuthFilter).
+# 앱이 X-Guest-Id·X-Guest-Token 헤더를 보내면 그 번호로 처음 온 토큰을 등록하고 다음부터 같은지 본다(guest_token 037).
+# false 인 동안은 토큰 없는 요청도 받는다. 앱이 토큰을 보내는 버전으로 바뀐 뒤 true로 바꾼다. 틀린 토큰은 언제나 막는다.
+guest-auth:
+  enforce: ${GUEST_AUTH_ENFORCE:false}
+
+# /api 요청 수 제한 (공개 배포 준비 1-2, com.saferoute.guest.RateLimitFilter). 서버 한 대 안에서 센다.
+# 게스트 번호(없으면 IP)마다 세고, 번호를 바꿔 가며 부르는 것을 막으려고 IP마다 넉넉한 상한을 따로 둔다.
+rate-limit:
+  enabled: ${RATE_LIMIT_ENABLED:true}
+  per-minute: 120              # /api 전체, 게스트마다
+  ip-per-minute: 600           # /api 전체, IP마다 (통신사 NAT로 여러 사람이 한 IP일 수 있어 넉넉히)
+  assistant-per-minute: 20     # POST /api/assistant (제미나이 비용)
+  assistant-per-day: 300
+  assistant-ip-per-minute: 60
+  reports-per-hour: 10         # POST /api/reports (사진 3장·16MB까지)
+  reports-ip-per-hour: 30

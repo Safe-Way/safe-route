@@ -1310,3 +1310,12 @@ CREATE TABLE IF NOT EXISTS odsay_call_count (
     calls  INT  NOT NULL DEFAULT 0 COMMENT '그날 ODsay를 부른 수 (두 서버 합)',
     PRIMARY KEY (day)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = 'ODsay 하루 부른 수 (서버 두 대가 같이 셈)';
+
+-- 게스트 본인 확인 토큰 (037). 토큰 원문은 저장 안 함
+CREATE TABLE IF NOT EXISTS guest_token (
+    guest_id     CHAR(36)  NOT NULL COMMENT '앱이 처음 실행 때 만든 무작위 번호(UUID)',
+    token_hash   CHAR(64)  NOT NULL COMMENT 'X-Guest-Token 의 SHA-256 16진수 (원문은 저장 안 함)',
+    created_at   DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '처음 등록한 시각',
+    last_used_on DATE      NULL     COMMENT '마지막으로 확인한 날짜 (하루 한 번만 고침)',
+    PRIMARY KEY (guest_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '게스트 본인 확인 토큰 (037)';
