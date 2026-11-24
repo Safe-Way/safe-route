@@ -140,6 +140,23 @@ class AssistantServiceTests {
     }
 
     @Test
+
+    void arriveByTellsWhenToLeave() {
+        // "3시까지 문화전당 가야 해" → 길은 그대로 찾고, 끝에 출발 시각 (지금 = 낮 12시, 걸어서 25분, 휠체어 여유 10분)
+        wheelchairUser();
+        when(kakao.search(eq("국립아시아문화전당"), any(), any())).thenReturn(List.of(
+                new Place("1", "국립아시아문화전당", "광주 동구", 35.1467, 126.9203, null)));
+        Trip walk = new Trip("walk", 25, 1600, 0, 0, "걸어서 25분, 1,600m", Map.of(), "safe", Map.of(), List.of(), false,
+                null);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of()), WeatherDust.unknown(), false, null));
+        AssistantReply r = ask(A, "3시까지 문화전당 가야 해", null);
+        assertThat(r.pick()).isNotNull();
+        assertThat(r.say()).endsWith("3시까지 가시려면 2시 25분쯤 나가시면 돼요 (가는 데 25분, 여유 10분).");
+        assertThat(r.heard().text()).isEqualTo("3시까지 문화전당 가야 해");// 알아들은 말은 원래 말 그대로
+      }
+
+    @Test
     void tamperedPendingInConversationIdIsNotServerError() {
         // conversationId 는 앱이 그대로 돌려주는 값이라 누가 고칠 수 있다. 날짜 자리에 글자·목록 자리에 글자면
         // 예전엔 500(서버 오류)이었다 → 저장하지 않고 다시 말해 달라고 답한다 (2026-11-23)
@@ -161,6 +178,7 @@ class AssistantServiceTests {
             assertThat(second.say()).contains("저장할 내용을 알아듣지 못했어요");
         }
         verify(memory, never()).saveLayer(anyString(), anyString(), anyBoolean(), any(), any());
+
     }
 
     @Test
