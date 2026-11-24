@@ -36,6 +36,52 @@ final class Sentences {
         return out;
     }
 
+    /** 비서가 말해 줄 엔진 알림 종류, 앞이 먼저. 계단·행사는 이미 다른 문장이 말하고, 지하·바닥 모름은 뺀다 */
+    static final List<String> NOTE_ORDER = List.of("entrance", "crossing", "no_sidewalk_alley", "narrow", "snap",
+            "trail", "unpaved", "alley");
+
+    /** 한 번에 붙이는 알림 수. 말이 길어지지 않게 */
+    static final int NOTE_MAX = 2;
+
+    /**
+     * 걷는 길 답 끝에 엔진 알림을 한두 개 붙인다 (11-23).
+     * 예: "… 가는 길에 횡단보도 없이 길을 건너요. 광주역은 3번 출구로 들어가요."
+     * 이미 같은 말을 했으면 다시 붙이지 않는다. 엔진 말("지납니다")은 비서 말투("지나요")로 바꾼다
+     */
+    static String withNotes(String say, List<RouteResult.Note> notes) {
+        if (say == null || notes == null || notes.isEmpty()) {
+            return say;
+        }
+        StringBuilder out = new StringBuilder(say.strip());
+        int added = 0;
+        for (String kind : NOTE_ORDER) {
+            for (RouteResult.Note n : notes) {
+                if (added >= NOTE_MAX) {
+                    return out.toString();
+                }
+                if (!kind.equals(n.kind()) || n.text() == null || n.text().isBlank()) {
+                    continue;
+                }
+                String line = noteLine(n.text());
+                String core = line.substring(0, line.length() - 1);
+                if (out.indexOf(core) >= 0) {
+                    continue;
+                }
+                out.append(' ').append(line);
+                added++;
+            }
+        }
+        return out.toString();
+    }
+
+    /** 엔진 알림 한 줄을 비서 말투로, 끝에 마침표 */
+    static String noteLine(String text) {
+        String s = text.strip().replace("지납니다", "지나요").replace("없습니다", "없어요")
+                .replace("않았습니다", "않았어요").replace("걸립니다", "걸려요");
+        char last = s.charAt(s.length() - 1);
+        return last == '.' || last == '?' || last == '!' ? s : s + ".";
+    }
+
     /**
      * 휠체어로 걷는 길을 추천했을 때 왜 이 길인지 (사실대로, 2026-11-11 현장 시험 뒤).
      * 엔진은 휠체어가 못 지나는 것으로 확인된 길(경사로 없는 계단·확인된 턱·못 지나는 육교)을 뺀다. 그런데 학교 DB에

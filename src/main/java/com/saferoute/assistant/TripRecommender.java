@@ -96,7 +96,20 @@ public class TripRecommender {
      * @param why 엔진이 고른 걷는 길(safe)의 이유 한 줄 (explanation.summary, 예 "인도가 있는 길로 갑니다"). 없으면 null.
      *            비서가 "왜 이 길이야?"에 그대로 말한다 (11-13 원일님 부탁)
      */
-    public record Plan(TripScorer.Scored scored, WeatherDust weather, boolean night, String failText, String why) {
+    /**
+     * @param notes 엔진이 걷는 길(safe)에 단 알림 (explanation.notes, 예 "횡단보도 없이 길을 건너요", "○○은 3번 출구로 들어가요").
+     *              비서가 걷는 길 답 끝에 한두 개 붙인다 ({@link Sentences#withNotes}). 없으면 빈 목록
+     */
+    public record Plan(TripScorer.Scored scored, WeatherDust weather, boolean night, String failText, String why,
+            List<RouteResult.Note> notes) {
+        public Plan {
+            notes = notes == null ? List.of() : List.copyOf(notes);
+        }
+
+        public Plan(TripScorer.Scored scored, WeatherDust weather, boolean night, String failText, String why) {
+            this(scored, weather, night, failText, why, List.of());
+        }
+
         public Plan(TripScorer.Scored scored, WeatherDust weather, boolean night, String failText) {
             this(scored, weather, night, failText, null);
         }
@@ -116,6 +129,7 @@ public class TripRecommender {
         boolean personal = speed != null && speed.personal();
         String failText = null;
         String why = null;
+        List<RouteResult.Note> notes = List.of();
 
         // 1. 걷는 길 (원일님 엔진): 최단·맞춤 중 피할 것이 적은 길을 걷기 후보로
         try {
@@ -128,6 +142,7 @@ public class TripRecommender {
                 Map<String, Integer> diff = r.explanation() == null || r.explanation().diff() == null
                         ? Map.of() : r.explanation().diff();
                 why = engineWhy(r, w);
+                notes = engineNotes(r, w);
                 trips.add(new Trip("walk", minutes, w.distanceM(), 0, near.getOrDefault(w.kind(), 0),
                         minutes + "분, " + String.format("%,d", w.distanceM()) + "m",
                         request(req), w.kind(), diff, w.events() == null ? List.of() : w.events(), false, null,
@@ -179,7 +194,7 @@ public class TripRecommender {
         Profile pf = a.profile();
         TripScorer.Context ctx = new TripScorer.Context(a.mode(), w.rain(), w.heat(), w.cold(), w.dustBad(), night,
                 personal, pf == null ? null : pf.preferTransit(), habit(a.guestId(), w), a.bodyNote());
-        return new Plan(scorer.score(trips, ctx), w, night, null, why);
+        return new Plan(scorer.score(trips, ctx), w, night, null, why, notes);
     }
 
     /** 엔진 설명(explanation.summary)은 safe 길을 고른 이유라서, 걷기 후보가 safe 길일 때만 쓴다 */
@@ -189,6 +204,14 @@ public class TripRecommender {
         }
         String s = r.explanation().summary();
         return s == null || s.isBlank() ? null : s.strip();
+    }
+
+    /** 엔진 알림(explanation.notes)도 safe 길에 대한 것이라 걷기 후보가 safe 길일 때만 쓴다 */
+    static List<RouteResult.Note> engineNotes(RouteResult r, RouteResult.Route w) {
+        if (r.explanation() == null || r.explanation().notes() == null || w == null || !"safe".equals(w.kind())) {
+            return List.of();
+        }
+        return r.explanation().notes();
     }
 
     /** 날씨가 같았던 지난 이동에서 더 많이 고른 것 (transit, walk). 기록이 없거나 같으면 null */

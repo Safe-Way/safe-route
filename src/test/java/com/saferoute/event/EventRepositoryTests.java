@@ -6,14 +6,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.testsupport.FakeDb;
 
 /** 지도용 행사·돌발 표 읽기 SQL (가짜 DB) */
+@DisplayName("지도용 행사·돌발 SQL")
 class EventRepositoryTests {
 
     @Test
+    @DisplayName("지도 범위 안의 지금 유효한 행사를 읽는다")
     void activeEventsInBox() {
         FakeDb db = new FakeDb().rows("FROM road_event", row("id", 5L, "kind", "festival", "detail", null,
                 "title", "양림 크리스마스 문화축제", "place", "양림오거리", "lat", 35.1399, "lon", 126.9150, "radius_m", 300,

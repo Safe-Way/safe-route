@@ -6,14 +6,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.sql.Date;
 import java.time.LocalDate;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.testsupport.FakeDb;
 
 /** 비서 지식 조각 찾기·못 한 요청 남기기 SQL (가짜 DB) */
+@DisplayName("비서 지식 조각·못 한 요청 SQL")
 class AssistantRepositoryDbTests {
 
     @Test
+    @DisplayName("지식 조각을 찾아 점수순으로 고른다")
     void knowledgeFindsAndPicksByScore() {
         FakeDb db = new FakeDb().rows("FROM assistant_knowledge",
                 row("id", 1, "topic", "휠체어", "body", "휠체어 모드는 계단을 피해요.", "s", 3.2),
@@ -27,6 +30,7 @@ class AssistantRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("지식 표가 없으면 지식 없이 답한다")
     void knowledgeTableMissingAnswersWithoutIt() {
         FakeDb db = new FakeDb().fails("FROM assistant_knowledge", "Table 'assistant_knowledge' doesn't exist");
 
@@ -34,6 +38,7 @@ class AssistantRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("못 한 요청은 다듬어서 저장한다")
     void unmetRequestIsCleanedBeforeSaving() {
         FakeDb db = new FakeDb();
         new UnmetRepository(db.jdbc()).add(LocalDate.of(2026, 11, 16), "senior", "김철수님에게 010-1234-5678 전화해 줘",
@@ -44,6 +49,7 @@ class AssistantRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("못 한 요청 저장이 실패해도 로그만 남긴다")
     void unmetFailureIsOnlyLogged() {
         FakeDb db = new FakeDb().fails("INSERT INTO assistant_unmet", "Table 'assistant_unmet' doesn't exist");
 

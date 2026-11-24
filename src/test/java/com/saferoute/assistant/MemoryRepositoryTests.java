@@ -10,17 +10,20 @@ import java.time.LocalTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.testsupport.FakeDb;
 
 /** 비서 기억 읽고 쓰기 SQL (가짜 DB) */
+@DisplayName("비서 기억 읽고 쓰기 SQL")
 class MemoryRepositoryTests {
 
     private final FakeDb db = new FakeDb();
     private final MemoryRepository repo = new MemoryRepository(db.jdbc());
 
     @Test
+    @DisplayName("비서가 쓸 내 정보를 읽는다")
     void profile() {
         assertThat(repo.profile("none")).isNull();
 
@@ -35,6 +38,7 @@ class MemoryRepositoryTests {
     }
 
     @Test
+    @DisplayName("내 정보는 허용한 칸만 저장한다")
     void saveProfileOnlyAllowedColumns() {
         repo.saveProfile("g1", Map.of("max_detour", 2)); // 비서는 이 칸을 못 고침
         assertThat(db.calls).isEmpty();
@@ -49,6 +53,7 @@ class MemoryRepositoryTests {
     }
 
     @Test
+    @DisplayName("습관·날씨 선택·가 본 곳을 읽는다")
     void habitsWeatherAndVisited() {
         db.rows("FROM trip_habit", row("to_name", "문화전당", "to_lat", 35.147, "to_lon", 126.92,
                         "start_slot", LocalTime.of(8, 30), "times", 3, "by_transit", 1, "by_walk", 2))
@@ -65,11 +70,13 @@ class MemoryRepositoryTests {
     }
 
     @Test
+    @DisplayName("날씨 선택이 없으면 빈 값")
     void weatherChoiceMissing() {
         assertThat(repo.weatherChoice("g1", "heat")).isNull();
     }
 
     @Test
+    @DisplayName("지도 시설: 같은 뜻의 말을 나눠 읽고 저장한다")
     void layersSplitAliasesAndSave() {
         db.rows("FROM map_layer ORDER BY", row("layer", "toilet", "name", "화장실", "aliases", "화장실, 공중화장실,,"),
                 row("layer", "cctv", "name", "CCTV", "aliases", null),

@@ -14,6 +14,7 @@ import javax.sql.DataSource;
 
 import net.ttddyy.dsproxy.QueryInfo;
 import net.ttddyy.dsproxy.support.ProxyDataSource;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -22,6 +23,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /** 느린 쿼리 로그: 가짜 DataSource에서 일부러 늦은 SQL을 돌려 WARN이 남는지 본다 */
 @ExtendWith(OutputCaptureExtension.class)
+@DisplayName("느린 쿼리 로그")
 class SlowQueryLogTests {
 
     /** execute 가 sleepMs 만큼 걸리는 가짜 DataSource */
@@ -43,6 +45,7 @@ class SlowQueryLogTests {
     }
 
     @Test
+    @DisplayName("느린 SQL은 값 없이 로그로 남긴다")
     void slowSqlIsLoggedWithoutValues(CapturedOutput out) throws SQLException {
         new JdbcTemplate(wrap(20, slowDb(60))).execute("SELECT *\n  FROM road_report_active\n WHERE guest_id = 'g-1'");
 
@@ -51,6 +54,7 @@ class SlowQueryLogTests {
     }
 
     @Test
+    @DisplayName("빠른 SQL은 남기지 않는다")
     void fastSqlIsNotLogged(CapturedOutput out) throws SQLException {
         new JdbcTemplate(wrap(1_000, slowDb(0))).execute("SELECT 1");
 
@@ -58,6 +62,7 @@ class SlowQueryLogTests {
     }
 
     @Test
+    @DisplayName("0이면 끄고, 연결 감싸기는 한 번만 한다")
     void zeroTurnsItOffAndWrapsOnlyOnce() throws SQLException {
         DataSource raw = slowDb(0);
         assertThat(wrap(0, raw)).isSameAs(raw);
@@ -70,6 +75,7 @@ class SlowQueryLogTests {
     }
 
     @Test
+    @DisplayName("긴 SQL은 잘라서 남긴다")
     void longSqlIsCut() {
         QueryInfo q = new QueryInfo("SELECT " + "a, ".repeat(200) + "b FROM t");
         String s = SlowQueryLog.sql(List.of(q, new QueryInfo("SELECT 2")));
