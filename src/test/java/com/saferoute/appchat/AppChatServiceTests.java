@@ -1,5 +1,18 @@
 package com.saferoute.appchat;
-
+/*
+ * 아래 import 줄은 다른 곳에 있는 도구를 불러와서 이 파일에서 짧은 이름으로 쓰게 한다.
+ * (import static = 메서드를 불러옴, import = 클래스를 불러옴)
+ *
+ * 이 테스트가 불러와서 쓰는 도구
+ * - AssertJ  : assertThat(결과 확인), assertThatThrownBy(오류가 나는지 확인)
+ * - Mockito  : mock(가짜 만들기), when(가짜 답 정하기), verify/never(불렸는지 확인),
+ *              any/anyString(아무 값), ArgumentCaptor(넘긴 값 붙잡기)
+ * - Spring   : MockMvc(서버 안 켜고 요청 보내기), post(POST 요청),
+ *              status(응답 코드), jsonPath(응답 JSON 칸), MediaType(JSON 표시)
+ * - JUnit    : @Test(테스트 표시), @BeforeEach(테스트마다 먼저 실행)
+ * - 자바 기본: List(목록), Map(이름-값 묶음)
+ * - 우리 코드: GeminiClient(테스트에선 가짜로 씀), ApiErrorHandler(오류를 JSON으로)
+ */
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -28,16 +41,16 @@ import com.saferoute.common.ApiErrorHandler;
 /** 앱 화면 AI 창구: 지시문은 서버가 쥐고, 제미나이 답은 정해진 값만 남긴다 (가짜 제미나이) */
 class AppChatServiceTests {
 
-    final GeminiClient gemini = mock(GeminiClient.class);
-    final AppChatService service = new AppChatService(gemini);
-    MockMvc mvc;
+    final GeminiClient gemini = mock(GeminiClient.class); //gemini라는 칸에 가짜 제미나이를 넣고, 앞으로 이 칸은 절대 바꾸지 않는다
+    final AppChatService service = new AppChatService(gemini); //진짜 AppChatService를 새로 만들면서 가짜 제미나이를 끼워 넣고, service라는 칸에 담아 절대 안 바꾼다
+    MockMvc mvc; //요청 보내 보는 도구를 담을 mvc라는 빈 칸만 만들어 둔다
 
-    @BeforeEach
+    @BeforeEach //테스트 하나를 돌리기 직전마다 이 함수를 먼저 실행
     void setUp() {
-        when(gemini.available()).thenReturn(true);
+        when(gemini.available()).thenReturn(true);//// 가짜 제미나이가 쓸 수 있냐고 질문이 오면 항상 true로 답함
         mvc = MockMvcBuilders.standaloneSetup(new AppChatController(service))
                 .setControllerAdvice(new ApiErrorHandler()).build();
-    }
+    }// 서비스를 넣은 새 컨트롤러 하나만 세우고, 오류 처리 도우미(ApiErrorHandler)를 붙여 요청 도구(mvc)를 만든다
 
     static AppChatRequest said(String... userLines) {
         List<AppChatRequest.Line> h = new java.util.ArrayList<>();
