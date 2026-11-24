@@ -119,7 +119,7 @@ class RateLimitFilterTests {
     @Test
     void realIpIsTrustedOnlyFromOurProxy() {
         assertThat(RateLimitFilter.clientIp("172.18.0.5", "203.0.113.7")).isEqualTo("203.0.113.7");
-        assertThat(RateLimitFilter.clientIp("10.116.64.12", "203.0.113.7")).isEqualTo("203.0.113.7");
+        assertThat(RateLimitFilter.clientIp("10.0.0.12", "203.0.113.7")).isEqualTo("203.0.113.7");
         assertThat(RateLimitFilter.clientIp("198.51.100.1", "203.0.113.7")).isEqualTo("198.51.100.1");   // 바로 붙은 외부
         assertThat(RateLimitFilter.clientIp("172.18.0.5", null)).isEqualTo("172.18.0.5");
         assertThat(RateLimitFilter.isPrivateOrLoopback("fd12:3456::1")).isTrue();
