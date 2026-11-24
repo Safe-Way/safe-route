@@ -12,6 +12,9 @@
 #   DATA_GO_KR_KEY                                날씨(기상청), 미세먼지(에어코리아)
 #   REPORT_HASH_SECRET                            (선택) 같은 사람 신고를 한 명으로 세는 해시 비밀값
 #
+# Repository variables (같은 화면의 Variables 탭, 비밀값이 아닌 설정):
+#   APP_DOWNLOAD_URL                              (선택) 앱 업데이트 창 [업데이트] 버튼이 여는 주소. 비면 창이 안 뜬다
+#
 # 순서: (CI 테스트 통과) → secrets 확인 → 코드 받기 → jar 빌드 → 도커 이미지 빌드·압축 → 환경변수 파일 만들기
 #       → 서버로 올리기(scp) → 서버에서 deploy.sh 실행(앱 두 대 한 대씩 교체)
 name: Deploy
@@ -55,6 +58,7 @@ jobs:
       # 공개 배포 준비 (2026-11-23): 저장소 Variables(비밀 아님)로 켜고 끔. 비어 있으면 아래 기본값
       GUEST_AUTH_ENFORCE: ${{ vars.GUEST_AUTH_ENFORCE }}
       RATE_LIMIT_ENABLED: ${{ vars.RATE_LIMIT_ENABLED }}
+      APP_DOWNLOAD_URL: ${{ vars.APP_DOWNLOAD_URL }}
     steps:
       # 꼭 필요한 secret이 하나라도 비어 있으면 이름을 알려 주고 멈춘다(서버에 반쯤 올라가는 것을 막는다)
       - name: secrets 확인
@@ -115,6 +119,8 @@ jobs:
           # 게스트 본인 확인(앱이 토큰을 보내기 전까지 false)·요청 제한. 저장소 Variables 에서 바꿈
           put GUEST_AUTH_ENFORCE "${GUEST_AUTH_ENFORCE:-false}"
           put RATE_LIMIT_ENABLED "${RATE_LIMIT_ENABLED:-true}"
+          # 앱 업데이트 창의 내려받을 주소 (GET /api/app/version의 downloadUrl). 비어 있으면 업데이트 창이 뜨지 않는다
+          put APP_DOWNLOAD_URL "$APP_DOWNLOAD_URL"
           # 서버 코드가 쓰지 않는 키(데이터 적재 스크립트용). application.yml이 이름을 가리키고 있어 빈 값으로 둔다
           for name in SAFEMAP_KEY SAFETYDATA_POLICE_KEY SAFETYDATA_SECURITYLIGHT_KEY SAFETYDATA_COLDSHELTER_KEY \
                       SAFETYDATA_STREETLIGHT_KEY TMAP_APP_KEY; do
@@ -140,22 +146,3 @@ jobs:
         run: |
           sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -p "$SSH_PORT" "$SSH_ID@$SSH_ADDRESS" \
             "bash ~/safe-route/deploy.sh '$APP_PORT'"
-
-      # 배포가 끝나면 앱 저장소의 앱·서버 연결 검사(safe-route-android contract.yml)를 바로 부른다.
-      # 새 서버 응답을 앱의 진짜 읽기 코드로 읽어 보는 검사라, 앱이 읽는 이름이 바뀌었으면 그쪽 실행이 빨갛게 되고
-      # 'contract-broken' 이슈가 열린다. 이 단계는 부르기만 하고 결과를 기다리지 않는다 (배포는 이미 끝남).
-      # 다른 저장소의 워크플로를 부르려면 토큰이 필요하다: safe-route-android 에 Actions 쓰기 권한만 준
-      # fine-grained 토큰을 Secrets 의 APP_REPO_TOKEN 에 넣는다. 없으면 건너뛰고, 앱 쪽은 매일 아침 9시 10분에 스스로 돈다.
-      - name: 앱·서버 연결 검사 부르기
-        env:
-          GH_TOKEN: ${{ secrets.APP_REPO_TOKEN }}
-        run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::notice::APP_REPO_TOKEN 이 없어 앱·서버 연결 검사를 부르지 않았어요 (앱 저장소에서 매일 아침 돌아요)"
-            exit 0
-          fi
-          # 서버가 새 버전으로 다 바뀐 뒤 부르도록 잠깐 기다린다
-          sleep 30
-          gh workflow run contract.yml -R Safe-Way/safe-route-android --ref main \
-            && echo "앱·서버 연결 검사를 불렀어요: https://github.com/Safe-Way/safe-route-android/actions/workflows/contract.yml" \
-            || echo "::warning::앱·서버 연결 검사를 부르지 못했어요 (토큰 권한 확인). 배포는 끝났어요"

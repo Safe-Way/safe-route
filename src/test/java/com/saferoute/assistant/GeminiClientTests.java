@@ -13,6 +13,8 @@ import java.util.List;
 
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.web.client.match.MockRestRequestMatchers;
+import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -118,8 +120,12 @@ class GeminiClientTests {
     void chatWithNoTimeLeftSendsNothing() {
         RestClient.Builder b = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(b).build();
+        // 기대가 하나도 없으면 verify()는 아무것도 보지 않으므로, "한 번도 오면 안 됨"을 걸어 둔다
+        server.expect(ExpectedCount.never(), MockRestRequestMatchers.anything());
         GeminiClient c = new GeminiClient(b, "k", "gemini-test", 10_000);
         assertThat(c.chat("지시", List.of(), List.of(Map.of("name", "a")), new TokenUsage(), 0)).isNull();
+        // 참고: leftMs<=0 막는 부분이 없어도 get(0)이 바로 시간 초과로 취소해 요청이 대개 안 나간다.
+        // 그래서 이 테스트는 "바로 null"을 지키고, never()는 요청이 실제로 나갔을 때만 잡는다
         server.verify(); // 아무 요청도 안 감
     }
 

@@ -24,6 +24,7 @@ import com.saferoute.place.PlaceAlias;
 import com.saferoute.report.ReportService;
 import com.saferoute.route.RouteService;
 import com.saferoute.situation.NightJudge;
+import com.saferoute.situation.WeatherDust;
 import com.saferoute.situation.WeatherDustService;
 import com.saferoute.walk.WalkSpeedService;
 
@@ -89,11 +90,19 @@ class FieldTest1113Tests {
                 new Place("3", "지센 광주금남로점", "광주 동구 금남로", 35.1481, 126.9181, 1310)));
         when(kakao.search(eq("금남지하상가"), isNull(), isNull())).thenReturn(List.of(
                 new Place("9", "금남지하상가", "광주 동구 금남로 186", 35.1490, 126.9160, null)));
-        // 한 곳으로 정해져 길찾기까지 감 (길찾기는 가짜라 비어 있음)
-        org.junit.jupiter.api.Assertions.assertThrows(NullPointerException.class, () -> ask("금남 지하상가 가자"));
+        // 한 곳으로 정해져 길찾기까지 감. 예전에는 가짜 길찾기가 null을 돌려 나는 NullPointerException을 기대했는데,
+        // 그러면 운영 코드가 null을 잘 다루게 고쳐질 때 깨지므로 걸어가는 결과 하나를 돌려준다
+        Trip walk = new Trip("walk", 5, 300, 0, 0, "걸어서 5분, 300m", java.util.Map.of(), "safe", java.util.Map.of(),
+                List.of(), false, null);
+        when(trips.recommend(any())).thenReturn(new TripRecommender.Plan(new TripScorer.Scored(walk, List.of(),
+                List.of()), WeatherDust.unknown(), false, null));
+        ask("금남 지하상가 가자");
         org.mockito.ArgumentCaptor<TripRecommender.Ask> asked = org.mockito.ArgumentCaptor.forClass(TripRecommender.Ask.class);
         org.mockito.Mockito.verify(trips).recommend(asked.capture());
-        assertThat(asked.getValue().toString()).contains("금남지하상가", "35.149");
+        // 가게(올포유·지센)가 아니라 진짜 금남지하상가 좌표로 간다
+        assertThat(asked.getValue().dest().name()).isEqualTo("금남지하상가");
+        assertThat(asked.getValue().dest().lat()).isEqualTo(35.1490);
+        assertThat(asked.getValue().dest().lon()).isEqualTo(126.9160);
     }
 
     @Test
