@@ -67,6 +67,8 @@ jobs:
       DB_URL: jdbc:mysql://127.0.0.1:3306/safe_route?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
       DB_USERNAME: safe_route
       DB_PASSWORD: ci-only-password
+      # 테스트가 띄우는 앱도 Flyway를 켠다: 이미 적용된 DB라 확인만 하고 넘어간다 (V 파일이 바뀌었으면 여기서 잡힘)
+      FLYWAY_ENABLED: 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -77,11 +79,20 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: DB 표 만들기 (schema.sql 문법 검사 겸)
+      # 배포와 같은 길로 표를 만든다: 앱을 띄우면 Flyway가 빈 DB에 db/flyway 의 V 파일을 차례로 적용 (2026-11-23)
+      - name: DB 표 만들기 (Flyway)
         run: |
-          mysql -h 127.0.0.1 -u safe_route -pci-only-password --default-character-set=utf8mb4 safe_route \
+          ./mvnw -B -ntp -Dtest=SafeRouteApplicationTests -Dsurefire.failIfNoSpecifiedTests=false test
+          mysql -h 127.0.0.1 -u safe_route -pci-only-password safe_route \
+            -e "SELECT version, description, success FROM flyway_schema_history; SHOW FULL TABLES"
+
+      # schema.sql(표 전체 그림·ERD 원본)이 V 파일과 어긋나지 않았는지. V 파일을 더하면 schema.sql도 같이 고친다
+      - name: schema.sql이 Flyway 결과와 같은지
+        run: |
+          mysql -h 127.0.0.1 -u root -pci-only-root -e "CREATE DATABASE schema_check"
+          mysql -h 127.0.0.1 -u root -pci-only-root --default-character-set=utf8mb4 schema_check \
             < src/main/resources/db/schema.sql
-          mysql -h 127.0.0.1 -u safe_route -pci-only-password safe_route -e "SHOW FULL TABLES"
+          MYSQL_PWD=ci-only-root scripts/check_schema_sync.sh 127.0.0.1 3306 root safe_route schema_check
 
       - name: 빌드·테스트
         run: ./mvnw -B -ntp verify

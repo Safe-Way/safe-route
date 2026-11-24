@@ -215,6 +215,13 @@ cp .env.example .env
 mysql -u safe_route -p safe_route < src/main/resources/db/schema.sql
 ```
 
+**표를 바꿀 때 (Flyway, 2026-11-23부터)**
+
+- `src/main/resources/db/flyway/`에 `V37__무엇을_하는지.sql`처럼 다음 번호로 새 파일을 만들고, `schema.sql`도 같은 내용으로 고칩니다. 이미 머지된 V 파일은 고치지 않습니다.
+- main에 머지되면 배포 때 앱이 뜨면서 학교 DB에 적용합니다(`FLYWAY_ENABLED=true`는 배포에서만). 학교 DB는 처음 한 번 "36까지 적용됨"으로 표시만 합니다(001~036은 손으로 적용해 둠, `db/migration/`에 기록으로 남김).
+- 로컬은 기본이 꺼짐입니다. `.env`가 학교 DB를 가리키므로, 기능 브랜치를 띄우기만 해도 머지 전 변경이 학교 DB에 들어가는 일을 막습니다.
+- CI는 빈 MySQL에 V 파일을 차례로 적용하고, `schema.sql`이 그 결과와 같은지 `scripts/check_schema_sync.sh`로 확인합니다.
+
 ### 3. 데이터 내려받기
 
 API마다 하루 호출 한도(1,000번)가 있어서, 가로등처럼 큰 데이터는 며칠에 걸쳐 받습니다.
@@ -293,8 +300,9 @@ src/main/java/com/saferoute/
 src/main/resources/
   application.yml   설정 (키는 .env에서 읽음)
   route.yml         모드별 가중치·우회 한도
-  db/schema.sql     DB 표 전체
-  db/migration/     DB 변경 기록 (001~036)
+  db/schema.sql     DB 표 전체 (V 파일과 같게 유지, CI가 확인)
+  db/flyway/        Flyway 변경 파일 (V36__baseline = 036까지 표 전체, 새 변경은 V37__부터)
+  db/migration/     손으로 적용하던 변경 기록 (001~036)
   models/report_photo/  신고 사진 분류 모델 (model.onnx, labels.json)
 docs/
   assistant/        비서 설계 (동의 문구, 도구 고르기, 시험 질문 41개, 사용성 점검표)
