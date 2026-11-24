@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -19,12 +20,14 @@ import org.springframework.web.client.RestClientException;
 import com.saferoute.testsupport.FakeDb;
 
 /** 외부 API 호출 수 세기와 /api/usage */
+@DisplayName("외부 API 호출 수 세기와 /api/usage")
 class ApiUsageTests {
 
     // 한국 11-25 00:30 (UTC로는 11-24): 한국 날짜로 센다
     static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-24T15:30:00Z"), ZoneId.of("Asia/Seoul"));
 
     @Test
+    @DisplayName("실패한 요청까지 모두 한국 날짜로 센다")
     void everyRequestIsCountedEvenFailedOnesByKoreanDay() {
         FakeDb db = new FakeDb();
         ApiUsage usage = new ApiUsage(db.jdbc(), CLOCK);
@@ -47,6 +50,7 @@ class ApiUsageTests {
     }
 
     @Test
+    @DisplayName("세기가 실패해도 API 호출은 막지 않는다")
     void countingFailureDoesNotBlockTheCall() {
         FakeDb db = new FakeDb().fails("INSERT INTO api_call_count", "Table 'api_call_count' doesn't exist");
         ApiUsage usage = new ApiUsage(db.jdbc(), CLOCK);
@@ -59,6 +63,7 @@ class ApiUsageTests {
     }
 
     @Test
+    @DisplayName("/api/usage가 한도 대비 비율과 높은 것을 보여 준다")
     void usageShowsRatioAndHighOnes() {
         FakeDb db = new FakeDb()
                 .rows("FROM api_call_count", FakeDb.row("api", "gemini", "calls", 850), FakeDb.row("api", "kakao", "calls", 10))
@@ -77,6 +82,7 @@ class ApiUsageTests {
     }
 
     @Test
+    @DisplayName("표가 없으면 0으로 본다")
     void noTableMeansZero() {
         FakeDb db = new FakeDb().fails("FROM api_call_count", "no table").fails("FROM odsay_call_count", "no table");
         UsageController c = new UsageController(new ApiUsage(db.jdbc(), CLOCK), 1000, 100_000, 30, 0.8);

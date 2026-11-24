@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -22,6 +23,7 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** 매일 기록 정리: 기간 계산, 돌아온 게스트는 남기기, 하나가 실패해도 나머지 */
+@DisplayName("매일 기록 정리")
 class RecordCleanupTests {
 
     static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-24T19:40:00Z"), ZoneId.of("Asia/Seoul")); // 11-25 04:40
@@ -38,6 +40,7 @@ class RecordCleanupTests {
     }
 
     @Test
+    @DisplayName("한국 날짜로 기간을 계산해 오래된 줄을 지운다")
     void deletesOldRowsByKoreanDate() {
         when(jdbc.update("DELETE FROM assistant_unmet WHERE asked_on < ?", TODAY.minusDays(90))).thenReturn(3);
         when(jdbc.update("DELETE FROM odsay_call_count WHERE day < ?", TODAY.minusDays(30))).thenReturn(2);
@@ -50,6 +53,7 @@ class RecordCleanupTests {
     }
 
     @Test
+    @DisplayName("1년 안 쓴 게스트는 내 기록 지우기처럼 지우고, 그사이 돌아온 사람은 남긴다")
     void staleGuestIsDeletedLikeDeleteAllButOneWhoCameBackIsKept() {
         LocalDate before = TODAY.minusDays(365);
         when(jdbc.queryForList(anyString(), eq(String.class), eq(before))).thenReturn(List.of("old", "back"));
@@ -62,6 +66,7 @@ class RecordCleanupTests {
     }
 
     @Test
+    @DisplayName("하나가 실패해도 나머지는 계속 지운다")
     void oneFailureDoesNotStopTheRest() {
         when(jdbc.update("DELETE FROM assistant_unmet WHERE asked_on < ?", TODAY.minusDays(90)))
                 .thenThrow(new DataAccessResourceFailureException("down"));
@@ -73,6 +78,7 @@ class RecordCleanupTests {
     }
 
     @Test
+    @DisplayName("지우다 실패한 게스트는 건너뛴다")
     void failedGuestIsSkipped() {
         LocalDate before = TODAY.minusDays(365);
         when(jdbc.queryForList(anyString(), eq(String.class), eq(before))).thenReturn(List.of("a", "b"));

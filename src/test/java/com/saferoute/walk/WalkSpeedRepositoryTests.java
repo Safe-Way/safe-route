@@ -5,17 +5,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDate;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.testsupport.FakeDb;
 
 /** 개인 보행 속도 표 SQL (가짜 DB) */
+@DisplayName("개인 걷기 속도 SQL")
 class WalkSpeedRepositoryTests {
 
     private final FakeDb db = new FakeDb();
     private final WalkSpeedRepository repo = new WalkSpeedRepository(db.jdbc());
 
     @Test
+    @DisplayName("잠그고, 측정을 넣고, 합을 구해 속도를 고친다")
     void lockInsertSumUpdate() {
         db.rows("FOR UPDATE", row("samples", 3))
                 .rows("COALESCE(SUM(speed_m_min), 0)", row("n", 3, "s", 141.0));
@@ -35,6 +38,7 @@ class WalkSpeedRepositoryTests {
     }
 
     @Test
+    @DisplayName("정해 둔 개수보다 오래된 측정은 지운다")
     void trimDeletesOlderThanKeepth() {
         repo.trimSamples("g1", "adult", 20); // 20개가 안 되면 지우지 않음
         assertThat(db.calls("DELETE")).isEmpty();
@@ -46,6 +50,7 @@ class WalkSpeedRepositoryTests {
     }
 
     @Test
+    @DisplayName("걷기 속도를 찾고 지운다")
     void findAndDelete() {
         assertThat(repo.find("g1", "adult")).isNull();
 

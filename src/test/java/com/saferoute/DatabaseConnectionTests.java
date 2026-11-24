@@ -2,6 +2,7 @@ package com.saferoute;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -11,12 +12,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * MySQL에 붙는지, 그리고 이 프로젝트에 필요한 공간 함수가 되는지 확인한다.
  */
 @SpringBootTest
+@DisplayName("DB 연결")
 class DatabaseConnectionTests {
 
     @Autowired
     JdbcTemplate jdbc;
 
     @Test
+    @DisplayName("DB에 연결되고 공간 함수를 쓸 수 있다")
     void connectsAndSupportsSpatialFunctions() {
         String version = jdbc.queryForObject("SELECT VERSION()", String.class);
         System.out.println("MySQL 버전: " + version);

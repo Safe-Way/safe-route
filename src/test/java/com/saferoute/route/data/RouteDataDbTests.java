@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -35,6 +36,7 @@ import com.saferoute.route.engine.graph.RoadGraph;
 import com.saferoute.testsupport.FakeDb;
 
 /** 도로망·행사·신고·경로 선호를 DB에서 읽는 부분을 가짜 DB로 끝까지 */
+@DisplayName("길찾기 데이터: 도로망·행사·신고·선호 읽기")
 class RouteDataDbTests {
 
     private static final BBox AREA = new BBox(126.91, 35.13, 126.93, 35.15);
@@ -83,6 +85,7 @@ class RouteDataDbTests {
     }
 
     @Test
+    @DisplayName("도로망을 한 번만 통째로 읽고 범위로 골라 쓴다")
     void readsWholeNetworkOnceAndPicksByBox() {
         FakeDb db = network();
         MysqlRoadGraphSource src = new MysqlRoadGraphSource(db.jdbc(), RouteTestProps.load());
@@ -126,6 +129,7 @@ class RouteDataDbTests {
     }
 
     @Test
+    @DisplayName("도로망이 비어 있으면 다음에 다시 읽는다")
     void emptyNetworkIsReadAgainNextTime() {
         FakeDb db = new FakeDb();
         MysqlRoadGraphSource src = new MysqlRoadGraphSource(db.jdbc(), RouteTestProps.load());
@@ -136,6 +140,7 @@ class RouteDataDbTests {
     }
 
     @Test
+    @DisplayName("미리 읽기는 웹 서버로 뜰 때만 한다")
     void warmUpOnlyForWebServer() {
         FakeDb db = network();
         MysqlRoadGraphSource src = new MysqlRoadGraphSource(db.jdbc(), RouteTestProps.load());
@@ -158,6 +163,7 @@ class RouteDataDbTests {
     }
 
     @Test
+    @DisplayName("행사를 읽고, 표가 없거나 오류면 빈 목록")
     void eventsAndFailures() {
         LocalDateTime at = LocalDateTime.of(2026, 12, 5, 18, 0);
         FakeDb db = new FakeDb().rows("FROM road_event", row("id", 5L, "kind", "festival", "title", "축제",
@@ -173,6 +179,7 @@ class RouteDataDbTests {
     }
 
     @Test
+    @DisplayName("신고: DB가 끊기면 이전 목록을 그대로 쓴다")
     void reportsKeepOldListWhenDbDrops() {
         FakeDb db = new FakeDb().rows("COALESCE(SUM(id), 0)", row("s", "2026-12-05 1 7"))
                 .rows("FROM road_report_active", row("spot_id", 7L, "report_type", "construction", "lon", 126.92,
@@ -194,6 +201,7 @@ class RouteDataDbTests {
     }
 
     @Test
+    @DisplayName("경로 선호를 읽고, 없거나 오류면 기본값")
     void preferences() {
         FakeDb db = new FakeDb().rows("FROM user_profile WHERE guest_id",
                 row("stairs_ok", 0, "max_detour", new BigDecimal("1.30"), "rest_every_m", null));

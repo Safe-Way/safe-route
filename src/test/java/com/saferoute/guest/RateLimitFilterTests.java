@@ -4,12 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
 import java.util.List;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 /** 요청 수 제한 (공개 배포 준비 1-2) */
+@DisplayName("요청 수 제한")
 class RateLimitFilterTests {
 
     private final GuestTokenStoreTests.MovableClock clock = new GuestTokenStoreTests.MovableClock();
@@ -40,6 +42,7 @@ class RateLimitFilterTests {
     }
 
     @Test
+    @DisplayName("시간 칸마다 세고 칸이 바뀌면 다시 센다")
     void limiterCountsPerWindowAndResets() {
         RateLimiter.Rule r = new RateLimiter.Rule("t", 2, Duration.ofMinutes(1));
         clock.now = java.time.Instant.parse("2026-11-23T01:00:10Z");
@@ -52,6 +55,7 @@ class RateLimitFilterTests {
     }
 
     @Test
+    @DisplayName("지난 시간 칸은 잊어서 메모리가 늘지 않는다")
     void limiterForgetsOldWindows() {
         RateLimiter.Rule r = new RateLimiter.Rule("t", 5, Duration.ofMinutes(1));
         limiter.hit(r, "a");
@@ -61,6 +65,7 @@ class RateLimitFilterTests {
     }
 
     @Test
+    @DisplayName("한도를 넘으면 429와 다시 시도할 시각을 준다")
     void blocksAfterLimitWith429AndRetryAfter() throws Exception {
         for (int i = 0; i < 3; i++) {
             assertThat(call("GET", "/api/places", "203.0.113.7", null).getStatus()).isEqualTo(200);
@@ -73,6 +78,7 @@ class RateLimitFilterTests {
     }
 
     @Test
+    @DisplayName("게스트별로 세되, 번호를 바꿔 가며 피하면 IP 한도에서 막는다")
     void countsByGuestButIpCeilingStopsIdRotation() throws Exception {
         // 같은 IP에서 게스트 번호를 바꿔 가며 부르면 게스트 한도(3)에는 안 걸려도 IP 한도(5)에 걸린다
         for (int i = 0; i < 5; i++) {
@@ -82,6 +88,7 @@ class RateLimitFilterTests {
     }
 
     @Test
+    @DisplayName("비서는 따로 더 작은 한도")
     void assistantHasItsOwnSmallerLimit() throws Exception {
         assertThat(call("POST", "/api/assistant", "203.0.113.7", "g1").getStatus()).isEqualTo(200);
         assertThat(call("POST", "/api/assistant", "203.0.113.7", "g1").getStatus()).isEqualTo(429);
@@ -89,6 +96,7 @@ class RateLimitFilterTests {
     }
 
     @Test
+    @DisplayName("신고 한도는 시간당")
     void reportsLimitIsPerHour() throws Exception {
         clock.now = java.time.Instant.parse("2026-11-23T01:30:00Z");
         assertThat(call("POST", "/api/reports", "203.0.113.7", "g1").getStatus()).isEqualTo(200);
@@ -99,6 +107,7 @@ class RateLimitFilterTests {
     }
 
     @Test
+    @DisplayName("서버 안에서 부른 요청은 세지 않는다")
     void serverInternalCallsAreNotCounted() throws Exception {
         for (int i = 0; i < 20; i++) {
             MockHttpServletRequest req = new MockHttpServletRequest("GET", "/api/places");
@@ -110,6 +119,7 @@ class RateLimitFilterTests {
     }
 
     @Test
+    @DisplayName("/api가 아닌 주소는 세지 않는다")
     void nonApiPathsAreNotCounted() throws Exception {
         for (int i = 0; i < 20; i++) {
             assertThat(call("GET", "/s/abc", "203.0.113.7", null).getStatus()).isEqualTo(200);
@@ -117,6 +127,7 @@ class RateLimitFilterTests {
     }
 
     @Test
+    @DisplayName("실제 IP 헤더는 우리 프록시에서 온 것만 믿는다")
     void realIpIsTrustedOnlyFromOurProxy() {
         assertThat(RateLimitFilter.clientIp("172.18.0.5", "203.0.113.7")).isEqualTo("203.0.113.7");
         assertThat(RateLimitFilter.clientIp("10.0.0.12", "203.0.113.7")).isEqualTo("203.0.113.7");
@@ -127,6 +138,7 @@ class RateLimitFilterTests {
     }
 
     @Test
+    @DisplayName("기다릴 시간 안내 문구가 읽기 쉽다")
     void waitTextIsReadable() {
         assertThat(RateLimitFilter.waitText(42)).isEqualTo("42초");
         assertThat(RateLimitFilter.waitText(61)).isEqualTo("2분");

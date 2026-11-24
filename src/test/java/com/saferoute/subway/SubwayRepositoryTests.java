@@ -6,17 +6,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.testsupport.FakeDb;
 
 /** 지하철 표 읽기 SQL (가짜 DB) */
+@DisplayName("지하철 표 읽기 SQL")
 class SubwayRepositoryTests {
 
     private final FakeDb db = new FakeDb();
     private final SubwayRepository repo = new SubwayRepository(db.jdbc());
 
     @Test
+    @DisplayName("가까운 역을 출구 수와 함께 읽는다")
     void nearMapsStationWithExitCounts() {
         db.rows("FROM subway_station s", row("station_id", 105, "name", "문화전당", "lat", 35.1465, "lon", 126.9203,
                 "elevator_total", 4, "elevator_available", 3, "elevator_disabled_gates", "2", "wheelchair_lift_total", 0,
@@ -34,6 +37,7 @@ class SubwayRepositoryTests {
     }
 
     @Test
+    @DisplayName("공휴일 이름을 읽는다")
     void holidayName() {
         assertThat(repo.holidayName(LocalDate.of(2026, 11, 16))).isNull();
         db.rows("FROM holiday", row("name", "성탄절"));
@@ -41,6 +45,7 @@ class SubwayRepositoryTests {
     }
 
     @Test
+    @DisplayName("시간표를 분 단위로 읽는다")
     void timetableReadsMinutes() {
         db.rows("FROM subway_timetable", row("station_code", 105, "direction", 1, "end_station_name", "평동", "m", 1450),
                 row("station_code", 105, "direction", 2, "end_station_name", "녹동", "m", 330));

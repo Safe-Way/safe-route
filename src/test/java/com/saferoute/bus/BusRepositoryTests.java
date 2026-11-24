@@ -7,16 +7,19 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.testsupport.FakeDb;
 
 /** 버스 정류장·노선 표 읽기 SQL (가짜 DB) */
+@DisplayName("버스 정류장·노선 SQL")
 class BusRepositoryTests {
 
     private final FakeDb db = new FakeDb();
 
     @Test
+    @DisplayName("가까운 정류장과 번호로 정류장을 읽는다")
     void stopsNearAndByIds() {
         db.rows("ST_Distance_Sphere", row("busstop_id", 3001, "name", "문화전당역", "next_busstop", "금남로4가",
                         "lat", 35.1465, "lon", 126.9203, "dist", 80.4))
@@ -42,6 +45,7 @@ class BusRepositoryTests {
     }
 
     @Test
+    @DisplayName("노선을 번호와 종점으로 찾는다")
     void linesFindByNumberAndEnd() {
         db.rows("FROM bus_line l WHERE l.line_name = ?", line(10, "수완03"))
                 .rows("dir_up_name LIKE ?", line(11, "07"))
@@ -60,6 +64,7 @@ class BusRepositoryTests {
     }
 
     @Test
+    @DisplayName("노선을 번호로 읽을 때 요청한 순서를 지킨다")
     void linesByIdsKeepAskedOrder() {
         db.rows("l.line_id IN", line(10, "수완03"), line(11, "07"));
         BusLineRepository repo = new BusLineRepository(db.jdbc());
