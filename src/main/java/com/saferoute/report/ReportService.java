@@ -11,7 +11,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -39,11 +41,21 @@ public class ReportService {
     private final ReporterHash reporter;
     private final PhotoClassifier photoKind;
 
+    /** 신고·사진 저장만 묶는 트랜잭션. null 이면 묶지 않고 그냥 돈다 (시험용) */
+    private final TransactionTemplate tx;
+
     @Autowired
-    public ReportService(ReportRepository repo, ReporterHash reporter, PhotoClassifier photoKind) {
+    public ReportService(ReportRepository repo, ReporterHash reporter, PhotoClassifier photoKind,
+                         PlatformTransactionManager txManager) {
         this.repo = repo;
         this.reporter = reporter;
         this.photoKind = photoKind;
+        this.tx = txManager == null ? null : new TransactionTemplate(txManager);
+    }
+
+    /** 트랜잭션 없이 (시험용) */
+    public ReportService(ReportRepository repo, ReporterHash reporter, PhotoClassifier photoKind) {
+        this(repo, reporter, photoKind, null);
     }
 
     public ReportService(ReportRepository repo, ReporterHash reporter) {
@@ -108,12 +120,20 @@ public class ReportService {
     }
 
     /**
-     * 신고와 사진을 한 번에 저장한다.
+     * 신고와 사진을 한 번에 저장하고(사진 저장이 실패하면 신고도 안 남음), 저장이 끝난 뒤 사진 종류를 판단한다.
+     * 사진 판단은 시간이 걸리고 메모리를 많이 쓸 수 있어서 DB 트랜잭션 밖에서 한다 (2026-11-23).
+     * 판단이 실패해도 신고는 이미 저장돼 있다.
      *
      * @param guestId 앱 번호. 해시로만 남기고 원래 번호는 저장하지 않는다. 없으면 null
      */
-    @Transactional
     public ReportCreated create(NewReport r, String guestId) {
+        long id = tx == null ? save(r, guestId) : tx.execute(status -> save(r, guestId));
+        labelPhotos(id, r.photos());
+        return new ReportCreated(id, "open", r.photos().size());
+    }
+
+    /** 신고 줄과 사진 줄 저장 (create 가 트랜잭션 안에서 부른다) */
+    private long save(NewReport r, String guestId) {
         Long edge = null;
         try {
             edge = repo.nearestEdge(r.lat(), r.lon(), EDGE_SNAP_M);
@@ -126,8 +146,7 @@ public class ReportService {
         for (NewReport.Photo p : r.photos()) {
             repo.insertPhoto(id, seq++, p);
         }
-        labelPhotos(id, r.photos());
-        return new ReportCreated(id, "open", r.photos().size());
+        return id;
     }
 
     /**
@@ -138,7 +157,14 @@ public class ReportService {
         if (photos.isEmpty() || !photoKind.ready()) {
             return;
         }
-        String label = photoKind.vehicleLabel(photos);
+        String label;
+        try {
+            label = photoKind.vehicleLabel(photos);
+        } catch (RuntimeException | OutOfMemoryError e) {
+            // 아주 큰 사진을 풀다가 메모리가 모자라도 신고는 이미 저장됐으니 판단만 건너뛴다
+            log.warn("신고 사진 판단 실패 (신고는 저장됨): {}", e.getClass().getSimpleName());
+            return;
+        }
         if (label == null) {
             return;
         }

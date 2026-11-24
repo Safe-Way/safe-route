@@ -66,15 +66,18 @@ class AuditFixesTests {
 
     @Test
     void eventIsNotAvoidedWhenTheSnappedStartIsInside() {
-        // 3. 요청한 출발점은 행사 반경 밖(약 58m)이지만 붙인 길 점 S는 안(약 33m). S에 닿는 길이 모두 반경 안
-        RoadEvent ev = new RoadEvent(1, "행사", "충장축제", null, null, S_P[0], LAT - 0.0003, 45, null);
+        // 3. 요청한 출발점은 행사 반경 밖(약 58m)이지만 붙인 길 점(S–N 길 위, 약 50m)은 안. 그 점에 닿는 길이 모두 반경 안.
+        //    (예전 반경 45m는 붙인 점이 반경 밖이라 행사가 경로에 닿지 않아, 운영 수정을 빼도 통과했다)
+        RoadEvent ev = new RoadEvent(1, "행사", "충장축제", null, null, S_P[0], LAT - 0.0003, 52, null);
         RouteService s = TestRoutes.service(diamond(0.0004), TestRoutes.pois(List.of(), List.of(ev)), 12);
         RouteResult r = s.route(new RouteRequest(new Place(LAT + 0.0002, S_P[0] + 0.0002, "출발"),
                 new Place(LAT, T_P[0], "도착"), "auto", "senior"));
 
         // 피할 길이 없다는 틀린 주의 대신, 피하지 않는 행사로 알리기만 한다
         assertThat(r.explanation().notes()).noneMatch(n -> n.level().equals("warn"));
-        assertThat(r.routes().get(r.routes().size() - 1).events()).allMatch(e -> !e.avoid());
+        // 행사가 아예 안 잡혀도 통과하지 않게, 한 건이 알림으로 붙었는지 본다
+        assertThat(r.routes().get(r.routes().size() - 1).events()).singleElement()
+                .satisfies(e -> assertThat(e.avoid()).isFalse());
     }
 
     @Test
