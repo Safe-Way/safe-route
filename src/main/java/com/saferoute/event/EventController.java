@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.saferoute.common.Bbox;
 import com.saferoute.common.ErrorResponse;
 
 /**
@@ -29,7 +30,7 @@ public class EventController {
 
     @GetMapping("/api/events")
     public ResponseEntity<?> events(@RequestParam(required = false) String bbox) {
-        double[] b = parseBbox(bbox);
+        double[] b = Bbox.parse(bbox);
         if (b == null) {
             return ResponseEntity.badRequest()
                     .body(new ErrorResponse("BAD_PARAM", "bbox 는 서쪽경도,남쪽위도,동쪽경도,북쪽위도 네 숫자여야 해요"));
@@ -42,28 +43,5 @@ public class EventController {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(new ErrorResponse("DB_UNAVAILABLE", "잠시 후 다시 시도해 주세요"));
         }
-    }
-
-    /** "서,남,동,북" 네 숫자. 모양이 틀리면 null (/api/reports 와 같은 규칙) */
-    static double[] parseBbox(String bbox) {
-        if (bbox == null) {
-            return null;
-        }
-        String[] p = bbox.split(",");
-        if (p.length != 4) {
-            return null;
-        }
-        double[] out = new double[4];
-        try {
-            for (int i = 0; i < 4; i++) {
-                out[i] = Double.parseDouble(p[i].trim());
-                if (!Double.isFinite(out[i])) {
-                    return null;
-                }
-            }
-        } catch (NumberFormatException e) {
-            return null;
-        }
-        return out;
     }
 }
