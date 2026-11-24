@@ -33,6 +33,8 @@ class ReportPhotoLabelTests {
     /** DB 대신 부른 것만 적어 두는 저장소 */
     static class FakeRepo extends ReportRepository {
         final List<String> labels = new ArrayList<>();
+        /** 부른 차례 (insert·photo·label) 와 트랜잭션 시작·끝 (begin·commit·rollback) */
+        final List<String> steps = new ArrayList<>();
         boolean labelFails;
         int inserted;
 
@@ -48,11 +50,13 @@ class ReportPhotoLabelTests {
         @Override
         public long insert(NewReport r, Long edgeId, String via, String reporterHash) {
             inserted++;
+            steps.add("insert");
             return 42;
         }
 
         @Override
         public void insertPhoto(long reportId, int seq, NewReport.Photo p) {
+            steps.add("photo");
         }
 
         @Override
@@ -60,6 +64,7 @@ class ReportPhotoLabelTests {
             if (labelFails) {
                 throw new DataAccessResourceFailureException("DB 끊김");
             }
+            steps.add("label");
             labels.add(reportId + ":" + label);
         }
     }
@@ -118,5 +123,53 @@ class ReportPhotoLabelTests {
         assertFalse(ReportRepository.PHOTO_DUE.contains("photo_label"));
         assertFalse(ReportRepository.ROW_DUE.contains("photo_label"));
         assertEquals(ReportRepository.stillKept(0, false), ReportRepository.stillKept(0));
+    }
+
+    /** 트랜잭션 시작·끝만 적어 두는 가짜 */
+    static org.springframework.transaction.PlatformTransactionManager fakeTx(List<String> steps) {
+        return new org.springframework.transaction.support.AbstractPlatformTransactionManager() {
+            @Override
+            protected Object doGetTransaction() {
+                return new Object();
+            }
+
+            @Override
+            protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition d) {
+                steps.add("begin");
+            }
+
+            @Override
+            protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus s) {
+                steps.add("commit");
+            }
+
+            @Override
+            protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus s) {
+                steps.add("rollback");
+            }
+        };
+    }
+
+    @Test
+    void photoIsJudgedAfterReportIsCommitted() throws IOException {
+        // 사진 판단은 DB 트랜잭션이 끝난 뒤에 (판단이 오래 걸려도 DB 연결을 붙잡지 않게, 2026-11-23)
+        FakeRepo repo = new FakeRepo();
+        ReportService s = new ReportService(repo, new ReporterHash(""), model, fakeTx(repo.steps));
+        s.create(report("obstacle", PhotoClassifierTests.jpg(Color.RED, 300, 300)), null);
+        assertEquals(List.of("begin", "insert", "photo", "commit", "label"), repo.steps);
+    }
+
+    @Test
+    void outOfMemoryWhileJudgingKeepsReport() throws IOException {
+        // 아주 큰 사진을 풀다가 메모리가 모자라도 신고는 이미 저장(commit)돼 있고 답도 정상
+        FakeRepo repo = new FakeRepo();
+        PhotoClassifier broken = org.mockito.Mockito.mock(PhotoClassifier.class);
+        org.mockito.Mockito.when(broken.ready()).thenReturn(true);
+        org.mockito.Mockito.when(broken.vehicleLabel(org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new OutOfMemoryError("Java heap space"));
+        ReportService s = new ReportService(repo, new ReporterHash(""), broken, fakeTx(repo.steps));
+        ReportCreated c = s.create(report("obstacle", PhotoClassifierTests.jpg(Color.RED, 300, 300)), null);
+        assertEquals(42, c.id());
+        assertEquals(List.of("begin", "insert", "photo", "commit"), repo.steps);
     }
 }

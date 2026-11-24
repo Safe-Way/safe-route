@@ -1047,6 +1047,11 @@ public class AssistantTools {
         } catch (DataAccessException e) {
             log.warn("비서 저장 실패 ({}): {}", p.tool(), e.getMostSpecificCause().getMessage());
             return "지금은 저장이 안 돼요. 잠시 뒤에 다시 말씀해 주세요.";
+        } catch (java.time.format.DateTimeParseException | ClassCastException e) {
+            // 저장할 값은 앱이 돌려준 conversationId 안에 들어 있다. 서버가 만든 값이면 늘 맞지만,
+            // 누가 고쳐 보낸 값(날짜가 아닌 글자, 목록 자리에 글자 등)이면 500 대신 다시 말해 달라고 한다 (2026-11-23)
+            log.warn("비서 저장 값이 맞지 않음 ({}): {}", p.tool(), e.getClass().getSimpleName());
+            return "저장할 내용을 알아듣지 못했어요. 처음부터 다시 말씀해 주세요.";
         }
     }
 

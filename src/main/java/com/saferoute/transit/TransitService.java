@@ -392,7 +392,8 @@ public class TransitService {
         private final Map<String, Optional<RouteResult.Route>> walks = new HashMap<>();
 
         Lookups(String guestId, String rain) {
-            this.guestId = guestId == null || guestId.isBlank() ? null : guestId;
+            // 게스트 칸은 대소문자 구별 (V38)
+            this.guestId = guestId == null || guestId.isBlank() ? null : guestId.strip().toLowerCase(Locale.ROOT);
             this.rain = rain;
         }
 

@@ -12,6 +12,9 @@
 #   DATA_GO_KR_KEY                                날씨(기상청), 미세먼지(에어코리아)
 #   REPORT_HASH_SECRET                            (선택) 같은 사람 신고를 한 명으로 세는 해시 비밀값
 #
+# Repository variables (같은 화면의 Variables 탭, 비밀값이 아닌 설정):
+#   APP_DOWNLOAD_URL                              (선택) 앱 업데이트 창 [업데이트] 버튼이 여는 주소. 비면 창이 안 뜬다
+#
 # 순서: (CI 테스트 통과) → secrets 확인 → 코드 받기 → jar 빌드 → 도커 이미지 빌드·압축 → 환경변수 파일 만들기
 #       → 서버로 올리기(scp) → 서버에서 deploy.sh 실행(앱 두 대 한 대씩 교체)
 name: Deploy
@@ -52,6 +55,10 @@ jobs:
       ODSAY_API_KEY: ${{ secrets.ODSAY_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       REPORT_HASH_SECRET: ${{ secrets.REPORT_HASH_SECRET }}
+      # 공개 배포 준비 (2026-11-23): 저장소 Variables(비밀 아님)로 켜고 끔. 비어 있으면 아래 기본값
+      GUEST_AUTH_ENFORCE: ${{ vars.GUEST_AUTH_ENFORCE }}
+      RATE_LIMIT_ENABLED: ${{ vars.RATE_LIMIT_ENABLED }}
+      APP_DOWNLOAD_URL: ${{ vars.APP_DOWNLOAD_URL }}
     steps:
       # 꼭 필요한 secret이 하나라도 비어 있으면 이름을 알려 주고 멈춘다(서버에 반쯤 올라가는 것을 막는다)
       - name: secrets 확인
@@ -103,19 +110,26 @@ jobs:
           put DB_URL "jdbc:mysql://${DB_ADDRESS}:${DB_PORT}/${DB_NAME}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
           put DB_USERNAME "$DB_USERNAME"
           put DB_PASSWORD "$DB_PASSWORD"
+          # 앱이 뜰 때 db/flyway 의 새 V 파일을 학교 DB에 적용한다. 처음 한 번은 36으로 baseline 표시만 (2026-11-23)
+          put FLYWAY_ENABLED "true"
           put KAKAO_REST_KEY "$KAKAO_REST_KEY"
           put DATA_GO_KR_KEY "$DATA_GO_KR_KEY"
           put ODSAY_API_KEY "$ODSAY_API_KEY"
           put GEMINI_API_KEY "$GEMINI_API_KEY"
           # 신고한 사람 해시용 비밀값 (비어 있으면 앱은 그대로 돌고 reporter_hash 만 비어 있음)
           put REPORT_HASH_SECRET "$REPORT_HASH_SECRET"
+          # 게스트 본인 확인(앱이 토큰을 보내기 전까지 false)·요청 제한. 저장소 Variables 에서 바꿈
+          put GUEST_AUTH_ENFORCE "${GUEST_AUTH_ENFORCE:-false}"
+          put RATE_LIMIT_ENABLED "${RATE_LIMIT_ENABLED:-true}"
+          # 앱 업데이트 창의 내려받을 주소 (GET /api/app/version의 downloadUrl). 비어 있으면 업데이트 창이 뜨지 않는다
+          put APP_DOWNLOAD_URL "$APP_DOWNLOAD_URL"
           # 서버 코드가 쓰지 않는 키(데이터 적재 스크립트용). application.yml이 이름을 가리키고 있어 빈 값으로 둔다
           for name in SAFEMAP_KEY SAFETYDATA_POLICE_KEY SAFETYDATA_SECURITYLIGHT_KEY SAFETYDATA_COLDSHELTER_KEY \
                       SAFETYDATA_STREETLIGHT_KEY TMAP_APP_KEY; do
             put "$name" ""
           done
 
-      # 서버에 ~/safe-route 폴더를 만들고 이미지·환경변수·deploy.sh를 올린다.
+      # 서버에 ~/safe-route 폴더를 만들고 이미지·환경변수·deploy.sh·backup_db.sh(DB 자동 백업, docs/backup.md)를 올린다.
       # 서버가 비밀번호 로그인이라 sshpass를 쓴다. StrictHostKeyChecking=accept-new: 처음 보는 서버 키는 받아 두고, 바뀌면 멈춘다
       - name: 서버로 올리기
         run: |
@@ -125,7 +139,7 @@ jobs:
           sshpass -e ssh "${opts[@]}" -p "$SSH_PORT" "$SSH_ID@$SSH_ADDRESS" \
             'mkdir -p ~/safe-route && chmod 700 ~/safe-route'
           sshpass -e scp -p "${opts[@]}" -P "$SSH_PORT" \
-            "$RUNNER_TEMP/image.tar.gz" "$RUNNER_TEMP/app.env" deploy/deploy.sh \
+            "$RUNNER_TEMP/image.tar.gz" "$RUNNER_TEMP/app.env" deploy/deploy.sh deploy/backup_db.sh \
             "$SSH_ID@$SSH_ADDRESS:safe-route/"
 
       # 서버에서 deploy.sh를 실행한다. 앱 두 대를 한 대씩 바꾸고, 다 되면 "배포 완료"를 찍는다.

@@ -37,7 +37,8 @@ public class ReporterHash {
         if (!ready() || guestId == null) {
             return null;
         }
-        String g = guestId.trim();
+        // 다른 창구와 같은 사람으로 세게 소문자로 맞춘다 (게스트 칸은 대소문자 구별, V38)
+        String g = guestId.trim().toLowerCase(java.util.Locale.ROOT);
         if (g.isEmpty() || g.length() > MAX_GUEST_ID) {
             return null;
         }
