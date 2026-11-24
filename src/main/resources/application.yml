@@ -108,6 +108,40 @@ app-update:
   message: ${APP_UPDATE_MESSAGE:새 버전이 나왔어요. 업데이트하고 더 안전한 길을 안내받으세요.}
   download-url: ${APP_DOWNLOAD_URL:}
 
+# 게스트 본인 확인 (2026-11-23, 공개 배포 준비 1-1, com.saferoute.guest.GuestAuthFilter).
+# 앱이 X-Guest-Id·X-Guest-Token 헤더를 보내면 그 번호로 처음 온 토큰을 등록하고 다음부터 같은지 본다(guest_token 037).
+# false 인 동안은 토큰 없는 요청도 받는다. 앱이 토큰을 보내는 버전으로 바뀐 뒤 true로 바꾼다. 틀린 토큰은 언제나 막는다.
+guest-auth:
+  enforce: ${GUEST_AUTH_ENFORCE:false}
+
+# /api 요청 수 제한 (공개 배포 준비 1-2, com.saferoute.guest.RateLimitFilter). 서버 한 대 안에서 센다.
+# 게스트 번호(없으면 IP)마다 세고, 번호를 바꿔 가며 부르는 것을 막으려고 IP마다 넉넉한 상한을 따로 둔다.
+rate-limit:
+  enabled: ${RATE_LIMIT_ENABLED:true}
+  per-minute: 120              # /api 전체, 게스트마다
+  ip-per-minute: 600           # /api 전체, IP마다 (통신사 NAT로 여러 사람이 한 IP일 수 있어 넉넉히)
+  assistant-per-minute: 20     # POST /api/assistant (제미나이 비용)
+  assistant-per-day: 300
+  assistant-ip-per-minute: 60
+  reports-per-hour: 10         # POST /api/reports (사진 3장·16MB까지)
+  reports-ip-per-hour: 30
+
+# 외부 API 사용량 알림 (2026-11-24). GET /api/usage 가 오늘 호출 수와 한도를 보여 주고,
+# health.yml 이 30분마다 읽어 한도의 warn-ratio 를 넘으면 GitHub 이슈(usage-high)를 연다. ODsay 한도는 transit.odsay-daily-limit
+usage:
+  # 제미나이 무료 등급의 하루 요청 수는 모델마다 다르다. 쓰는 모델·요금제에 맞춰 GEMINI_DAILY_LIMIT 로 바꾼다
+  gemini-daily-limit: ${GEMINI_DAILY_LIMIT:1000}
+  # 카카오 로컬 API 하루 무료 한도
+  kakao-daily-limit: ${KAKAO_DAILY_LIMIT:100000}
+  warn-ratio: ${USAGE_WARN_RATIO:0.8}
+
+# 매일 기록 정리 (me/RecordCleanup, 새벽 4시 40분). 기간은 날짜 수
+records:
+  unmet-days: 90
+  guest-days: 365
+  odsay-days: 30
+  api-days: 90
+
 # 느린 쿼리 로그 (2026-11-23). 학교 MySQL의 slow log(2초)는 공용 서버 파일이라 우리가 못 읽어서, 앱이 직접 남긴다.
 # 이 시간(ms)보다 오래 걸린 SQL을 WARN으로 남긴다 (값은 안 남김: 게스트 번호·위치가 들어 있다). 0이면 끈다
 db:

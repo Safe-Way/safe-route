@@ -879,7 +879,7 @@ CREATE TABLE IF NOT EXISTS road_report (
     geom        POINT        NOT NULL SRID 0 COMMENT 'POINT(경도, 위도), 다른 표와 같음',
     accuracy_m  SMALLINT     NULL     COMMENT '올릴 때 GPS 정확도 (m)',
     edge_id     BIGINT       NULL     COMMENT '가장 가까운 길 road_edge.id (나중에 경로에 반영할 때 씀, 비어도 됨)',
-    status      VARCHAR(10)  NOT NULL DEFAULT 'open' COMMENT 'open 지도에 보임, confirmed 확인됨, hidden 숨김(잘못 올림·얼굴·차량 번호)',
+    status      VARCHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'open' COMMENT 'open 지도에 보임, confirmed 확인됨, hidden 숨김(잘못 올림·얼굴·차량 번호)',
     reporter_hash CHAR(64)   NULL     COMMENT '같은 사람 판단용: HMAC-SHA256(서버 비밀값, 게스트 번호) 16진수. 원래 번호는 저장 안 함, 없으면 NULL (033)',
     photo_label VARCHAR(20)  NULL     COMMENT '신고 사진 분류 결과 (036): vehicle 차·오토바이 → 막는 물건이면 3시간만. 모르면 NULL',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '올린 시각 (학교 DB는 한국 시각)',
@@ -906,7 +906,7 @@ CREATE TABLE IF NOT EXISTS road_report_photo (
 -- 길안내 때 잰 걸음 속도로 도착 시간을 그 사람 기준으로 계산한다. 게스트 번호(UUID)로 구분하고 속도 숫자만 둔다.
 -- 좌표·걸은 길·시각은 저장하지 않는다(위치 기록은 서버에 저장하지 않음). 측정 규칙은 migration/025_walk_profile.sql
 CREATE TABLE IF NOT EXISTS walk_profile (
-    guest_id    CHAR(36)     NOT NULL COMMENT '앱이 처음 실행 때 만든 무작위 번호(UUID). 사람을 알아볼 수 있는 값이 아님',
+    guest_id    CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '앱이 처음 실행 때 만든 무작위 번호(UUID). 사람을 알아볼 수 있는 값이 아님',
     mode        VARCHAR(20)  NOT NULL COMMENT 'adult, child, senior, wheelchair (가족이 대신 찾을 수 있어 모드마다 따로)',
     speed_m_min DECIMAL(5,1) NULL     COMMENT '지금 쓰는 걸음 속도(분당 m) = (모드 기본 속도×5 + 측정 합) ÷ (5 + 측정 수). 측정이 없으면 NULL(모드 기본값)',
     samples     SMALLINT     NOT NULL DEFAULT 0 COMMENT '지금까지 받은 측정 수',
@@ -914,13 +914,15 @@ CREATE TABLE IF NOT EXISTS walk_profile (
     moving_s    INT          NOT NULL DEFAULT 0 COMMENT '지금까지 움직인 시간 합(초, 멈춘 시간 뺌)',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (guest_id, mode)
+    PRIMARY KEY (guest_id, mode),
+    -- 모드 값 검사 (V39, 2026-11-24)
+    CONSTRAINT ck_walk_profile_mode CHECK (mode IN ('adult', 'child', 'senior', 'wheelchair'))
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '개인 보행 속도 (게스트·모드별)';
 
 -- 한 번 잰 값. 좌표와 시각 없이 거리·움직인 시간·날짜만
 CREATE TABLE IF NOT EXISTS walk_speed_sample (
     id          BIGINT       NOT NULL AUTO_INCREMENT,
-    guest_id    CHAR(36)     NOT NULL,
+    guest_id    CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     mode        VARCHAR(20)  NOT NULL,
     distance_m  INT          NOT NULL COMMENT '잰 거리 (300m 이상)',
     moving_s    INT          NOT NULL COMMENT '움직인 시간(초, 멈춘 시간 뺌)',
@@ -929,7 +931,9 @@ CREATE TABLE IF NOT EXISTS walk_speed_sample (
     PRIMARY KEY (id),
     KEY idx_walk_speed_sample_guest (guest_id, mode, id),
     CONSTRAINT fk_walk_speed_sample_profile FOREIGN KEY (guest_id, mode)
-        REFERENCES walk_profile (guest_id, mode) ON DELETE CASCADE
+        REFERENCES walk_profile (guest_id, mode) ON DELETE CASCADE,
+    -- 모드 값 검사 (V39, 2026-11-24)
+    CONSTRAINT ck_walk_speed_sample_mode CHECK (mode IN ('adult', 'child', 'senior', 'wheelchair'))
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '보행 속도 측정 (최근 20개)';
 
 -- ---------------------------------------------------------------- 길 위의 행사·돌발상황 (026)
@@ -968,7 +972,7 @@ CREATE TABLE IF NOT EXISTS road_event (
 -- 개인정보 규칙 전체는 migration/027_user_profile_trip.sql
 -- 내 정보: 비서가 매번 묻지 않아도 되는 것. 걸음 속도는 walk_profile(025)에 모드마다 따로 있다
 CREATE TABLE IF NOT EXISTS user_profile (
-    guest_id        CHAR(36)     NOT NULL COMMENT '앱이 처음 실행 때 만든 무작위 번호(UUID). walk_profile과 같은 번호',
+    guest_id        CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '앱이 처음 실행 때 만든 무작위 번호(UUID). walk_profile과 같은 번호',
     mode            VARCHAR(20)  NULL     COMMENT '평소 모드: adult, child, senior, wheelchair',
     mobility_aid    VARCHAR(20)  NULL     COMMENT '이동 보조: manual_wheelchair 수동 휠체어, power_wheelchair 전동, walker 보행기, cane 지팡이, stroller 유모차',
     stairs_ok       TINYINT      NULL     COMMENT '계단: 0 못 감, 1 몇 칸은 괜찮음, 2 괜찮음. NULL이면 모드 기준',
@@ -986,13 +990,16 @@ CREATE TABLE IF NOT EXISTS user_profile (
     consent_at      DATETIME     NULL     COMMENT '동의한 시각',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (guest_id)
+    PRIMARY KEY (guest_id),
+    -- 모드 값 검사 (V39, 2026-11-24)
+    CONSTRAINT ck_user_profile_mode CHECK (mode IN ('adult', 'child', 'senior', 'wheelchair')),
+    CONSTRAINT ck_user_profile_temp_mode CHECK (temp_mode IN ('adult', 'child', 'senior', 'wheelchair'))
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '비서가 기억하는 내 정보 (게스트별)';
 
 -- 이동 기록: 한 번 길을 찾아 출발한 것이 한 줄. 도착하거나 그만두면 결과를 채운다
 CREATE TABLE IF NOT EXISTS trip_log (
     id              BIGINT       NOT NULL AUTO_INCREMENT,
-    guest_id        CHAR(36)     NOT NULL,
+    guest_id        CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     started_on      DATE         NOT NULL COMMENT '출발한 날짜',
     weekday         TINYINT      NOT NULL COMMENT '요일 1 월 ~ 7 일',
     start_slot      TIME         NOT NULL COMMENT '출발 시간대 (30분 단위로 내림, 예 08:00, 08:30)',
@@ -1001,7 +1008,7 @@ CREATE TABLE IF NOT EXISTS trip_log (
     to_lat          DECIMAL(7,3) NOT NULL COMMENT '도착지 위도 (약 100m 단위로 반올림)',
     to_lon          DECIMAL(8,3) NOT NULL COMMENT '도착지 경도 (약 100m 단위로 반올림)',
     mode            VARCHAR(20)  NOT NULL COMMENT '그때 모드',
-    travel          VARCHAR(10)  NOT NULL COMMENT 'walk 걸어서, transit 대중교통',
+    travel          VARCHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'walk 걸어서, transit 대중교통',
     route_kind      VARCHAR(20)  NULL     COMMENT '고른 길: safe 맞춤, shortest 최단, bus, subway, bus_subway',
     by_assistant    TINYINT      NOT NULL DEFAULT 0 COMMENT '1이면 비서가 추천한 길로 출발',
     weather         VARCHAR(30)  NULL     COMMENT '출발 때 날씨 표시 (쉼표: rain, heat, cold, dust). 없으면 맑음',
@@ -1015,7 +1022,9 @@ CREATE TABLE IF NOT EXISTS trip_log (
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_trip_log_guest (guest_id, started_on),
-    CONSTRAINT fk_trip_log_profile FOREIGN KEY (guest_id) REFERENCES user_profile (guest_id) ON DELETE CASCADE
+    CONSTRAINT fk_trip_log_profile FOREIGN KEY (guest_id) REFERENCES user_profile (guest_id) ON DELETE CASCADE,
+    -- 모드 값 검사 (V39, 2026-11-24)
+    CONSTRAINT ck_trip_log_mode CHECK (mode IN ('adult', 'child', 'senior', 'wheelchair'))
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '이동 기록 (동의한 게스트만, 최근 200건)';
 
 -- 비서가 쓰는 습관 요약 ①: 같은 요일·시간대에 같은 곳을 몇 번 갔나 (3번 이상이면 "이 시간에 ○○ 가세요?" 먼저 제안)
@@ -1053,7 +1062,7 @@ FROM user_profile;
 
 -- ② 지도 시설 사전: 비서가 "장애인 화장실", "엘리베이터 육교" 같은 말을 지도 시설(poi)에 맞추는 표
 CREATE TABLE IF NOT EXISTS map_layer (
-    layer      VARCHAR(40)  NOT NULL COMMENT '시설 묶음 이름 (종류:조건). 앱·서버가 이 이름으로 주고받음',
+    layer      VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '시설 묶음 이름 (종류:조건). 앱·서버가 이 이름으로 주고받음',
     name       VARCHAR(50)  NOT NULL COMMENT '화면·비서가 쓰는 이름',
     aliases    VARCHAR(200) NULL     COMMENT '같은 뜻으로 알아들을 말 (쉼표)',
     kind       VARCHAR(20)  NOT NULL COMMENT 'poi.kind',
@@ -1084,8 +1093,8 @@ ON DUPLICATE KEY UPDATE name = VALUES(name), aliases = VALUES(aliases), kind = V
 
 -- ③ 내 지도 설정: 모드 기본에 더하거나 뺀 시설 묶음과 기간
 CREATE TABLE IF NOT EXISTS user_map_layer (
-    guest_id   CHAR(36)    NOT NULL,
-    layer      VARCHAR(40) NOT NULL COMMENT 'map_layer.layer',
+    guest_id   CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    layer      VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'map_layer.layer',
     shown      TINYINT     NOT NULL COMMENT '1 더해서 보임, 0 빼서 안 보임',
     until      DATE        NULL     COMMENT '이 날짜까지(그날 포함). NULL이면 바꿀 때까지',
     reason     VARCHAR(50) NULL     COMMENT '이유 한마디 (다리 다침 등)',
@@ -1104,8 +1113,8 @@ WHERE u.until IS NULL OR u.until >= CURDATE();
 
 -- 걷는 동안만, 마지막 한 점만. 끝나면 위치를 비우고 10분 뒤 서버가 지움. 규칙은 migration/029_guardian_share.sql
 CREATE TABLE IF NOT EXISTS guardian_share (
-    token       CHAR(32)     NOT NULL COMMENT '보호자 링크에 들어가는 무작위 32자 (서버가 만듦)',
-    guest_id    CHAR(36)     NULL     COMMENT '공유한 게스트 번호 (내 기록 지우기 때 같이 지움)',
+    token       CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '보호자 링크에 들어가는 무작위 32자 (서버가 만듦)',
+    guest_id    CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL     COMMENT '공유한 게스트 번호 (내 기록 지우기 때 같이 지움)',
     walker_name VARCHAR(30)  NULL     COMMENT '보호자 화면에 보일 이름 (예 "엄마", 사용자가 정함)',
     dest_name   VARCHAR(100) NULL     COMMENT '가는 곳 이름',
     dest_lat    DECIMAL(9,6) NULL,
@@ -1172,7 +1181,7 @@ UNION ALL SELECT 'public_toilet'      AS type, id, kind, source, source_id, name
 
 -- 데이터 출처별 적재 현황. type은 위 시설 표 이름과 같다.
 CREATE TABLE IF NOT EXISTS data_source (
-    type          VARCHAR(30)  NOT NULL COMMENT '시설 표 이름',
+    type          VARCHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '시설 표 이름',
     source        VARCHAR(20)  NOT NULL,
     title         VARCHAR(100) NOT NULL,
     api           VARCHAR(200) NOT NULL COMMENT 'API 주소 또는 파일 이름',
@@ -1310,3 +1319,20 @@ CREATE TABLE IF NOT EXISTS odsay_call_count (
     calls  INT  NOT NULL DEFAULT 0 COMMENT '그날 ODsay를 부른 수 (두 서버 합)',
     PRIMARY KEY (day)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = 'ODsay 하루 부른 수 (서버 두 대가 같이 셈)';
+
+-- 게스트 본인 확인 토큰 (037). 토큰 원문은 저장 안 함
+CREATE TABLE IF NOT EXISTS guest_token (
+    guest_id     CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '앱이 처음 실행 때 만든 무작위 번호(UUID)',
+    token_hash   CHAR(64)  NOT NULL COMMENT 'X-Guest-Token 의 SHA-256 16진수 (원문은 저장 안 함)',
+    created_at   DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '처음 등록한 시각',
+    last_used_on DATE      NULL     COMMENT '마지막으로 확인한 날짜 (하루 한 번만 고침)',
+    PRIMARY KEY (guest_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '게스트 본인 확인 토큰 (037)';
+
+-- 외부 API 하루 호출 수 (V40, 2026-11-24). 제미나이·카카오처럼 세기만 하는 것. ODsay 는 odsay_call_count
+CREATE TABLE IF NOT EXISTS api_call_count (
+    day   DATE        NOT NULL COMMENT '한국 날짜',
+    api   VARCHAR(20) NOT NULL COMMENT 'gemini, kakao',
+    calls INT         NOT NULL DEFAULT 0 COMMENT '그날 부른 수 (서버 두 대 합)',
+    PRIMARY KEY (day, api)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '외부 API 하루 호출 수 (V40)';

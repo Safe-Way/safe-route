@@ -55,6 +55,9 @@ jobs:
       ODSAY_API_KEY: ${{ secrets.ODSAY_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       REPORT_HASH_SECRET: ${{ secrets.REPORT_HASH_SECRET }}
+      # 공개 배포 준비 (2026-11-23): 저장소 Variables(비밀 아님)로 켜고 끔. 비어 있으면 아래 기본값
+      GUEST_AUTH_ENFORCE: ${{ vars.GUEST_AUTH_ENFORCE }}
+      RATE_LIMIT_ENABLED: ${{ vars.RATE_LIMIT_ENABLED }}
       APP_DOWNLOAD_URL: ${{ vars.APP_DOWNLOAD_URL }}
     steps:
       # 꼭 필요한 secret이 하나라도 비어 있으면 이름을 알려 주고 멈춘다(서버에 반쯤 올라가는 것을 막는다)
@@ -115,6 +118,9 @@ jobs:
           put GEMINI_API_KEY "$GEMINI_API_KEY"
           # 신고한 사람 해시용 비밀값 (비어 있으면 앱은 그대로 돌고 reporter_hash 만 비어 있음)
           put REPORT_HASH_SECRET "$REPORT_HASH_SECRET"
+          # 게스트 본인 확인(앱이 토큰을 보내기 전까지 false)·요청 제한. 저장소 Variables 에서 바꿈
+          put GUEST_AUTH_ENFORCE "${GUEST_AUTH_ENFORCE:-false}"
+          put RATE_LIMIT_ENABLED "${RATE_LIMIT_ENABLED:-true}"
           # 앱 업데이트 창의 내려받을 주소 (GET /api/app/version의 downloadUrl). 비어 있으면 업데이트 창이 뜨지 않는다
           put APP_DOWNLOAD_URL "$APP_DOWNLOAD_URL"
           # 서버 코드가 쓰지 않는 키(데이터 적재 스크립트용). application.yml이 이름을 가리키고 있어 빈 값으로 둔다

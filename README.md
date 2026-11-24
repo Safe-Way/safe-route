@@ -341,6 +341,10 @@ python3 scripts/review_reports.py             # 새 신고·사진 확인, --hid
 
 앱·서버 연결 검사: 앱 저장소 [safe-route-android](https://github.com/Safe-Way/safe-route-android)의 `contract.yml`이 매일 오전 9시 10분에 운영 서버 응답 11개를 받아 앱 코드로 읽어 봅니다. 앱이 읽는 이름(약 150개)이 빠지거나 값이 이상하면 `contract-broken` 이슈가 열립니다.
 
+외부 API 사용량: `GET /api/usage`가 오늘 제미나이·카카오·ODsay 호출 수(서버 두 대 합)와 하루 한도를 보여 줍니다. `health.yml`이 30분마다 읽어 한도의 80%를 넘으면 `usage-high` 이슈를 열고, 내려가면 닫습니다. 한도는 `GEMINI_DAILY_LIMIT`(기본 1000)·`KAKAO_DAILY_LIMIT`(기본 100000)·`transit.odsay-daily-limit`(30)로 맞춥니다.
+
+매일 기록 정리(새벽 4시 40분, `me/RecordCleanup`): 비서가 못 한 요청 90일, 1년 동안 안 쓴 게스트(토큰 마지막 확인 기준, "내 기록 지우기"와 같은 코드), ODsay 호출 수 30일, API 호출 수 90일이 지나면 지웁니다. 신고는 4시 30분 정리(결정 59)가 따로 합니다.
+
 DB 백업: 서버 cron이 매일 03:30 사람 기록 표, 매주 일요일 04:10 전체를 `~/safe-route/backup/`에 뜬다(`deploy/backup_db.sh`). 주 1회 노트북으로 복사(`scripts/pull_backup.sh`), 한 달에 한 번 되살려 보기(`scripts/check_backup.sh`). 자세히는 [docs/backup.md](docs/backup.md).
 
 ## 진행 상황

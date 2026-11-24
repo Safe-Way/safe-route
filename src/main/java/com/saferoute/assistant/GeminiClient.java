@@ -57,8 +57,10 @@ public class GeminiClient {
     @Autowired
     public GeminiClient(@Value("${api-keys.gemini:}") String key,
             @Value("${assistant.gemini-model:}") String model,
-            @Value("${assistant.timeout-ms:6000}") int timeoutMs) {
-        this(RestClient.builder().requestFactory(timeoutFactory(timeoutMs)), key, model, timeoutMs);
+            @Value("${assistant.timeout-ms:6000}") int timeoutMs, com.saferoute.common.ApiUsage usage) {
+        // 하루 호출 수를 센다 (api_call_count, 사용량 알림 2026-11-24). 모델을 바꿔 다시 묻는 것도 한 번씩
+        this(RestClient.builder().requestFactory(timeoutFactory(timeoutMs)).requestInterceptor(usage.counter("gemini")),
+                key, model, timeoutMs);
     }
 
     /** 테스트에서 가짜 제미나이 서버를 붙일 때 쓴다 */
