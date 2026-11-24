@@ -15,14 +15,14 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else 'docs/erd/safe_route_full_erd.png'
 
 
 def read_schema(path):
-    """표마다 칸 [이름, 자료형, 설명, NULL 허용], PK, 인덱스 [(종류, 이름, 칸들)]"""
+    """표마다 칸 [이름, 자료형, 설명, NULL 허용], PK, 인덱스 [(종류, 이름, 칸들)], CHECK {칸: 값 수}"""
     src = open(path, encoding='utf-8').read()
     src = re.sub(r'/\*.*?\*/', '', src, flags=re.S)
     tables = {}
     for m in re.finditer(r'CREATE TABLE (?:IF NOT EXISTS )?`?(\w+)`?\s*\((.*?)\)\s*(?:ENGINE|COMMENT|DEFAULT|;)', src, re.S | re.I):
         name, body = m.group(1), m.group(2)
         lines = [re.sub(r'\s*--.*$', '', l.strip()) for l in body.split('\n')]
-        cols, pk, idx = [], [], []
+        cols, pk, idx, chk = [], [], [], {}
         for l in lines:
             if not l: continue
             mm = re.match(r'PRIMARY KEY\s*\(([^)]*)\)', l, re.I)
@@ -35,14 +35,18 @@ def read_schema(path):
                 idx.append(({'UNIQUE': 'UQ', 'SPATIAL': 'SP', 'FULLTEXT': 'FT'}.get(k, 'IX'), mm.group(2),
                             [c.strip(' `') for c in re.split(r',(?![^(]*\))', l[mm.end():j - 1])]))
                 continue
+            mm = re.search(r'CHECK\s*\(\s*`?(\w+)`?\s+IN\s*\(([^)]*)\)', l, re.I)
+            if mm: chk[mm.group(1)] = len(mm.group(2).split(',')); continue
             if re.match(r'(CONSTRAINT|FOREIGN|CHECK)\b', l, re.I): continue
             mm = re.match(r'`?(\w+)`?\s+([A-Za-z]+(?:\([^)]*\))?)', l)
             if not mm or mm.group(1).upper() in ('WHEN', 'REFERENCES', 'END', 'CASE'): continue
             c, t = mm.group(1), mm.group(2)
             cm = re.search(r"COMMENT\s+'((?:[^']|'')*)'", l)
             if 'PRIMARY KEY' in l.upper(): pk.append(c)
+            # 영문·숫자만 담는 칸 (V38·V41): 대소문자를 구별하고 한 글자 1바이트
+            if re.search(r'CHARACTER SET ascii', l, re.I): t += ' ascii'
             cols.append([c, t.lower(), (cm.group(1) if cm else ''), 'NOT NULL' not in l.upper()])
-        tables[name] = {'cols': cols, 'pk': pk, 'idx': idx}
+        tables[name] = {'cols': cols, 'pk': pk, 'idx': idx, 'chk': chk}
     m = re.search(r'CREATE TABLE (?:IF NOT EXISTS )?(\w+) LIKE (\w+)', src)
     for m in re.finditer(r'CREATE TABLE (?:IF NOT EXISTS )?`?(\w+)`? LIKE `?(\w+)`?', src):
         tables[m.group(1)] = dict(tables[m.group(2)], like=m.group(2))
@@ -124,6 +128,7 @@ D = {
  'loaded_count':'넣은 건수','skipped_count':'뺀 건수','complete':'다 받았는지','loaded_at':'넣은 시각',
  'keywords':'찾는 말','body':'설명 글','material':'재질','bicycle':'자전거도로 함께','made_on':'원본 갱신일',
  'left_ratio':'왼쪽 인도 비율','right_ratio':'오른쪽 인도 비율','side':'인도 있는 쪽','calls':'부른 수',
+ 'token_hash':'토큰 해시(SHA-256)','last_used_on':'마지막 확인 날짜',
 }
 O = {
  ('road_node','id'):'점 번호(OSM)', ('road_node_excluded','id'):'점 번호(OSM)', ('road_edge','id'):'길 구간 번호',
@@ -144,6 +149,7 @@ O = {
  ('road_edge_excluded','reason'):'뺀 이유', ('road_node_excluded','reason'):'뺀 이유', ('user_map_layer','reason'):'이유',
  ('edge_stat','curb'):'건너는 곳 보도턱', ('subway_entrance','wheelchair'):'휠체어 출입',
  ('region_density','kind'):'시설 종류', ('edge_stat','edge_id'):'길 구간 번호', ('road_report','edge_id'):'가까운 길 구간',
+ ('guest_token','created_at'):'처음 등록 시각', ('api_call_count','api'):'API 이름', ('api_call_count','day'):'날짜(한국)',
 }
 def logical(t, c): return O.get((t, c)) or D.get(c, c)
 
@@ -176,6 +182,7 @@ DESC = {
  'subway_timetable':'열차 시간표','subway_transfer':'역사별 환승','subway_exit_bus':'출구별 연계 버스',
  'subway_exit_place':'출구별 주변 장소','bus_stop':'버스 정류장','bus_line':'버스 노선','lowfloor_bus':'저상버스',
  'odsay_call_count':'ODsay 하루 부른 수','assistant_unmet':'비서가 못 한 요청','assistant_knowledge':'비서 지식 조각',
+ 'guest_token':'게스트 본인 확인 토큰 (V37)','api_call_count':'외부 API 하루 부른 수 (V40)',
 }
 COMMON = ['id','kind','source','source_id','name','address','sido_code','sgg_code','lon','lat','geom','attrs']
 FAC = ['streetlight','security_light','cctv','police','emergency_bell','convenience_store','child_safety_house',
@@ -186,18 +193,18 @@ COLS = [
  ['edge_stat','edge_stat_excluded','edge_sidewalk','sidewalk','admin_area','region_density'],
  ['road_node','road_edge','road_node_excluded','road_edge_excluded'],
  ['edge_poi','poi','road_report','road_report_photo','road_event'],
- ['user_profile','walk_profile','walk_speed_sample','trip_log','user_map_layer','map_layer','guardian_share'],
+ ['user_profile','walk_profile','walk_speed_sample','trip_log','user_map_layer','map_layer','guardian_share','guest_token'],
  ['subway_station','subway_entrance','subway_timetable','subway_transfer','subway_exit_bus','subway_exit_place'],
- ['bus_stop','bus_line','lowfloor_bus','odsay_call_count','assistant_unmet','assistant_knowledge','holiday'],
+ ['bus_stop','bus_line','lowfloor_bus','odsay_call_count','api_call_count','assistant_unmet','assistant_knowledge','holiday'],
 ]
 GROUP = {t: 'fac' for t in FAC + ['__common__', 'facility_unlocated', 'data_source']}
 GROUP.update({t: 'road' for t in ['road_node','road_edge','road_node_excluded','road_edge_excluded','edge_stat','edge_stat_excluded',
               'edge_sidewalk','sidewalk','admin_area','region_density','edge_poi','poi']})
 GROUP.update({t: 'rep' for t in ['road_report','road_report_photo','road_event']})
-GROUP.update({t: 'user' for t in ['user_profile','walk_profile','walk_speed_sample','trip_log','user_map_layer','map_layer','guardian_share']})
+GROUP.update({t: 'user' for t in ['user_profile','walk_profile','walk_speed_sample','trip_log','user_map_layer','map_layer','guardian_share','guest_token']})
 GROUP.update({t: 'tr' for t in ['subway_station','subway_entrance','subway_timetable','subway_transfer','subway_exit_bus',
               'subway_exit_place','bus_stop','bus_line','lowfloor_bus','odsay_call_count']})
-GROUP.update({t: 'etc' for t in ['assistant_unmet','assistant_knowledge','holiday']})
+GROUP.update({t: 'etc' for t in ['assistant_unmet','assistant_knowledge','holiday','api_call_count']})
 
 # (자식 표, 자식 칸들, 부모 표, 부모 칸, 실제 외래 키?). 식별/비식별·끝 표시는 schema.sql의 PK·NULL로 계산
 REL = [
@@ -210,6 +217,7 @@ REL = [
  ('walk_speed_sample',('guest_id','mode'),'walk_profile','guest_id',1),
  ('trip_log',('guest_id',),'user_profile','guest_id',1), ('user_map_layer',('guest_id',),'user_profile','guest_id',1),
  ('user_map_layer',('layer',),'map_layer','layer',0), ('guardian_share',('guest_id',),'user_profile','guest_id',0),
+ ('guest_token',('guest_id',),'user_profile','guest_id',0),
  ('subway_entrance',('station_id',),'subway_station','station_id',0),
 ]
 def nullable(t, c): return any(x[0] == c and x[3] for x in T[t]['cols'])
@@ -222,13 +230,13 @@ def rel_kind(child, cols):
     return ident, child_end, parent_end
 # 칸은 NOT NULL이지만 부모 줄이 없을 수 있는 것: walk_profile(025)이 user_profile(027)보다 먼저 생겨 외래 키가 없고,
 # 첫 설정 없이 길안내만 쓴 게스트는 user_profile 줄이 없다
-PARENT_MAYBE_MISSING = {'walk_profile'}
+PARENT_MAYBE_MISSING = {'walk_profile', 'guest_token'}
 NOTE = {('poi','sources'): '← 시설 원본 표들', ('facility_unlocated','tbl'): '어느 시설 표',
         ('road_report','reporter_hash'): 'UUID의 HMAC', ('guardian_share','token'): '서버가 만든 무작위'}
-UUID = {(t, 'guest_id') for t in ['user_profile','walk_profile','walk_speed_sample','trip_log','user_map_layer','guardian_share']}
+UUID = {(t, 'guest_id') for t in ['user_profile','walk_profile','walk_speed_sample','trip_log','user_map_layer','guardian_share','guest_token']}
 FK_SRC = {(a, c): (b, r, i == 0) for a, cs, b, _, r in REL for i, c in enumerate(cs)}
 
-def short(t): return t.split('(')[0].replace(' unsigned', '')
+def short(t): return t.split('(')[0].replace(' unsigned', '') + (' ascii' if t.endswith(' ascii') else '')
 IDX_NAME = {'UQ': '유니크', 'IX': '인덱스', 'SP': '공간', 'FT': '전문'}
 def idx_rows(t):
     """표 아래 인덱스 칸: (보일 글, 인덱스 이름, 'idx:종류', 칸 목록). PK는 따로 안 적음(PK 자체가 인덱스)"""
@@ -267,6 +275,7 @@ def rows_of(t):
             dst, real, first = FK_SRC[(t, c)]; k = (k + '+' if k else '') + ('fk' if real else 'lk')
             if first: note = '→ ' + dst
         if (t, c) in UUID: note = (note + ' · ' if note else '') + 'UUID 36글자'
+        if c in T[t].get('chk', {}): note = (note + ' · ' if note else '') + 'CHECK %d값만' % T[t]['chk'][c]
         out.append((c, short(ty), k, note))
     return out + idx_rows(t)
 
@@ -304,7 +313,7 @@ H = int(H + 30 * SC)
 img = Image.new('RGB', (W, H), '#FFFFFF'); d = ImageDraw.Draw(img)
 
 d.text((40 * SC, 28 * SC), '세잎지도 DB 전체 ERD', font=f_title, fill='#111')
-d.text((40 * SC, 66 * SC), '표 50개 · 2026-11-20 schema.sql 기준 · 실제 DB에는 외래 키 4개뿐이고 나머지는 칸 값으로 이어짐 (데이터 갱신 때 표를 통째로 다시 넣기 때문)',
+d.text((40 * SC, 66 * SC), '표 %d개 · 2026-11-24 schema.sql(Flyway V41) 기준 · ' % (len(T)) + '실제 DB에는 외래 키 4개뿐이고 나머지는 칸 값으로 이어짐 (데이터 갱신 때 표를 통째로 다시 넣기 때문)',
        font=f_leg, fill='#555')
 
 
@@ -348,9 +357,9 @@ HOW = [
                  ('solid', '#999'), ('t', '회색 선 = DB 외래 키 없이 같은 값으로만 이어짐 (진한 선 = 실제 외래 키, 칸 앞에 FK)')]),
     ('끝 표시', [('end', 'one'), ('t', '꼭 하나'), ('end', 'one_opt'), ('t', '없거나 하나'), ('end', 'many_opt'), ('t', '없거나 여러 개'),
                 ('t', '   읽는 법: 부모 쪽 끝 = 자식 한 줄이 가리키는 부모 수, 자식 쪽 끝 = 부모 한 줄에 붙는 자식 수 (세발 = 여러 개)')]),
-    ('표시', [('t', 'PK = 표에서 한 줄을 콕 집어 가리키는 칸(같은 값 두 번 없음, 그 자체로 인덱스)  ·  FK = DB가 지키는 외래 키  ·  → = 같은 값을 적어 이어 둔 칸  ·  UUID = 앱이 처음 켤 때 만든 36글자 무작위 번호(사람을 알아볼 수 없음)')]),
+    ('표시', [('t', 'PK = 표에서 한 줄을 콕 집어 가리키는 칸(같은 값 두 번 없음, 그 자체로 인덱스)  ·  FK = DB가 지키는 외래 키  ·  → = 같은 값을 적어 이어 둔 칸  ·  UUID = 앱이 처음 켤 때 만든 36글자 무작위 번호(사람을 알아볼 수 없음)  ·  CHECK = DB가 정해진 값만 받음')]),
     ('인덱스', [('t', 'UQ 유니크 = 같은 값 두 번 못 넣음 + 빨리 찾기  ·  IX 일반 = 빨리 찾기  ·  SP 공간 = 지도 범위·거리로 찾기  ·  FT 전문 = 글 속 낱말로 찾기  ·  주소(앞 20자) = 글자 앞부분만 인덱스에 넣음')]),
-    ('자료형', [('t', 'int·bigint·smallint = 정수  ·  tinyint = 작은 정수(0/1이면 예·아니오)  ·  decimal·double = 소수  ·  varchar·char = 글자  ·  date = 날짜  ·  datetime = 날짜+시각  ·  time = 시각  ·  point·linestring·geometry = 위치·선·면  ·  json·set = 여러 값 묶음  ·  mediumblob = 파일(사진)')]),
+    ('자료형', [('t', 'int·bigint·smallint = 정수  ·  tinyint = 작은 정수(0/1이면 예·아니오)  ·  decimal·double = 소수  ·  varchar·char = 글자 (뒤에 ascii = 영문·숫자만, 대소문자 구별)  ·  date = 날짜  ·  datetime = 날짜+시각  ·  time = 시각  ·  point·linestring·geometry = 위치·선·면  ·  json·set = 여러 값 묶음  ·  mediumblob = 파일(사진)')]),
 ]
 for i, (k, parts) in enumerate(HOW):
     yy = (128 + i * 22) * SC; x = 104 * SC
