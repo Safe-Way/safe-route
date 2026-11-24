@@ -102,6 +102,21 @@ class GuestTokenStoreTests {
     }
 
     @Test
+    void cleanedUpRowIsRegisteredAgain() {
+        // 1년 안 쓴 게스트 정리(RecordCleanup)가 토큰 줄을 지웠는데 메모리에는 남아 있는 경우
+        String hash = GuestTokenStore.sha256(TOKEN);
+        when(jdbc.query(anyString(), any(ResultSetExtractor.class), eq(GUEST))).thenReturn(hash, null, hash);
+        assertThat(store.check(GUEST, TOKEN)).isEqualTo(GuestTokenStore.Check.OK);
+
+        clock.now = clock.now.plusSeconds(86_400);
+        when(jdbc.update(eq("UPDATE guest_token SET last_used_on = ? WHERE guest_id = ?"), any(Object[].class)))
+                .thenReturn(0);
+        assertThat(store.check(GUEST, TOKEN)).isEqualTo(GuestTokenStore.Check.OK);
+        verify(jdbc).update("INSERT IGNORE INTO guest_token (guest_id, token_hash, last_used_on) VALUES (?, ?, ?)",
+                GUEST, hash, LocalDate.of(2026, 11, 24));
+    }
+
+    @Test
     void dbTroubleDoesNotBlock() {
         when(jdbc.query(anyString(), any(ResultSetExtractor.class), eq(GUEST)))
                 .thenThrow(new DataAccessResourceFailureException("Table 'guest_token' doesn't exist"));

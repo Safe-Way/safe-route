@@ -22,7 +22,7 @@
 **켜는 순서**
 
 1. 이 PR 배포 (`enforce=false`라 지금 앱은 그대로 동작)
-2. 학교 DB에 `037_guest_token.sql` 적용 (적용 전에는 확인을 건너뜀)
+2. 학교 DB에 guest_token 표 만들기: `db/flyway/V37__guest_token.sql`이 배포 때 Flyway로 들어감 (Flyway #315 먼저, 표가 생기기 전에는 확인을 건너뜀)
 3. 앱(D, 민수): 아래 표대로 바꾼 버전 배포
 4. 새 앱이 대부분 깔린 뒤 저장소 Settings → Variables에 `GUEST_AUTH_ENFORCE=true` → 다음 배포부터 토큰 없는 요청을 막음
 

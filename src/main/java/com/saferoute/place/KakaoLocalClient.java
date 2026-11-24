@@ -24,8 +24,9 @@ public class KakaoLocalClient {
     private final String key;
 
     @Autowired
-    public KakaoLocalClient(@Value("${api-keys.kakao-rest:}") String key) {
-        this(RestClient.builder().requestFactory(timeoutFactory()), key);
+    public KakaoLocalClient(@Value("${api-keys.kakao-rest:}") String key, com.saferoute.common.ApiUsage usage) {
+        // 하루 호출 수를 센다 (api_call_count, 사용량 알림 2026-11-24)
+        this(RestClient.builder().requestFactory(timeoutFactory()).requestInterceptor(usage.counter("kakao")), key);
     }
 
     /** 테스트에서 가짜 카카오 서버를 붙일 때 쓴다 */

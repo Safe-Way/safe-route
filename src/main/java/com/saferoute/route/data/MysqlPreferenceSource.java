@@ -37,7 +37,7 @@ public class MysqlPreferenceSource implements PreferenceSource {
                             rs.getObject("max_detour") == null ? null
                                     : ((BigDecimal) rs.getObject("max_detour")).doubleValue(),
                             rs.getObject("rest_every_m") == null ? null : rs.getInt("rest_every_m")),
-                    guestId.trim());
+                    guestId.trim().toLowerCase(java.util.Locale.ROOT)); // 게스트 칸은 대소문자 구별 (V38)
             return rows.isEmpty() ? UserPreferences.NONE : rows.get(0);
         } catch (DataAccessException e) {
             log.warn("경로 선호를 읽지 못함: {}", e.getMostSpecificCause().getMessage());

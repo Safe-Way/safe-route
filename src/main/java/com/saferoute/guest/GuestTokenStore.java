@@ -93,13 +93,17 @@ public class GuestTokenStore {
                 known = new Known(stored, today);
                 cache.put(guestId, known);
             } else if (!today.equals(known.touched())) {
-                jdbc.update("UPDATE guest_token SET last_used_on = ? WHERE guest_id = ?", today, guestId);
+                if (jdbc.update("UPDATE guest_token SET last_used_on = ? WHERE guest_id = ?", today, guestId) == 0) {
+                    // 줄이 사라졌다 (1년 안 쓴 게스트 정리 RecordCleanup, 다른 서버의 내 기록 지우기): 처음 온 사람처럼 다시 등록
+                    cache.remove(guestId);
+                    return check(guestId, token);
+                }
                 known = new Known(known.hash(), today);
                 cache.put(guestId, known);
             }
         } catch (DataAccessException e) {
             if (warned.compareAndSet(false, true)) {
-                log.warn("게스트 토큰을 확인하지 못해 건너뛰어요 (guest_token 표가 없거나 DB 오류, 037 적용 확인): {}", e.getMessage());
+                log.warn("게스트 토큰을 확인하지 못해 건너뛰어요 (guest_token 표가 없거나 DB 오류, Flyway V37 적용 확인): {}", e.getMessage());
             }
             return Check.UNAVAILABLE;
         }

@@ -33,7 +33,7 @@ import java.util.stream.Stream;
  *
  * <p>{@code guest-auth.enforce=false}(지금)인 동안은 토큰 없는 요청도 받는다. 앱이 토큰을 보내기 시작한 뒤
  * true로 바꾸면 토큰 없는 요청을 막는다. 틀린 토큰은 언제나 막는다.
- * guest_token 표가 없으면(037 적용 전) 확인을 건너뛴다.
+ * guest_token 표가 없으면(V37 적용 전) 확인을 건너뛴다.
  */
 @Component
 @Order(GuestAuthFilter.ORDER)
@@ -147,8 +147,9 @@ public class GuestAuthFilter extends OncePerRequestFilter {
         }
     }
 
+    /** 게스트 번호는 소문자로 맞춘다: DB 칸이 ascii_bin(대소문자 구별, V38)이라 대문자로 오면 다른 사람이 된다 */
     private static String clean(String s) {
-        return s == null || s.isBlank() ? null : s.strip();
+        return s == null || s.isBlank() ? null : s.strip().toLowerCase(java.util.Locale.ROOT);
     }
 
     static void write(HttpServletResponse res, int status, String code, String message) throws IOException {
