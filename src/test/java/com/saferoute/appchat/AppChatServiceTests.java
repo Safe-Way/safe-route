@@ -1,5 +1,5 @@
 package com.saferoute.appchat;
-
+//테스트에서 쓸 도구들 불러오기 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
