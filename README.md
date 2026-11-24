@@ -115,7 +115,7 @@ MySQL 8 (공간 인덱스) — 시설·도로망·길별 점수·신고·내 정
 | 앱 | Android (Kotlin, Jetpack Compose, 카카오맵 SDK) |
 | 외부 API | 카카오 로컬(장소), 기상청·에어코리아, ODsay(대중교통), 광주 버스 도착, TMAP 보행자(비교용) |
 | 도로망 | OpenStreetMap (광주 81,709구간) |
-| 배포 | GitHub Actions → Docker → 학교 서버 (`main` 머지 = 배포, 서버 상태 감시, 배포 뒤 앱·서버 연결 검사) |
+| 배포 | GitHub Actions → Docker → 학교 서버 (`main` 머지 = 배포, 서버 상태 감시) |
 | 데이터 스크립트 | Python 3 (표준 라이브러리만) |
 
 ## 데이터
@@ -215,6 +215,13 @@ cp .env.example .env
 mysql -u safe_route -p safe_route < src/main/resources/db/schema.sql
 ```
 
+**표를 바꿀 때 (Flyway, 2026-11-23부터)**
+
+- `src/main/resources/db/flyway/`에 `V37__무엇을_하는지.sql`처럼 다음 번호로 새 파일을 만들고, `schema.sql`도 같은 내용으로 고칩니다. 이미 머지된 V 파일은 고치지 않습니다.
+- main에 머지되면 배포 때 앱이 뜨면서 학교 DB에 적용합니다(`FLYWAY_ENABLED=true`는 배포에서만). 학교 DB는 처음 한 번 "36까지 적용됨"으로 표시만 합니다(001~036은 손으로 적용해 둠, `db/migration/`에 기록으로 남김).
+- 로컬은 기본이 꺼짐입니다. `.env`가 학교 DB를 가리키므로, 기능 브랜치를 띄우기만 해도 머지 전 변경이 학교 DB에 들어가는 일을 막습니다.
+- CI는 빈 MySQL에 V 파일을 차례로 적용하고, `schema.sql`이 그 결과와 같은지 `scripts/check_schema_sync.sh`로 확인합니다.
+
 ### 3. 데이터 내려받기
 
 API마다 하루 호출 한도(1,000번)가 있어서, 가로등처럼 큰 데이터는 며칠에 걸쳐 받습니다.
@@ -293,8 +300,9 @@ src/main/java/com/saferoute/
 src/main/resources/
   application.yml   설정 (키는 .env에서 읽음)
   route.yml         모드별 가중치·우회 한도
-  db/schema.sql     DB 표 전체
-  db/migration/     DB 변경 기록 (001~036)
+  db/schema.sql     DB 표 전체 (V 파일과 같게 유지, CI가 확인)
+  db/flyway/        Flyway 변경 파일 (V36__baseline = 036까지 표 전체, 새 변경은 V37__부터)
+  db/migration/     손으로 적용하던 변경 기록 (001~036)
   models/report_photo/  신고 사진 분류 모델 (model.onnx, labels.json)
 docs/
   assistant/        비서 설계 (동의 문구, 도구 고르기, 시험 질문 41개, 사용성 점검표)
@@ -317,7 +325,7 @@ python3 scripts/check_report_retention.py     # 신고 보관 규칙 시험
 python3 scripts/review_reports.py             # 새 신고·사진 확인, --hide로 숨기기
 ```
 
-앱·서버 연결 검사: 앱 저장소 [safe-route-android](https://github.com/Safe-Way/safe-route-android)의 `contract.yml`이 매일 오전 9시 10분과 이 저장소 배포 뒤(저장소 비밀값 `APP_REPO_TOKEN`이 있을 때)에 운영 서버 응답 11개를 받아 앱 코드로 읽어 봅니다. 앱이 읽는 이름(약 150개)이 빠지거나 값이 이상하면 `contract-broken` 이슈가 열립니다.
+앱·서버 연결 검사: 앱 저장소 [safe-route-android](https://github.com/Safe-Way/safe-route-android)의 `contract.yml`이 매일 오전 9시 10분에 운영 서버 응답 11개를 받아 앱 코드로 읽어 봅니다. 앱이 읽는 이름(약 150개)이 빠지거나 값이 이상하면 `contract-broken` 이슈가 열립니다.
 
 ## 진행 상황
 
@@ -332,7 +340,7 @@ python3 scripts/review_reports.py             # 새 신고·사진 확인, --hid
 - [x] 국토지리정보원 인도·1:1,000 수치지도 반영, 엘리베이터 출구 안내
 - [x] 본선 발표 ([영상·자료](docs/presentation/))
 - [x] 신고 사진 차량 판단 (MobileNetV3, v6) → 차가 막은 길은 3시간만 피하기
-- [x] 앱·서버 연결 자동 검사 (매일·배포 뒤)
+- [x] 앱·서버 연결 자동 검사 (매일 아침)
 - [ ] 인도 폭·재질로 좁은 인도 피하기 (지금은 폭을 안내에만 씀)
 - [ ] 건물 출입구·엘리베이터 위치, 경사 데이터
 - [ ] 실제 보행 약자와 함께 걷는 시험

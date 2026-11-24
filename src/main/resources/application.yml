@@ -16,6 +16,15 @@ spring:
       data-source-properties:
         # 여러 줄 INSERT를 한 번에 보내서 대량 적재를 빠르게
         rewriteBatchedStatements: true
+  flyway:
+    # DB 변경 자동 적용 (2026-11-23). 로컬 .env가 학교 DB를 가리키므로 기본은 꺼 두고, 배포(deploy.yml)에서만 켠다.
+    # 켜 두면 기능 브랜치를 로컬에서 띄우기만 해도 머지 전 변경이 학교 DB에 들어간다
+    enabled: ${FLYWAY_ENABLED:false}
+    locations: classpath:db/flyway
+    # 학교 DB는 001~036을 손으로 적용해 둔 상태: 기록 표가 없으면 "36까지 적용됨"으로 표시만 하고 37부터 적용
+    baseline-on-migrate: true
+    baseline-version: 36
+    baseline-description: manual 001-036 (db/migration)
   servlet:
     multipart:
       # 불편 신고 사진 (POST /api/reports): 한 장 5MB, 사진 3장 + 글 합쳐 16MB까지
@@ -85,9 +94,9 @@ guardian:
   public-url: ${GUARDIAN_PUBLIC_URL:https://safe-route.java21.net}
 
 # 앱 업데이트 안내 (C 파트, GET /api/app/version). 숫자는 앱 build.gradle.kts의 versionCode.
-# 새 APK를 내면 latest를 올리고, 옛 앱을 꼭 바꾸게 하려면 min도 올린다. download-url이 비면 창이 안 뜬다.
+# 번호 = 앱 CI 실행 번호(앱 #180부터 versionCode). 176 = #180 머지 빌드(e3c04ac). 새 APK를 내면 latest를 올리고, 옛 앱을 꼭 바꾸게 하려면 min도 올린다. download-url이 비면 창이 안 뜬다.
 app-update:
-  latest-version-code: ${APP_LATEST_VERSION_CODE:1}
+  latest-version-code: ${APP_LATEST_VERSION_CODE:176}
   latest-version-name: ${APP_LATEST_VERSION_NAME:1.0}
   min-version-code: ${APP_MIN_VERSION_CODE:1}
   message: ${APP_UPDATE_MESSAGE:새 버전이 나왔어요. 업데이트하고 더 안전한 길을 안내받으세요.}
