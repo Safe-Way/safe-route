@@ -50,6 +50,15 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- DB 변경 자동 적용 (2026-11-23). 학교 DB는 36으로 baseline, 37부터 db/flyway 의 V 파일을 배포 때 적용 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
         <!-- 느린 쿼리 로그: DataSource를 감싸 SQL마다 걸린 시간을 잰다 (common/SlowQueryLog) -->
         <dependency>
             <groupId>net.ttddyy</groupId>

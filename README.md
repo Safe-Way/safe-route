@@ -215,6 +215,13 @@ cp .env.example .env
 mysql -u safe_route -p safe_route < src/main/resources/db/schema.sql
 ```
 
+**표를 바꿀 때 (Flyway, 2026-11-23부터)**
+
+- `src/main/resources/db/flyway/`에 `V37__무엇을_하는지.sql`처럼 다음 번호로 새 파일을 만들고, `schema.sql`도 같은 내용으로 고칩니다. 이미 머지된 V 파일은 고치지 않습니다.
+- main에 머지되면 배포 때 앱이 뜨면서 학교 DB에 적용합니다(`FLYWAY_ENABLED=true`는 배포에서만). 학교 DB는 처음 한 번 "36까지 적용됨"으로 표시만 합니다(001~036은 손으로 적용해 둠, `db/migration/`에 기록으로 남김).
+- 로컬은 기본이 꺼짐입니다. `.env`가 학교 DB를 가리키므로, 기능 브랜치를 띄우기만 해도 머지 전 변경이 학교 DB에 들어가는 일을 막습니다.
+- CI는 빈 MySQL에 V 파일을 차례로 적용하고, `schema.sql`이 그 결과와 같은지 `scripts/check_schema_sync.sh`로 확인합니다.
+
 ### 3. 데이터 내려받기
 
 API마다 하루 호출 한도(1,000번)가 있어서, 가로등처럼 큰 데이터는 며칠에 걸쳐 받습니다.
@@ -293,8 +300,9 @@ src/main/java/com/saferoute/
 src/main/resources/
   application.yml   설정 (키는 .env에서 읽음)
   route.yml         모드별 가중치·우회 한도
-  db/schema.sql     DB 표 전체
-  db/migration/     DB 변경 기록 (001~036)
+  db/schema.sql     DB 표 전체 (V 파일과 같게 유지, CI가 확인)
+  db/flyway/        Flyway 변경 파일 (V36__baseline = 036까지 표 전체, 새 변경은 V37__부터)
+  db/migration/     손으로 적용하던 변경 기록 (001~036)
   models/report_photo/  신고 사진 분류 모델 (model.onnx, labels.json)
 docs/
   assistant/        비서 설계 (동의 문구, 도구 고르기, 시험 질문 41개, 사용성 점검표)
@@ -332,6 +340,10 @@ python3 scripts/review_reports.py             # 새 신고·사진 확인, --hid
 ```
 
 앱·서버 연결 검사: 앱 저장소 [safe-route-android](https://github.com/Safe-Way/safe-route-android)의 `contract.yml`이 매일 오전 9시 10분에 운영 서버 응답 11개를 받아 앱 코드로 읽어 봅니다. 앱이 읽는 이름(약 150개)이 빠지거나 값이 이상하면 `contract-broken` 이슈가 열립니다.
+
+외부 API 사용량: `GET /api/usage`가 오늘 제미나이·카카오·ODsay 호출 수(서버 두 대 합)와 하루 한도를 보여 줍니다. `health.yml`이 30분마다 읽어 한도의 80%를 넘으면 `usage-high` 이슈를 열고, 내려가면 닫습니다. 한도는 `GEMINI_DAILY_LIMIT`(기본 1000)·`KAKAO_DAILY_LIMIT`(기본 100000)·`transit.odsay-daily-limit`(30)로 맞춥니다.
+
+매일 기록 정리(새벽 4시 40분, `me/RecordCleanup`): 비서가 못 한 요청 90일, 1년 동안 안 쓴 게스트(토큰 마지막 확인 기준, "내 기록 지우기"와 같은 코드), ODsay 호출 수 30일, API 호출 수 90일이 지나면 지웁니다. 신고는 4시 30분 정리(결정 59)가 따로 합니다.
 
 DB 백업: 서버 cron이 매일 03:30 사람 기록 표, 매주 일요일 04:10 전체를 `~/safe-route/backup/`에 뜬다(`deploy/backup_db.sh`). 주 1회 노트북으로 복사(`scripts/pull_backup.sh`), 한 달에 한 번 되살려 보기(`scripts/check_backup.sh`). 자세히는 [docs/backup.md](docs/backup.md).
 
