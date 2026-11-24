@@ -879,7 +879,7 @@ CREATE TABLE IF NOT EXISTS road_report (
     geom        POINT        NOT NULL SRID 0 COMMENT 'POINT(경도, 위도), 다른 표와 같음',
     accuracy_m  SMALLINT     NULL     COMMENT '올릴 때 GPS 정확도 (m)',
     edge_id     BIGINT       NULL     COMMENT '가장 가까운 길 road_edge.id (나중에 경로에 반영할 때 씀, 비어도 됨)',
-    status      VARCHAR(10)  NOT NULL DEFAULT 'open' COMMENT 'open 지도에 보임, confirmed 확인됨, hidden 숨김(잘못 올림·얼굴·차량 번호)',
+    status      VARCHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'open' COMMENT 'open 지도에 보임, confirmed 확인됨, hidden 숨김(잘못 올림·얼굴·차량 번호)',
     reporter_hash CHAR(64)   NULL     COMMENT '같은 사람 판단용: HMAC-SHA256(서버 비밀값, 게스트 번호) 16진수. 원래 번호는 저장 안 함, 없으면 NULL (033)',
     photo_label VARCHAR(20)  NULL     COMMENT '신고 사진 분류 결과 (036): vehicle 차·오토바이 → 막는 물건이면 3시간만. 모르면 NULL',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '올린 시각 (학교 DB는 한국 시각)',
@@ -1008,7 +1008,7 @@ CREATE TABLE IF NOT EXISTS trip_log (
     to_lat          DECIMAL(7,3) NOT NULL COMMENT '도착지 위도 (약 100m 단위로 반올림)',
     to_lon          DECIMAL(8,3) NOT NULL COMMENT '도착지 경도 (약 100m 단위로 반올림)',
     mode            VARCHAR(20)  NOT NULL COMMENT '그때 모드',
-    travel          VARCHAR(10)  NOT NULL COMMENT 'walk 걸어서, transit 대중교통',
+    travel          VARCHAR(10) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'walk 걸어서, transit 대중교통',
     route_kind      VARCHAR(20)  NULL     COMMENT '고른 길: safe 맞춤, shortest 최단, bus, subway, bus_subway',
     by_assistant    TINYINT      NOT NULL DEFAULT 0 COMMENT '1이면 비서가 추천한 길로 출발',
     weather         VARCHAR(30)  NULL     COMMENT '출발 때 날씨 표시 (쉼표: rain, heat, cold, dust). 없으면 맑음',
@@ -1062,7 +1062,7 @@ FROM user_profile;
 
 -- ② 지도 시설 사전: 비서가 "장애인 화장실", "엘리베이터 육교" 같은 말을 지도 시설(poi)에 맞추는 표
 CREATE TABLE IF NOT EXISTS map_layer (
-    layer      VARCHAR(40)  NOT NULL COMMENT '시설 묶음 이름 (종류:조건). 앱·서버가 이 이름으로 주고받음',
+    layer      VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '시설 묶음 이름 (종류:조건). 앱·서버가 이 이름으로 주고받음',
     name       VARCHAR(50)  NOT NULL COMMENT '화면·비서가 쓰는 이름',
     aliases    VARCHAR(200) NULL     COMMENT '같은 뜻으로 알아들을 말 (쉼표)',
     kind       VARCHAR(20)  NOT NULL COMMENT 'poi.kind',
@@ -1094,7 +1094,7 @@ ON DUPLICATE KEY UPDATE name = VALUES(name), aliases = VALUES(aliases), kind = V
 -- ③ 내 지도 설정: 모드 기본에 더하거나 뺀 시설 묶음과 기간
 CREATE TABLE IF NOT EXISTS user_map_layer (
     guest_id   CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    layer      VARCHAR(40) NOT NULL COMMENT 'map_layer.layer',
+    layer      VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'map_layer.layer',
     shown      TINYINT     NOT NULL COMMENT '1 더해서 보임, 0 빼서 안 보임',
     until      DATE        NULL     COMMENT '이 날짜까지(그날 포함). NULL이면 바꿀 때까지',
     reason     VARCHAR(50) NULL     COMMENT '이유 한마디 (다리 다침 등)',
@@ -1113,7 +1113,7 @@ WHERE u.until IS NULL OR u.until >= CURDATE();
 
 -- 걷는 동안만, 마지막 한 점만. 끝나면 위치를 비우고 10분 뒤 서버가 지움. 규칙은 migration/029_guardian_share.sql
 CREATE TABLE IF NOT EXISTS guardian_share (
-    token       CHAR(32)     NOT NULL COMMENT '보호자 링크에 들어가는 무작위 32자 (서버가 만듦)',
+    token       CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '보호자 링크에 들어가는 무작위 32자 (서버가 만듦)',
     guest_id    CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL     COMMENT '공유한 게스트 번호 (내 기록 지우기 때 같이 지움)',
     walker_name VARCHAR(30)  NULL     COMMENT '보호자 화면에 보일 이름 (예 "엄마", 사용자가 정함)',
     dest_name   VARCHAR(100) NULL     COMMENT '가는 곳 이름',
@@ -1181,7 +1181,7 @@ UNION ALL SELECT 'public_toilet'      AS type, id, kind, source, source_id, name
 
 -- 데이터 출처별 적재 현황. type은 위 시설 표 이름과 같다.
 CREATE TABLE IF NOT EXISTS data_source (
-    type          VARCHAR(30)  NOT NULL COMMENT '시설 표 이름',
+    type          VARCHAR(30) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '시설 표 이름',
     source        VARCHAR(20)  NOT NULL,
     title         VARCHAR(100) NOT NULL,
     api           VARCHAR(200) NOT NULL COMMENT 'API 주소 또는 파일 이름',
