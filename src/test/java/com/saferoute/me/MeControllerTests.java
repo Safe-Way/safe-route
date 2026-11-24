@@ -1,7 +1,12 @@
 package com.saferoute.me;
 
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -51,11 +56,24 @@ class MeControllerTests {
 
     @Test
     void patchReturnsUpdatedView() throws Exception {
-        when(repo.find(GUEST)).thenReturn(Optional.of(MeServiceTests.row(true)));
+        // 가짜 프로필의 기본값(300)과 다른 500을 보내야, 보낸 값이 저장되고 다시 읽은 값이 응답에 나오는지 가려진다
+        MeRepository.Row before = MeServiceTests.row(true);
+        MeRepository.Row after = new MeRepository.Row(before.modeNow(), before.aidNow(), before.tempActive(),
+                before.setupDone(), before.askToday(), before.mode(), before.mobilityAid(), before.stairsOk(),
+                before.maxDetour(), 500, before.preferTransit(), before.tempMode(), before.tempAid(),
+                before.tempReason(), before.tempUntil(), before.consentTrips());
+        when(repo.find(GUEST)).thenReturn(Optional.of(before));
+        doAnswer(inv -> {
+            when(repo.find(GUEST)).thenReturn(Optional.of(after));
+            return null;
+        }).when(repo).save(eq(GUEST), anyMap());
+
         mvc.perform(patch("/api/me").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"guestId\":\"" + GUEST + "\",\"restEveryM\":300,\"consentTrips\":true}"))
+                        .content("{\"guestId\":\"" + GUEST + "\",\"restEveryM\":500,\"consentTrips\":true}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.restEveryM").value(300));
+                .andExpect(jsonPath("$.restEveryM").value(500));
+        verify(repo).save(eq(GUEST), argThat(f -> Integer.valueOf(500).equals(f.get("rest_every_m"))
+                && Integer.valueOf(1).equals(f.get("consent_trips"))));
     }
 
     @Test

@@ -151,11 +151,15 @@ class RouteReportTests {
     void noReportKeepsTheSameRoute() {
         for (String mode : ALL) {
             RouteResult none = route(mode);
-            // 범위 밖 신고는 읽지 않는다
-            RouteResult far = route(mode, report("construction", new double[] {127.0, 35.2}));
-            assertThat(far.explanation()).as(mode).isEqualTo(none.explanation());
-            assertThat(far.routes()).extracting(RouteResult.Route::distanceM)
-                    .isEqualTo(none.routes().stream().map(RouteResult.Route::distanceM).toList());
+            // 범위 밖 신고(127.0, 35.2)는 가짜의 범위 필터가 먼저 거르므로, 운영 코드가 실제로 거르는지는
+            // 읽는 범위(약 2km) 안이지만 길에서 약 170m 떨어진 남쪽 신고로 본다
+            for (double[] at : List.of(new double[] {127.0, 35.2}, new double[] {126.93110, LAT - 0.0015})) {
+                RouteResult far = route(mode, report("construction", at));
+                assertThat(far.explanation()).as(mode).isEqualTo(none.explanation());
+                assertThat(far.routes()).extracting(RouteResult.Route::distanceM)
+                        .isEqualTo(none.routes().stream().map(RouteResult.Route::distanceM).toList());
+                assertThat(far.routes()).as(mode).allSatisfy(x -> assertThat(x.events()).isEmpty());
+            }
         }
     }
 
