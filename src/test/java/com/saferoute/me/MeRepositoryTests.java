@@ -11,17 +11,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.testsupport.FakeDb;
 
 /** 내 정보·다닌 기록 SQL (가짜 DB) */
+@DisplayName("내 정보·다닌 기록 SQL")
 class MeRepositoryTests {
 
     private final FakeDb db = new FakeDb();
     private final MeRepository repo = new MeRepository(db.jdbc());
 
     @Test
+    @DisplayName("내 정보를 표와 뷰에서 읽는다")
     void findReadsProfileAndView() {
         db.rows("FROM user_profile u JOIN user_profile_now", row("mode_now", "wheelchair", "aid_now", "wheelchair",
                 "temp_active", 1, "setup_done", 1, "ask_today", 0, "mode", "adult", "mobility_aid", null,
@@ -43,6 +46,7 @@ class MeRepositoryTests {
     }
 
     @Test
+    @DisplayName("없는 사람·빈 값은 빈 값으로 돌려준다")
     void findEmptyAndNullValues() {
         assertThat(repo.find("none")).isEmpty();
 
@@ -54,6 +58,7 @@ class MeRepositoryTests {
     }
 
     @Test
+    @DisplayName("허용한 칸만 저장하고, 있으면 고치고 없으면 넣는다")
     void saveOnlyAllowedColumnsAndUpserts() {
         Map<String, Object> f = new LinkedHashMap<>();
         f.put("mode", "senior");
@@ -71,6 +76,7 @@ class MeRepositoryTests {
     }
 
     @Test
+    @DisplayName("저장할 칸이 없으면 줄만 만들어 둔다")
     void saveWithNothingAllowedOnlyEnsuresRow() {
         repo.save("g1", Map.of("nope", 1));
 
@@ -79,6 +85,7 @@ class MeRepositoryTests {
     }
 
     @Test
+    @DisplayName("내 지도 시설 설정을 읽고 저장한다")
     void layers() {
         db.rows("FROM user_map_layer_now", row("layer", "cctv", "name", "CCTV", "shown", 1,
                         "until", LocalDate.of(2026, 11, 20), "reason", "밤길"),
@@ -99,12 +106,14 @@ class MeRepositoryTests {
     }
 
     @Test
+    @DisplayName("없는 지도 시설 이름은 없다고 답한다")
     void layerMissing() {
         db.rows("FROM map_layer WHERE", row("n", 0));
         assertThat(repo.layerExists("nope")).isFalse();
     }
 
     @Test
+    @DisplayName("다닌 기록: 넣기·오래된 것 정리·끝내기·읽기")
     void tripsInsertTrimEndAndRead() {
         db.generatedKey(42L).rows("COUNT(*) FROM trip_log", row("n", 7))
                 .rows("FROM trip_log WHERE guest_id = ? AND result IN", row("travel", "transit", "result", "arrived",
@@ -128,6 +137,7 @@ class MeRepositoryTests {
     }
 
     @Test
+    @DisplayName("다닌 기록을 넣고 번호를 못 받으면 0")
     void insertTripWithoutKeyIsZero() {
         assertThat(repo.insertTrip("g1", LocalDate.of(2026, 11, 16), 1, LocalTime.NOON,
                 new MeRepository.Trip("집", 35.1, 126.9, "adult", "walk", "safe", false, null, true, "피곤", null)))
@@ -135,6 +145,7 @@ class MeRepositoryTests {
     }
 
     @Test
+    @DisplayName("내 기록 지우기는 표마다 지운 줄 수를 센다")
     void deleteAllCountsEachTable() {
         db.updates("DELETE FROM trip_log", 5).updates("DELETE FROM user_map_layer", 2)
                 .updates("DELETE FROM user_profile", 1).updates("DELETE FROM walk_profile", 3)
@@ -145,6 +156,7 @@ class MeRepositoryTests {
     }
 
     @Test
+    @DisplayName("다닌 기록이 없으면 0건")
     void tripCountWhenNoRow() {
         db.rows("COUNT(*) FROM trip_log", row("n", null));
         assertThat(repo.tripCount("g1")).isZero();

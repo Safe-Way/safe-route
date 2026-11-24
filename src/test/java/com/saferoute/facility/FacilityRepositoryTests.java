@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import java.util.Set;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @SpringBootTest
 @Transactional
+@DisplayName("시설 표 SQL (실제 MySQL)")
 class FacilityRepositoryTests {
 
     private static final double LON = 125.5;
@@ -49,6 +51,7 @@ class FacilityRepositoryTests {
     }
 
     @Test
+    @DisplayName("가까운 곳을 거리순으로, 운영 상태와 함께 읽는다")
     void nearSortsByDistanceWithStatus() {
         List<Facility> found = repo.near(LAT, LON, "toilet", false, 1000);
 
@@ -61,12 +64,14 @@ class FacilityRepositoryTests {
     }
 
     @Test
+    @DisplayName("휠체어 가능한 곳만 고른다")
     void nearWheelchairOnly() {
         assertThat(repo.near(LAT, LON, "toilet", true, 1000)).extracting(Facility::name)
                 .containsExactly("시험 장애인 화장실");
     }
 
     @Test
+    @DisplayName("지도 범위에서 종류와 개수 한도로 거른다")
     void withinFiltersKindsAndLimit() {
         double w = LON - 0.01, e = LON + 0.01, s = LAT - 0.01, n = LAT + 0.01;
 
@@ -79,6 +84,7 @@ class FacilityRepositoryTests {
     }
 
     @Test
+    @DisplayName("지하철역은 엘리베이터 출구가 0개여도 남긴다")
     void subwayKeepsZeroElevatorExits() {
         jdbc.update("INSERT INTO poi (kind, name, lon, lat, geom, cnt, wheelchair, modes, detail, sources, built_at)"
                 + " VALUES ('subway', '시험역', ?, ?, ST_SRID(POINT(?, ?), 0), 0, 0, 'common', '시험역', '[]', NOW())",
@@ -92,6 +98,7 @@ class FacilityRepositoryTests {
     }
 
     @Test
+    @DisplayName("엘리베이터 = 엘리베이터 육교와 엘리베이터 출구")
     void elevatorMeansElevatorFootbridgesAndElevatorExits() {
         // 엘리베이터 육교(약 110m), 그냥 육교(약 220m), 엘리베이터 출구(약 330m), 엘리베이터 없는 출구(약 440m)
         place("footbridge", "승강기", "시험 엘리베이터 육교", 0.001, null);

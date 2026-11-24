@@ -5,11 +5,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.testsupport.FakeDb;
 
 /** 신고 저장·지도 목록·지금 유효한 신고·사진 SQL (가짜 DB로 끝까지) */
+@DisplayName("신고 저장·지도 목록·유효 신고·사진 SQL")
 class ReportRepositoryDbTests {
 
     private final FakeDb db = new FakeDb().generatedKey(7L);
@@ -20,6 +22,7 @@ class ReportRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("신고를 신고한 사람 해시와 함께 저장한다")
     void insertWithReporterHash() {
         long id = repo.insert(report(12), 99L, "voice", "abc");
 
@@ -31,6 +34,7 @@ class ReportRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("정확도·가까운 길이 없으면 빈 값, 경로는 기본값으로 저장한다")
     void insertWithoutAccuracyEdgeAndDefaultVia() {
         repo.insert(report(null), null);
 
@@ -40,6 +44,7 @@ class ReportRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("033 이전 DB면 옛 칸으로 저장한다")
     void insertFallsBackBeforeMigration033() {
         db.fails(", reporter_hash) VALUES", "Unknown column 'reporter_hash'");
 
@@ -54,6 +59,7 @@ class ReportRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("신고 사진을 넣고 읽는다")
     void photoInsertAndRead() {
         byte[] jpg = {1, 2, 3};
         repo.insertPhoto(7L, 1, new NewReport.Photo("image/jpeg", jpg));
@@ -67,6 +73,7 @@ class ReportRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("신고 위치에서 가장 가까운 길 구간을 찾는다")
     void nearestEdge() {
         assertThat(repo.nearestEdge(35.147, 126.92, 30)).isNull();
 
@@ -78,6 +85,7 @@ class ReportRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("지도 범위의 신고 목록에 사진 주소를 붙인다")
     void withinListsPhotoUrls() {
         db.rows("FROM road_report r WHERE r.status IN", row("id", 7L, "report_type", "curb", "mode", "wheelchair",
                         "memo", "턱", "lat", 35.147, "lon", 126.92, "status", "open", "created", "2026-11-16T10:00",
@@ -95,6 +103,7 @@ class ReportRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("지금 유효한 신고 지점: 피할 모드 목록을 나눠 읽는다")
     void activeSpotsSplitModes() {
         db.rows("FROM road_report_active", row("spot_id", 3L, "report_type", "steep", "lat", 35.147, "lon", 126.92,
                 "starts", "2026-11-16", "ends", "2026-12-15", "report_count", 3, "reporter_count", 2, "photo_count", 1,
@@ -109,6 +118,7 @@ class ReportRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("오래된 신고는 500개씩 나눠 지운다")
     void cleanUpDeletesInBatchesOf500() {
         Object[] many = new Object[1001];
         for (int i = 0; i < many.length; i++) {
@@ -126,6 +136,7 @@ class ReportRepositoryDbTests {
     }
 
     @Test
+    @DisplayName("모드 목록에서 빈 값은 뺀다")
     void modesIgnoresBlanks() {
         assertThat(ReportRepository.modes(null)).isEmpty();
         assertThat(ReportRepository.modes(" ")).isEmpty();

@@ -6,12 +6,15 @@ import static org.assertj.core.api.Assertions.within;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /** 적재에 쓰는 좌표 변환과 CSV 읽기 확인 (DB 없이 돈다) */
+@DisplayName("적재 도우미: 좌표 변환·CSV 읽기")
 class IngestHelpersTests {
 
     @Test
+    @DisplayName("웹 메르카토르 좌표를 경도·위도로 바꾼다")
     void mercatorToLonLat() {
         // 경찰청 본청: 재난안전데이터의 XMAP_CRTS / YMAP_CRTS 값. 서울 서대문구 미근동 근처가 나와야 한다
         double[] ll = Mercator.toLonLat(14133956.66, 4517926.194);
@@ -21,18 +24,21 @@ class IngestHelpersTests {
     }
 
     @Test
+    @DisplayName("한국 밖 좌표는 버린다")
     void outsideKoreaIsRejected() {
         assertThat(Mercator.inKorea(0, 0)).isFalse();
         assertThat(Mercator.inKorea(126.93, 35.14)).isTrue();
     }
 
     @Test
+    @DisplayName("CSV: 따옴표 안의 쉼표는 나누지 않는다")
     void csvKeepsCommasInsideQuotes() {
         List<String> f = FacilityImporter.parseCsvLine("a,\"서울특별시 종로구, 1\",,\"따옴표 \"\"안\"\"\"");
         assertThat(f).containsExactly("a", "서울특별시 종로구, 1", "", "따옴표 \"안\"");
     }
 
     @Test
+    @DisplayName("모든 데이터셋에 넣을 표가 정해져 있다")
     void everyDatasetHasItsTable() {
         // 적재 규칙의 종류 이름이 모두 실제 표 이름이어야 한다 (오타가 있으면 여기서 걸림)
         for (FacilityDataset ds : FacilityDataset.ALL) {
@@ -45,6 +51,7 @@ class IngestHelpersTests {
     }
 
     @Test
+    @DisplayName("모르는 데이터 종류는 거절한다")
     void unknownTypeIsRejected() {
         // 표 이름을 SQL에 직접 넣으므로 목록에 없는 이름은 막아야 한다
         assertThatThrownBy(() -> FacilityTable.of("facility; DROP TABLE cctv"))
@@ -52,6 +59,7 @@ class IngestHelpersTests {
     }
 
     @Test
+    @DisplayName("한파쉼터: 경도·위도 칸과 종류 이름을 쓴다")
     void coldShelterRowUsesLonLatAndKindNames() {
         // 재난안전데이터 한파쉼터 원본 한 줄 (값 일부)
         String item = """
@@ -74,6 +82,7 @@ class IngestHelpersTests {
     }
 
     @Test
+    @DisplayName("보안등 표준데이터: 등 개수와 줄 해시를 쓴다")
     void securityLightStdRowUsesCountAndRowHash() {
         // 전국보안등정보표준데이터 원본 한 줄. 원본 번호가 없어 줄 전체로 번호를 만든다
         String item = """
@@ -99,6 +108,7 @@ class IngestHelpersTests {
     }
 
     @Test
+    @DisplayName("육교: 장애인 편의 종류를 세부 종류로 둔다")
     void footbridgeRowKeepsHandicapTypeAsKind() {
         // 전국육교정보표준데이터 원본 한 줄 (값 일부). 장애인 편의시설 종류가 세부 종류가 된다
         String item = """
@@ -121,6 +131,7 @@ class IngestHelpersTests {
     }
 
     @Test
+    @DisplayName("횡단보도: 도로 이름과 두 자리 종류 코드를 쓴다")
     void crosswalkRowUsesRoadNameAndTwoDigitKind() {
         // 전국횡단보도표준데이터 원본 한 줄 (값 일부). 종류 코드 "1"은 "01"로 맞추고, 빈 칸(" ")은 attrs에서 빠진다
         String item = """
@@ -140,6 +151,7 @@ class IngestHelpersTests {
     }
 
     @Test
+    @DisplayName("어린이보호구역은 전국 CSV에서 읽는다")
     void childProtectionZoneComesFromNationalCsv() {
         // API 대신 포털 CSV(CP949)로 넣는다. 개수 칸이 없는 표라 INSERT에도 개수 칸이 없어야 한다
         FacilityImporter.RegionalCsv rc = FacilityImporter.REGIONAL.stream()
@@ -153,6 +165,7 @@ class IngestHelpersTests {
     }
 
     @Test
+    @DisplayName("넣는 SQL에 개수 칸은 그 칸이 있는 표에만 붙인다")
     void insertSqlAddsCountColumnOnlyWhereItExists() {
         assertThat(FacilityImporter.insertSql(FacilityTable.CCTV))
                 .startsWith("INSERT IGNORE INTO cctv ")

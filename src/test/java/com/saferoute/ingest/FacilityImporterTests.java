@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -18,6 +19,7 @@ import com.saferoute.testsupport.FakeDb;
 import com.saferoute.testsupport.FakeDb.Call;
 
 /** 내려받은 파일 → 시설 표 적재를 가짜 DB로 끝까지 돌려 본다 (어떤 줄이 들어가고 빠지는지, 출처 현황) */
+@DisplayName("시설 적재: 내려받은 파일 → 시설 표")
 class FacilityImporterTests {
 
     private static final Charset MS949 = Charset.forName("MS949");
@@ -56,6 +58,7 @@ class FacilityImporterTests {
     }
 
     @Test
+    @DisplayName("API 페이지에서 한국 좌표가 있는 줄만 넣는다")
     void apiPagesKeepOnlyRowsWithKoreanCoordinates() throws Exception {
         // 재난안전데이터 경찰: 메르카토르 좌표. 좌표 없는 줄·한국 밖 줄은 빠진다
         write("national/police/_total.txt", "3\n", StandardCharsets.UTF_8);
@@ -90,6 +93,7 @@ class FacilityImporterTests {
     }
 
     @Test
+    @DisplayName("번호 없는 데이터는 줄 해시를 번호로, 개수도 넣는다")
     void lonLatDatasetWithoutIdUsesRowHashAndCount() throws Exception {
         // 보안등 표준데이터: 경도·위도, 번호 칸 없음 → 줄 내용으로 번호, 설치 개수는 lamp 개수 칸
         write("national/security_light_std/_total.txt", "2500", StandardCharsets.UTF_8);
@@ -118,6 +122,7 @@ class FacilityImporterTests {
     }
 
     @Test
+    @DisplayName("종류 코드는 이름으로 바꾸고 긴 값은 자른다")
     void kindCodesBecomeNamesAndLongValuesAreCut() throws Exception {
         write("national/crosswalk/_total.txt", "1", StandardCharsets.UTF_8);
         String longName = "가".repeat(250);
@@ -132,6 +137,7 @@ class FacilityImporterTests {
     }
 
     @Test
+    @DisplayName("없는 파일은 건너뛴다")
     void missingFilesAreSkipped() throws Exception {
         run();
 
@@ -140,6 +146,7 @@ class FacilityImporterTests {
     }
 
     @Test
+    @DisplayName("전국 CCTV CSV(MS949 글자)를 읽는다")
     void nationalCctvCsvInMs949() throws Exception {
         write("national/cctv_national.csv", String.join("\n",
                 "관리번호,관리기관명,소재지도로명주소,소재지지번주소,설치목적구분,카메라대수,카메라화소수,촬영방면정보,보관일수,설치연월,관리기관전화번호,WGS84위도,WGS84경도,데이터기준일자",
@@ -165,6 +172,7 @@ class FacilityImporterTests {
     }
 
     @Test
+    @DisplayName("지역 CSV의 BOM·글자 집합을 맞춰 읽는다")
     void regionalCsvFilesWithBomAndCharset() throws Exception {
         write("regional/gwangju_cctv.csv", String.join("\n",
                 "관리기관명,소재지도로명주소,소재지지번주소,카메라대수,카메라화소,위도,경도",
@@ -191,6 +199,7 @@ class FacilityImporterTests {
     }
 
     @Test
+    @DisplayName("개수 칸은 그 칸이 있는 표에만 넣는다")
     void insertSqlAddsCountColumnOnlyForTablesWithIt() {
         assertThat(FacilityImporter.insertSql(FacilityTable.of("police")))
                 .doesNotContain("camera_count").endsWith("?, ?), 0), ?)");
