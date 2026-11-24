@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.saferoute.common.Bbox;
 import com.saferoute.common.ErrorResponse;
 
 /**
@@ -56,7 +57,7 @@ public class ReportController {
 
     @GetMapping("/api/reports")
     public ResponseEntity<ReportsResponse> list(@RequestParam(required = false) String bbox) {
-        double[] b = parseBbox(bbox);
+        double[] b = Bbox.parse(bbox);
         if (b == null) {
             throw ReportException.bad("bbox 는 서쪽경도,남쪽위도,동쪽경도,북쪽위도 네 숫자여야 해요");
         }
@@ -65,7 +66,7 @@ public class ReportController {
 
     @GetMapping("/api/reports/active")
     public ResponseEntity<ActiveSpotsResponse> active(@RequestParam(required = false) String bbox) {
-        double[] b = parseBbox(bbox);
+        double[] b = Bbox.parse(bbox);
         if (b == null) {
             throw ReportException.bad("bbox 는 서쪽경도,남쪽위도,동쪽경도,북쪽위도 네 숫자여야 해요");
         }
@@ -95,27 +96,5 @@ public class ReportController {
         log.warn("신고 DB 오류: {}", e.getMostSpecificCause().getMessage());
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(new ErrorResponse("DB_UNAVAILABLE", "잠시 후 다시 시도해 주세요"));
-    }
-
-    static double[] parseBbox(String bbox) {
-        if (bbox == null) {
-            return null;
-        }
-        String[] p = bbox.split(",");
-        if (p.length != 4) {
-            return null;
-        }
-        double[] out = new double[4];
-        try {
-            for (int i = 0; i < 4; i++) {
-                out[i] = Double.parseDouble(p[i].trim());
-                if (!Double.isFinite(out[i])) {
-                    return null;
-                }
-            }
-        } catch (NumberFormatException e) {
-            return null;
-        }
-        return out;
     }
 }

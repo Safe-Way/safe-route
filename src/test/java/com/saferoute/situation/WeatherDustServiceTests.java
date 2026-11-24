@@ -141,6 +141,21 @@ class WeatherDustServiceTests {
     }
 
     @Test
+    void oldAnswersAreForgottenWhenManyPile() {
+        when(weather.judgeNow(anyDouble(), anyDouble())).thenReturn(RAINY);
+        when(dust.judgeAt(anyDouble(), anyDouble())).thenReturn(DUSTY);
+        for (int i = 0; i < WeatherDustService.MAX_SAVED; i++) {
+            service.judge(LAT + i * 0.01, LON); // 칸마다 한 줄
+        }
+        assertThat(service.savedCount()).isEqualTo(WeatherDustService.MAX_SAVED);
+
+        clock.move(Duration.ofMinutes(11));
+        service.judge(LAT - 1, LON);
+
+        assertThat(service.savedCount()).isEqualTo(1); // 시간이 지난 500줄은 지우고 새 한 줄만
+    }
+
+    @Test
     void awaitNeverThrows() {
         assertThat(service.await(null)).isEqualTo(WeatherDust.unknown());
     }
