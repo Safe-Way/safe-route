@@ -257,6 +257,10 @@ public class AssistantService {
                 say = say.strip() + " " + Sentences.SCARED_TIP;
             }
         }
+        if (pick != null && "walk".equals(pick.type()) && t.stopPlan == null && t.plan != null) {
+            // 엔진이 길에 단 알림(출구·횡단보도 없음·좁은 인도 등)을 한두 개 (11-23)
+            say = Sentences.polish(Sentences.withNotes(say, t.plan.notes()), mode);
+        }
         if (pick != null && t.arriveBy != null && say != null) {
             say = say.strip() + " " + ArriveBy.sentence(t.arriveBy, t.now, pick.minutes(), mode);
         }
