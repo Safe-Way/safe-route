@@ -129,7 +129,7 @@ jobs:
             put "$name" ""
           done
 
-      # 서버에 ~/safe-route 폴더를 만들고 이미지·환경변수·deploy.sh를 올린다.
+      # 서버에 ~/safe-route 폴더를 만들고 이미지·환경변수·deploy.sh·backup_db.sh(DB 자동 백업, docs/backup.md)를 올린다.
       # 서버가 비밀번호 로그인이라 sshpass를 쓴다. StrictHostKeyChecking=accept-new: 처음 보는 서버 키는 받아 두고, 바뀌면 멈춘다
       - name: 서버로 올리기
         run: |
@@ -139,7 +139,7 @@ jobs:
           sshpass -e ssh "${opts[@]}" -p "$SSH_PORT" "$SSH_ID@$SSH_ADDRESS" \
             'mkdir -p ~/safe-route && chmod 700 ~/safe-route'
           sshpass -e scp -p "${opts[@]}" -P "$SSH_PORT" \
-            "$RUNNER_TEMP/image.tar.gz" "$RUNNER_TEMP/app.env" deploy/deploy.sh \
+            "$RUNNER_TEMP/image.tar.gz" "$RUNNER_TEMP/app.env" deploy/deploy.sh deploy/backup_db.sh \
             "$SSH_ID@$SSH_ADDRESS:safe-route/"
 
       # 서버에서 deploy.sh를 실행한다. 앱 두 대를 한 대씩 바꾸고, 다 되면 "배포 완료"를 찍는다.

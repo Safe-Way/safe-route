@@ -42,6 +42,9 @@ public class WeatherDustService {
     private final DustJudge dust;
     private final Clock clock;
     private final ExecutorService pool;
+    /** 이만큼 쌓이면 시간이 지난 기억을 지운다 (1km 칸 하나에 한 줄이라 광주 안이면 보통 넘지 않는다) */
+    static final int MAX_SAVED = 500;
+
     private final Map<String, Saved> saved = new ConcurrentHashMap<>();
 
     @Autowired
@@ -76,7 +79,9 @@ public class WeatherDustService {
         return w.thenCombine(d, (wr, dr) -> {
             WeatherDust v = combine(wr, dr);
             if (v.weatherAvailable() && v.dustAvailable()) { // 하나라도 못 받았으면 다음에 다시 묻는다
-                saved.put(key, new Saved(v, clock.instant()));
+                Instant at = clock.instant();
+                forgetOld(at);
+                saved.put(key, new Saved(v, at));
             }
             return v;
         }).orTimeout(WAIT.toMillis(), TimeUnit.MILLISECONDS)
@@ -108,6 +113,19 @@ public class WeatherDustService {
         boolean dOk = d != null && d.available();
         return new WeatherDust(wOk && w.rain(), wOk && w.heat(), wOk && w.cold(), wOk ? w.tempC() : null, wOk,
                 dOk && d.dustBad(), dOk);
+    }
+
+    /** 기억이 많이 쌓이면 시간이 지난 것을 지운다. 예전에는 지우지 않아 서버가 오래 켜져 있으면 계속 늘었다 */
+    private void forgetOld(Instant now) {
+        if (saved.size() < MAX_SAVED) {
+            return;
+        }
+        saved.values().removeIf(s -> !now.isBefore(s.at().plus(KEEP)));
+    }
+
+    /** 테스트용: 지금 기억하고 있는 칸 수 */
+    int savedCount() {
+        return saved.size();
     }
 
     /** 약 1km 칸으로 묶는다 */

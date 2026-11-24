@@ -345,6 +345,8 @@ python3 scripts/review_reports.py             # 새 신고·사진 확인, --hid
 
 매일 기록 정리(새벽 4시 40분, `me/RecordCleanup`): 비서가 못 한 요청 90일, 1년 동안 안 쓴 게스트(토큰 마지막 확인 기준, "내 기록 지우기"와 같은 코드), ODsay 호출 수 30일, API 호출 수 90일이 지나면 지웁니다. 신고는 4시 30분 정리(결정 59)가 따로 합니다.
 
+DB 백업: 서버 cron이 매일 03:30 사람 기록 표, 매주 일요일 04:10 전체를 `~/safe-route/backup/`에 뜬다(`deploy/backup_db.sh`). 주 1회 노트북으로 복사(`scripts/pull_backup.sh`), 한 달에 한 번 되살려 보기(`scripts/check_backup.sh`). 자세히는 [docs/backup.md](docs/backup.md).
+
 ## 진행 상황
 
 - [x] 공공데이터 수집·정제, 광주 도로망 (지하 길·광장 길 포함)
