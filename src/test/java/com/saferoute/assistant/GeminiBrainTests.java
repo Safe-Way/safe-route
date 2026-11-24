@@ -22,6 +22,8 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.web.client.match.MockRestRequestMatchers;
+import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -102,6 +104,7 @@ class GeminiBrainTests {
         GeminiBrain brain = new GeminiBrain(new GeminiClient(builder, "test-key", "gemini-test"), tools, json);
         AssistantService s = new AssistantService(new RuleBrain(tools, memory, mock(UnmetRepository.class)), brain, tools,
                 json, Clock.fixed(Instant.parse("2026-11-06T03:00:00Z"), ZoneId.of("Asia/Seoul")), 0);
+        server.expect(ExpectedCount.never(), MockRestRequestMatchers.anything()); // 기대가 없으면 verify()가 아무것도 안 본다
         AssistantReply r = s.answer(new AssistantRequest(A, "AI가 내 위치 알아?", 35.148, 126.926, null, null, null, null,
                 null, null));
         server.verify(); // 제미나이 요청 없음
@@ -178,6 +181,7 @@ class GeminiBrainTests {
     void hurtLegAsksUntilWhenWithoutGeminiThenSevenDays() {
         // 비서 점검 24·25번: 제미나이를 부르지 않고 규칙이 "언제까지?"를 묻고, "잘 모르겠어"면 일주일
         String N = "00000000-0000-4000-8000-00000000de99";
+        server.expect(ExpectedCount.never(), MockRestRequestMatchers.anything()); // 기대가 없으면 verify()가 아무것도 안 본다
         AssistantReply first = service.answer(new AssistantRequest(N, "다리를 다쳐서 휠체어 타고 다녀", 35.148, 126.926,
                 null, null, null, null, null, null));
         assertThat(first.ai()).isFalse();

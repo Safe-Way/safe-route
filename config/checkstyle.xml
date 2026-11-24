@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+<!--
+  린터 규칙 (2026-11-24). 모양 규칙은 넣지 않고, 실수로 버그가 되기 쉬운 것만 둔다.
+  지금은 경고만 낸다 (pom.xml checkstyle.failOnViolation=false).
+  규칙을 더할 때는 경고 수가 너무 늘지 않는지 ./mvnw checkstyle:check 로 먼저 본다.
+-->
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="warning"/>
+
+    <module name="TreeWalker">
+        <!-- 안 쓰는 import, import *, 같은 것 두 번 -->
+        <module name="UnusedImports"/>
+        <module name="AvoidStarImport"/>
+        <module name="RedundantImport"/>
+
+        <!-- 아무것도 안 하는 catch: 오류를 조용히 삼킨다. 일부러면 주석을 남긴다 -->
+        <module name="EmptyCatchBlock">
+            <property name="exceptionVariableName" value="ignored|expected"/>
+            <property name="commentFormat" value=".+"/>
+        </module>
+        <!-- if (x); 처럼 혼자 남은 세미콜론 -->
+        <module name="EmptyStatement"/>
+        <!-- 문자열을 == 로 비교 (내용이 아니라 주소를 비교한다) -->
+        <module name="StringLiteralEquality"/>
+        <!-- equals만 만들고 hashCode를 안 만들면 HashMap에서 못 찾는다 -->
+        <module name="EqualsHashCode"/>
+        <!-- switch에서 break 빠뜨림 -->
+        <module name="FallThrough"/>
+        <!-- if (x == true), return x ? true : false -->
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
+        <!-- for 안에서 반복 변수를 바꿈 -->
+        <module name="ModifiedControlVariable"/>
+        <!-- long 숫자 끝에 소문자 l (1과 헷갈림) -->
+        <module name="UpperEll"/>
+        <!-- 한 줄에 문장 두 개 -->
+        <module name="OneStatementPerLine"/>
+    </module>
+</module>

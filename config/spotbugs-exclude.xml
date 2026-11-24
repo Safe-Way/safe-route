@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs에서 빼는 규칙 (2026-11-24).
+  스프링은 빈(Bean)을 생성자로 넘겨받아 필드에 넣는 게 정상인데, SpotBugs는 이것을
+  "바깥 물건을 그대로 들고 있음(EI_EXPOSE_REP·EI_EXPOSE_REP2)"으로 잡는다. 대부분 이 경고라 뺀다.
+-->
+<FindBugsFilter>
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+</FindBugsFilter>
