@@ -98,9 +98,12 @@ class PreferenceLearnerTests {
         assertThat(r.learned()).extracting(MeRequests.Learned::to).containsExactly(0);
         verify(repo).save(g, Map.of("prefer_transit", 0));
 
-        when(repo.recentDone(g, PreferenceLearner.RECENT)).thenReturn(List.of(WALK));
+        // 같은 프로필(prefer_transit 2)이라도 끝난 기록이 1건뿐이면 배우지 않는다.
+        // 가짜 응답을 quiet에 걸어야 한다 (repo에 걸면 quiet는 기록·프로필이 없어서 저절로 통과)
         MeRepository quiet = mock(MeRepository.class);
         when(quiet.endTrip(g, 5L, "arrived", 12, null, null)).thenReturn(1);
+        when(quiet.find(g)).thenReturn(Optional.of(MeServiceTests.row(true)));
+        when(quiet.recentDone(g, PreferenceLearner.RECENT)).thenReturn(List.of(WALK));
         new MeService(quiet, Clock.systemUTC()).endTrip(5L, new MeRequests.TripEnd(g, "arrived", 12, null, null));
         verify(quiet, never()).save(anyString(), anyMap());
     }

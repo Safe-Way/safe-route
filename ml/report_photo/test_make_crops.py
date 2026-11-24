@@ -128,6 +128,14 @@ class EndToEndTest(unittest.TestCase):
             self.assertTrue(os.path.realpath(path).startswith(os.path.realpath(self.out) + os.sep))
             with Image.open(path) as im:
                 self.assertEqual(im.size, (224, 224))
+        # '../../escape.jpg'가 split/class 밖으로 빠져나가면 out 바로 아래에 떨어진다 (tmp까지는 못 감).
+        # 그래서 out 안의 모든 사진이 split/class/파일 깊이에만 있는지 본다
+        for root, _dirs, files in os.walk(self.out):
+            depth = os.path.relpath(root, self.out).count(os.sep) + (0 if root == self.out else 1)
+            for f in files:
+                if f.endswith(".jpg"):
+                    self.assertEqual(depth, 2, os.path.join(root, f))
+        self.assertFalse(os.path.exists(os.path.join(self.out, "escape.jpg")))
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "escape.jpg")))
 
     def test_folder_source(self):

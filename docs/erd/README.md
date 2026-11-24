@@ -1,6 +1,6 @@
 # ERD
 
-학교 DB(`cf_u34_d3`)의 ERD 파일이다. 전체 그림(`safe_route_full_erd.png`)은 2026-11-20 `schema.sql`의 표 50개로 그렸다.
+학교 DB의 ERD 파일이다. 전체 그림(`safe_route_full_erd.png`)은 2026-11-20 `schema.sql`의 표 50개로 그렸다.
 아래 `.sql`·`.dbml` 파일은 2026-11-03에 학교 DB의 `information_schema`에서 만든 표 32개 판이다(그 뒤 생긴 신고·게스트·인도 등 표는 없음).
 표 정의의 원본은 `src/main/resources/db/schema.sql`이고, 이 폴더는 그림용이다.
 

@@ -13,6 +13,12 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
+      # 연결 풀 (2026-11-23). 학교 MySQL은 여러 팀이 같이 쓴다: max_connections 9190, 평소 400개쯤 붙어 있음.
+      # 우리는 앱 두 대(app-1·app-2) × 10 = 최대 20개. 기본값(10)을 적어 두고, 한가할 때는 2개만 남긴다
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: 2
+      # 연결을 3초 안에 못 받으면 바로 오류 (기본 30초는 요청이 줄줄이 쌓인다)
+      connection-timeout: 3000
       data-source-properties:
         # 여러 줄 INSERT를 한 번에 보내서 대량 적재를 빠르게
         rewriteBatchedStatements: true
@@ -135,3 +141,8 @@ records:
   guest-days: 365
   odsay-days: 30
   api-days: 90
+
+# 느린 쿼리 로그 (2026-11-23). 학교 MySQL의 slow log(2초)는 공용 서버 파일이라 우리가 못 읽어서, 앱이 직접 남긴다.
+# 이 시간(ms)보다 오래 걸린 SQL을 WARN으로 남긴다 (값은 안 남김: 게스트 번호·위치가 들어 있다). 0이면 끈다
+db:
+  slow-query-ms: ${DB_SLOW_QUERY_MS:500}

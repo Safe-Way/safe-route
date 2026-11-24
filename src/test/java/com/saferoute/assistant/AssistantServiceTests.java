@@ -140,6 +140,30 @@ class AssistantServiceTests {
     }
 
     @Test
+    void tamperedPendingInConversationIdIsNotServerError() {
+        // conversationId 는 앱이 그대로 돌려주는 값이라 누가 고칠 수 있다. 날짜 자리에 글자·목록 자리에 글자면
+        // 예전엔 500(서버 오류)이었다 → 저장하지 않고 다시 말해 달라고 답한다 (2026-11-23)
+        wheelchairUser();
+        AssistantReply first = ask(A, "엘베 있는 육교도 보여 주고 CCTV는 빼 줘", null);
+        JsonMapper json = JsonMapper.builder().build();
+        String raw = new String(java.util.Base64.getUrlDecoder().decode(first.conversationId()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        for (String bad : List.of("\"until\":\"내일까지\"", "\"add\":\"cctv\"")) {
+            tools.jackson.databind.node.ObjectNode c = (tools.jackson.databind.node.ObjectNode) json.readTree(raw);
+            tools.jackson.databind.node.ObjectNode args = (tools.jackson.databind.node.ObjectNode) c.path("pending").path("args");
+            tools.jackson.databind.JsonNode b = json.readTree("{" + bad + "}");
+            b.propertyNames().forEach(k -> args.set(k, b.get(k)));
+            String tampered = java.util.Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(json.writeValueAsBytes(c));
+
+            AssistantReply second = ask(A, "응 그렇게 해", tampered);
+
+            assertThat(second.say()).contains("저장할 내용을 알아듣지 못했어요");
+        }
+        verify(memory, never()).saveLayer(anyString(), anyString(), anyBoolean(), any(), any());
+    }
+
+    @Test
     void reportOnTheWayIsSaidPlainly() {
         // 원일님 w11: 엔진이 못 피한 신고는 events[] kind "신고", title 종류 이름 → "가는 길에 공사 신고가 있어요."
         wheelchairUser();
