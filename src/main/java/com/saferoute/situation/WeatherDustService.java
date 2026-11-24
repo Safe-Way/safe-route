@@ -115,7 +115,6 @@ public class WeatherDustService {
                 dOk && d.dustBad(), dOk);
     }
 
-    /** 약 1km 칸으로 묶는다 */
     /** 기억이 많이 쌓이면 시간이 지난 것을 지운다. 예전에는 지우지 않아 서버가 오래 켜져 있으면 계속 늘었다 */
     private void forgetOld(Instant now) {
         if (saved.size() < MAX_SAVED) {
@@ -129,6 +128,7 @@ public class WeatherDustService {
         return saved.size();
     }
 
+    /** 약 1km 칸으로 묶는다 */
     static String key(double lat, double lon) {
         return Math.round(lat * 100) + "," + Math.round(lon * 100);
     }
