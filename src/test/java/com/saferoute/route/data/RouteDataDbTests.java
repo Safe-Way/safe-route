@@ -2,7 +2,11 @@ package com.saferoute.route.data;
 
 import static com.saferoute.testsupport.FakeDb.row;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.withSettings;
 
@@ -15,6 +19,8 @@ import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -172,9 +178,15 @@ class RouteDataDbTests {
                 .rows("FROM road_report_active", row("spot_id", 7L, "report_type", "construction", "lon", 126.92,
                         "lat", 35.14, "ends_on", LocalDate.of(2026, 12, 11), "avoid_modes", "adult,child,senior,wheelchair",
                         "cost_modes", ""));
-        MysqlPoiSource src = new MysqlPoiSource(db.jdbc());
+        JdbcTemplate jdbc = spy(db.jdbc());
+        MysqlPoiSource src = new MysqlPoiSource(jdbc);
         List<RoadReport> first = src.reports(AREA);
         assertThat(first).hasSize(1);
+
+        // 한 번 읽은 뒤 DB가 끊기면 낡았어도 이전 목록을 그대로 준다 (피하던 신고가 사라지지 않게)
+        doThrow(new DataAccessResourceFailureException("Communications link failure"))
+                .when(jdbc).queryForObject(anyString(), eq(String.class));
+        assertThat(src.reports(AREA)).isEqualTo(first);
 
         // 처음부터 못 읽으면 빈 목록
         FakeDb down = new FakeDb().fails("COALESCE(SUM(id), 0)", "Communications link failure");

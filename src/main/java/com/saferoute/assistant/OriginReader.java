@@ -36,7 +36,8 @@ final class OriginReader {
 
     /** 출발지를 말하지 않았으면 null */
     static Split split(String text) {
-        if (text == null) {
+        if (text == null || text.contains("출구")) {
+            // "문화전당역에서 ○○ 가려면 몇 번 출구야?"는 출발지가 아니라 출구 질문 (11-23)
             return null;
         }
         Matcher h = HERE_FROM.matcher(text);

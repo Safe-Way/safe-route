@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.saferoute.common.Bbox;
 import com.saferoute.common.ErrorResponse;
 
 /**
@@ -143,21 +144,10 @@ public class FacilityController {
         return new NearbyResponse(NEARBY_RADIUS_M, List.of(), closed, msg);
     }
 
-    /** "126.91,35.14,126.93,35.15" → {서, 남, 동, 북}. 형식이 틀리면 null */
+    /** "126.91,35.14,126.93,35.15" → {서, 남, 동, 북}. 형식이 틀리거나 순서·범위가 맞지 않으면 null */
     static double[] parseBbox(String bbox) {
-        if (bbox == null) {
-            return null;
-        }
-        String[] p = bbox.split(",");
-        if (p.length != 4) {
-            return null;
-        }
-        double[] b = new double[4];
-        try {
-            for (int i = 0; i < 4; i++) {
-                b[i] = Double.parseDouble(p[i].trim());
-            }
-        } catch (NumberFormatException e) {
+        double[] b = Bbox.parse(bbox);
+        if (b == null) {
             return null;
         }
         boolean ok = b[0] < b[2] && b[1] < b[3] && Math.abs(b[0]) <= 180 && Math.abs(b[2]) <= 180

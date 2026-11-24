@@ -121,7 +121,13 @@ public class AssistantService {
         // ①-1 말로 할 때 끼는 "어.. 잠시만.. 아" 같은 말은 빼고 본다 (11-12 음성 시험)
         t.text = SpeechFix.fix(Fillers.clean(t.text)); // 받아쓰기 실수도 고침 ("갓다가", "서석동 삼 번지")
         t.heard = t.text;
-        // ①-2 "광주역에서 …"처럼 출발지를 말했으면 떼어 찾아 두고, 나머지 말로 이어 간다 (11-12)
+        // ①-2 "3시까지 문화전당 가야 해"처럼 도착 시각을 말했으면 떼어 두고 나머지로 길을 찾는다 (2026-11-23)
+        ArriveBy.Split by = ArriveBy.split(t.text, t.now);
+        if (by != null) {
+            t.arriveBy = by.at();
+            t.text = by.rest();
+        }
+        // ①-3 "광주역에서 …"처럼 출발지를 말했으면 떼어 찾아 두고, 나머지 말로 이어 간다 (11-12)
         Outcome from = origin(t);
         if (from != null) {
             return from;
@@ -254,6 +260,9 @@ public class AssistantService {
         if (pick != null && "walk".equals(pick.type()) && t.stopPlan == null && t.plan != null) {
             // 엔진이 길에 단 알림(출구·횡단보도 없음·좁은 인도 등)을 한두 개 (11-23)
             say = Sentences.polish(Sentences.withNotes(say, t.plan.notes()), mode);
+        }
+        if (pick != null && t.arriveBy != null && say != null) {
+            say = say.strip() + " " + ArriveBy.sentence(t.arriveBy, t.now, pick.minutes(), mode);
         }
         Conversation.Place from = t.convo.origin();
         if (pick != null && from != null && say != null && !say.contains(from.name())) {
