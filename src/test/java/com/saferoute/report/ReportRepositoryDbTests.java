@@ -89,9 +89,9 @@ class ReportRepositoryDbTests {
     void withinListsPhotoUrls() {
         db.rows("FROM road_report r WHERE r.status IN", row("id", 7L, "report_type", "curb", "mode", "wheelchair",
                         "memo", "턱", "lat", 35.147, "lon", 126.92, "status", "open", "created", "2026-11-16T10:00",
-                        "photos", 2),
+                        "photos", 2, "photo_label", null),
                 row("id", 8L, "report_type", "obstacle", "mode", null, "memo", null, "lat", 35.148, "lon", 126.921,
-                        "status", "confirmed", "created", "2026-11-16T09:00", "photos", 0));
+                        "status", "confirmed", "created", "2026-11-16T09:00", "photos", 0, "photo_label", "vehicle"));
 
         List<ReportItem> got = repo.within(126.91, 35.14, 126.93, 35.15, 50);
 
@@ -99,6 +99,9 @@ class ReportRepositoryDbTests {
         assertThat(got.get(0).photoUrls()).containsExactly("/api/reports/7/photos/1", "/api/reports/7/photos/2");
         assertThat(got.get(0).typeName()).isEqualTo(ReportType.name("curb"));
         assertThat(got.get(1).photoUrls()).isEmpty();
+        // 사진으로 차량이라고 본 막는 물건 신고 (036, 비서 문장용 11-23)
+        assertThat(got.get(0).vehicle()).isFalse();
+        assertThat(got.get(1).vehicle()).isTrue();
         assertThat(db.call("FROM road_report r WHERE r.status IN").params().get(1)).isEqualTo(50);
     }
 
