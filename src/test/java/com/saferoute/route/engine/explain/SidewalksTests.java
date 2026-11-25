@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.route.api.RouteResult.Alley;
@@ -16,6 +17,7 @@ import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadEdge.EdgePenalty;
 import com.saferoute.route.engine.search.RoadPath;
 
+@DisplayName("인도 쪽 구간")
 class SidewalksTests {
 
     private static final double[] A = {126.930, 35.140};
@@ -25,6 +27,7 @@ class SidewalksTests {
     private static final double[] E = {126.933, 35.141};
 
     @Test
+    @DisplayName("같은 쪽 인도 구간은 잇고 보행로는 인도 구간에서 뺀다")
     void sameSideJoinsAndWalkwaysAreLeftOut() {
         // A→B→C 차도(오른쪽 인도), C→D 인도, D→E 태그 없는 차도
         RoadPath path = path(List.of(
@@ -43,6 +46,7 @@ class SidewalksTests {
     }
 
     @Test
+    @DisplayName("그린 방향과 거꾸로 걸으면 인도 왼쪽·오른쪽을 바꾼다")
     void walkingAgainstDrawnDirectionSwapsSide() {
         // 길은 B→A로 그렸고(인도 left) 걷는 건 A→B: 걷는 사람에겐 오른쪽
         RoadPath path = path(List.of(edge(1, 2, 1, "tertiary", List.of(B, A), "left")), List.of(A, B));
@@ -53,6 +57,7 @@ class SidewalksTests {
     }
 
     @Test
+    @DisplayName("태그 없는 일방통행 길은 차 가는 방향 오른쪽을 인도로 본다")
     void onewayWithoutTagHasSidewalkOnRightOfTraffic() {
         // A→B로 그린 일방통행(차도 A→B): 인도는 그린 방향 오른쪽. A→B로 걸으면 오른쪽, B→A로 걸으면 왼쪽
         RoadEdge ab = edge(1, 1, 2, "primary", List.of(A, B), null, null, 1, null);
@@ -97,6 +102,7 @@ class SidewalksTests {
     }
 
     @Test
+    @DisplayName("인도까지 거리는 폭, 차로 수, 기본 차로 수 차례로 정한다")
     void offsetFromWidthThenLanesThenDefault() {
         // 폭이 있으면 폭/2 + 1.5
         assertThat(Sidewalks.offsetM("primary", 4, false, 7.0)).isEqualTo(5.0);
@@ -113,6 +119,7 @@ class SidewalksTests {
     }
 
     @Test
+    @DisplayName("인도 구간은 차로 수가 바뀌면 나누고 같으면 잇는다")
     void splitsWhenLanesChangeAndJoinsWhenEqual() {
         RoadPath path = path(List.of(
                 edge(1, 1, 2, "primary", List.of(A, B), "right", 4, 0, null),
@@ -126,6 +133,7 @@ class SidewalksTests {
     }
 
     @Test
+    @DisplayName("both 큰 길은 골목·횡단보도 너머 따로 그린 인도 쪽을 따른다")
     void bothTakesSideOfSeparateSidewalkPastAlleyAndCrosswalk() {
         // 서남동 행정복지센터 앞 (w20): 태그 없는 동서 큰 길(both) → 북쪽 골목 7m → 골목 횡단보도 → 따로 그린 북쪽 인도
         double[] w = m(-100, 0), o = m(0, 0), n1 = m(0, 7), n2 = m(6, 7), n3 = m(100, 7);
@@ -140,10 +148,77 @@ class SidewalksTests {
         // 거꾸로 걸으면 인도가 큰 길 앞에 있다(뒤엔 없음). 서쪽으로 걸으면 북쪽은 오른쪽
         List<Sidewalk> back = Sidewalks.along(path(List.of(walk, zebra, alley, road), List.of(n3, n2, n1, o, w)), 0);
         assertThat(back.get(back.size() - 1).side()).isEqualTo("right");
+        // 출발 점을 앞에 붙여 경로 선이 응답 geometry 3번에서 시작해도 같은 큰 길 선으로 잰다
+        List<Sidewalk> shifted = Sidewalks.along(path(List.of(road, alley, zebra, walk), List.of(w, o, n1, n2, n3)), 3);
+        assertThat(shifted.get(0)).extracting(Sidewalk::from, Sidewalk::to, Sidewalk::side).containsExactly(3, 4, "left");
     }
 
     @Test
+    @DisplayName("따로 그린 인도보다 큰 길을 먼저 만나면 both 구간 쪽을 정하지 않는다")
+    void bigRoadReachedFirstLeavesBothStretchBoth() {
+        // Sidewalks.walkwaySide
+        double[] w = m(-100, 0), o = m(0, 0), e = m(100, 0);
+        RoadEdge four = new RoadEdge(1, 1, 2, 100, "primary", List.of(w, o), EdgePenalty.NONE, null, null, 4, 0, null);
+        RoadEdge six = new RoadEdge(2, 2, 3, 100, "primary", List.of(o, e), EdgePenalty.NONE, null, null, 6, 0, null);
+
+        assertThat(Sidewalks.along(path(List.of(four, six), List.of(w, o, e)), 0)).extracting(Sidewalk::side)
+                .containsExactly("both", "both");
+    }
+
+    @Test
+    @DisplayName("큰 길 연장선 위로 이어지는 보행로로는 인도 쪽을 정하지 않는다")
+    void walkwayContinuingOnTheRoadLineDoesNotTellTheSide() {
+        // INTO_M 들어간 점이 끝 조각 연장선에서 ON_LINE_M보다 가까울 때 (Sidewalks.ON_LINE_M)
+        double[] w = m(-100, 0), o = m(0, 0);
+        for (double lateral : new double[] {Sidewalks.ON_LINE_M - 0.01, Sidewalks.ON_LINE_M + 0.01}) {
+            // 큰 길 끝 o에서 동쪽으로 이어지며 INTO_M 지점에서 북쪽으로 lateral만큼 벗어나는 보행로
+            double a = Math.asin(lateral / Sidewalks.INTO_M);
+            double[] far = m(100 * Math.cos(a), 100 * Math.sin(a));
+            RoadEdge road = way(1, 1, 2, "primary", false, w, o);
+            RoadEdge walk = way(2, 2, 3, "footway", false, o, far);
+
+            assertThat(Sidewalks.along(path(List.of(road, walk), List.of(w, o, far)), 0).get(0).side())
+                    .isEqualTo(lateral < Sidewalks.ON_LINE_M ? "both" : "left");
+        }
+    }
+
+    @Test
+    @DisplayName("both 구간 뒤 골목·횡단보도는 정한 길이까지만 건너뛰고 그 뒤 인도는 안 본다")
+    void walkwayPastLookMOfAlleysIsNotLookedAt() {
+        // LOOK_M (Sidewalks.LOOK_M)
+        double[] w = m(-100, 0), o = m(0, 0), n1 = m(0, 7), n2 = m(100, 7);
+        for (double alleyM : new double[] {Sidewalks.LOOK_M - 0.01, Sidewalks.LOOK_M + 0.01}) {
+            RoadEdge road = way(1, 1, 2, "primary", false, w, o);
+            RoadEdge alley = new RoadEdge(2, 2, 3, alleyM, "residential", List.of(o, n1), EdgePenalty.NONE);
+            RoadEdge walk = way(3, 3, 4, "footway", false, n1, n2);
+
+            assertThat(Sidewalks.along(path(List.of(road, alley, walk), List.of(w, o, n1, n2)), 0).get(0).side())
+                    .isEqualTo(alleyM <= Sidewalks.LOOK_M ? "left" : "both");
+        }
+    }
+
+    @Test
+    @DisplayName("따로 그린 인도 쪽은 큰 길 중 그 인도와 맞닿은 끝 조각 기준으로 잰다")
+    void bendingRoadTakesTheSideFromItsEndNextToTheWalkway() {
+        // Sidewalks.walkwaySide
+        // 동쪽으로 가다 모퉁이 O에서 북서쪽으로 꺾는 큰 길(both), 그 끝 Q에서 북동쪽으로 따로 그린 인도
+        double[] w = m(-100, 0), o = m(0, 0), q = m(-40, 40), r = m(0, 80);
+        RoadEdge east = way(1, 1, 2, "primary", false, w, o);
+        RoadEdge northWest = way(2, 2, 3, "primary", false, o, q);
+        RoadEdge walk = way(3, 3, 4, "footway", false, q, r);
+
+        // 북서쪽으로 가다 북동쪽 인도는 오른쪽 (처음 조각인 동쪽 기준이면 왼쪽)
+        assertThat(Sidewalks.along(path(List.of(east, northWest, walk), List.of(w, o, q, r)), 0))
+                .extracting(Sidewalk::side).containsExactly("right");
+        // 거꾸로 인도에서 와서 큰 길을 남동쪽으로 걸으면 왼쪽 (마지막 조각인 서쪽 기준이면 오른쪽)
+        assertThat(Sidewalks.along(path(List.of(walk, northWest, east), List.of(r, q, o, w)), 0))
+                .extracting(Sidewalk::side).containsExactly("left");
+    }
+
+    @Test
+    @DisplayName("큰 길에서 25m보다 먼 보행로는 그 길의 인도로 보지 않는다")
     void walkwayFartherThan25mFromTheRoadIsNotItsSidewalk() {
+        // Sidewalks.WALKWAY_MAX_M
         double[] w = m(-100, 0), o = m(0, 0);
         for (double north : new double[] {20, 28}) {
             double[] n1 = m(0, north), n2 = m(100, north);
@@ -157,6 +232,7 @@ class SidewalksTests {
     }
 
     @Test
+    @DisplayName("이어진 골목은 한 구간으로 잇고 응답 geometry 번호로 가리킨다")
     void alleysJoinAndUseGeometryIndices() {
         // A→B 큰 길, B→(가운데 점)→C 태그 없는 service, C→D 인도 없음(no) living_street: 이어서 한 골목 구간.
         // D→E 인도 양쪽(both) residential은 골목이 아니다

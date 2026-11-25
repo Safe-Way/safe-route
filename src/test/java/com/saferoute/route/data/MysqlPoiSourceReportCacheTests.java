@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -19,10 +20,12 @@ import com.saferoute.route.engine.event.RoadReport;
 import com.saferoute.route.engine.geo.BBox;
 
 /** 신고 기억: 표시가 같으면 뷰를 다시 읽지 않고, 표시가 바뀌면 60초를 기다리지 않고 바로 다시 읽는다 (DB 없이 돈다) */
+@DisplayName("신고 뷰 기억")
 class MysqlPoiSourceReportCacheTests {
 
     @Test
     @SuppressWarnings("unchecked")
+    @DisplayName("신고 뷰는 표시(stamp)가 같으면 기억한 것을 쓰고 바뀌면 바로 다시 읽는다")
     void rereadsViewAsSoonAsStampChanges() {
         RoadReport old = report(1, 126.92, 35.15);
         RoadReport ramp = report(2, 126.921, 35.151);
