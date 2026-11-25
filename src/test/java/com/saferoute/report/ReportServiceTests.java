@@ -67,22 +67,22 @@ class ReportServiceTests {
 
     @Test
     @DisplayName("위도가 NaN(숫자 아님)이면 400으로 거절한다 — NaN은 범위 비교를 몰래 통과하던 버그(#302)")
-    void rejectsLatitudeThatIsNotANumber() {
-        double latitudeNotANumber = Double.NaN;
-        double normalLongitude = 126.93;
+    void rejectNanLat() {
+        double nanLat = Double.NaN;
+        double okLon = 126.93;
 
-        assertThatThrownBy(() -> checkReportWithOnlyLocation(latitudeNotANumber, normalLongitude))
+        assertThatThrownBy(() -> checkLocation(nanLat, okLon))
                 .isInstanceOf(ReportException.class)
                 .hasMessageContaining("lat, lon");
     }
 
     @Test
     @DisplayName("경도가 무한대여도 400으로 거절한다")
-    void rejectsInfiniteLongitude() {
-        double normalLatitude = 35.14;
-        double infiniteLongitude = Double.POSITIVE_INFINITY;
+    void rejectInfiniteLon() {
+        double okLat = 35.14;
+        double infiniteLon = Double.POSITIVE_INFINITY;
 
-        assertThatThrownBy(() -> checkReportWithOnlyLocation(normalLatitude, infiniteLongitude))
+        assertThatThrownBy(() -> checkLocation(okLat, infiniteLon))
                 .isInstanceOf(ReportException.class)
                 .hasMessageContaining("lat, lon");
     }
@@ -90,27 +90,27 @@ class ReportServiceTests {
     @ParameterizedTest(name = "위도 {0}, 경도 {1} → 받아들임")
     @CsvSource({"90.0, 180.0", "-90.0, -180.0"})
     @DisplayName("위도 ±90·경도 ±180 딱 끝값은 받아들인다")
-    void acceptsLatitude90AndLongitude180(double latitude, double longitude) {
-        NewReport accepted = checkReportWithOnlyLocation(latitude, longitude);
+    void acceptMaxLatLon(double lat, double lon) {
+        NewReport accepted = checkLocation(lat, lon);
 
-        assertThat(accepted.lat()).isEqualTo(latitude);
+        assertThat(accepted.lat()).isEqualTo(lat);
     }
 
     @ParameterizedTest(name = "위도 {0}, 경도 {1} → 거절")
     @CsvSource({"90.1, 126.93", "35.14, 180.1"})
     @DisplayName("끝값을 조금이라도 넘으면 거절한다")
-    void rejectsLatitudeOver90OrLongitudeOver180(double latitude, double longitude) {
-        assertThatThrownBy(() -> checkReportWithOnlyLocation(latitude, longitude))
+    void rejectOverMax(double lat, double lon) {
+        assertThatThrownBy(() -> checkLocation(lat, lon))
                 .isInstanceOf(ReportException.class);
     }
 
     /** 위치만 넣고 모드·메모·정확도·사진은 비운 '턱' 신고 검사 */
-    private NewReport checkReportWithOnlyLocation(double latitude, double longitude) {
+    private NewReport checkLocation(double lat, double lon) {
         String noMode = null;
         String noMemo = null;
-        Integer noAccuracyM = null;
+        Integer noAccuracy = null;
         List<MultipartFile> noPhotos = null;
-        return service.check("curb", latitude, longitude, noMode, noMemo, noAccuracyM, noPhotos);
+        return service.check("curb", lat, lon, noMode, noMemo, noAccuracy, noPhotos);
     }
 
     @Test

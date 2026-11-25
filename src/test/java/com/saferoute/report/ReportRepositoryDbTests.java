@@ -17,14 +17,14 @@ class ReportRepositoryDbTests {
     private final FakeDb db = new FakeDb().generatedKey(7L);
     private final ReportRepository repo = new ReportRepository(db.jdbc());
 
-    private static NewReport curbReportWithAccuracy(Integer accuracy) {
+    private static NewReport curbReport(Integer accuracy) {
         return new NewReport("curb", "wheelchair", "턱이 높아요", 35.147, 126.92, accuracy, List.of());
     }
 
     @Test
     @DisplayName("신고를 신고한 사람 해시와 함께 저장한다")
     void insertWithReporterHash() {
-        long id = repo.insert(curbReportWithAccuracy(12), 99L, "voice", "abc");
+        long id = repo.insert(curbReport(12), 99L, "voice", "abc");
 
         assertThat(id).isEqualTo(7L);
         FakeDb.Call c = db.call("INSERT INTO road_report (");
@@ -36,7 +36,7 @@ class ReportRepositoryDbTests {
     @Test
     @DisplayName("정확도·가까운 길이 없으면 빈 값, 경로는 기본값으로 저장한다")
     void insertWithoutAccuracyEdgeAndDefaultVia() {
-        repo.insert(curbReportWithAccuracy(null), null);
+        repo.insert(curbReport(null), null);
 
         assertThat(db.call("INSERT INTO road_report (").params())
                 .containsExactly("curb", "wheelchair", "턱이 높아요", 126.92, 35.147, 126.92, 35.147, null, null, "photo",
@@ -45,26 +45,26 @@ class ReportRepositoryDbTests {
 
     @Test
     @DisplayName("033 이전 DB면 옛 칸으로 저장한다 (새 칸은 처음 한 번만 시도)")
-    void savesWithOldSqlWhenDbHasNoHashColumn() {
-        String newSqlWithHashColumn = ", reporter_hash) VALUES";
-        String oldSqlWithoutHash = "edge_id, via) VALUES";
-        db.fails(newSqlWithHashColumn, "Unknown column 'reporter_hash'"); // 033 이전 DB 흉내
-        NewReport curbReport = curbReportWithAccuracy(5);
-        long roadSegmentId = 1L;
-        String reportedVia = "photo";
-        String reporterHash = "abc";
-        long expectedNewId = 7L;   // 맨 위 FakeDb.generatedKey(7L)가 돌려주는 번호
-        int oldSqlValueCount = 10; // 옛 INSERT 문의 ? 개수
+    void oldDbUsesOldSql() {
+        String newSql = ", reporter_hash) VALUES";
+        String oldSql = "edge_id, via) VALUES";
+        db.fails(newSql, "Unknown column 'reporter_hash'"); // 033 이전 DB 흉내
+        NewReport report = curbReport(5);
+        long roadId = 1L;
+        String via = "photo";
+        String hash = "abc";
+        long newId = 7L;   // 맨 위 FakeDb.generatedKey(7L)가 돌려주는 번호
+        int oldSqlParams = 10; // 옛 INSERT 문의 ? 개수
 
-        long firstId = repo.insert(curbReport, roadSegmentId, reportedVia, reporterHash);
-        long secondId = repo.insert(curbReport, roadSegmentId, reportedVia, reporterHash);
+        long firstId = repo.insert(report, roadId, via, hash);
+        long secondId = repo.insert(report, roadId, via, hash);
 
-        assertThat(firstId).isEqualTo(expectedNewId);
-        assertThat(secondId).isEqualTo(expectedNewId);
-        assertThat(db.calls(newSqlWithHashColumn)).hasSize(1);
-        List<FakeDb.Call> oldSqlCalls = db.calls(oldSqlWithoutHash);
+        assertThat(firstId).isEqualTo(newId);
+        assertThat(secondId).isEqualTo(newId);
+        assertThat(db.calls(newSql)).hasSize(1);
+        List<FakeDb.Call> oldSqlCalls = db.calls(oldSql);
         assertThat(oldSqlCalls).hasSize(2);
-        assertThat(oldSqlCalls.get(0).params()).hasSize(oldSqlValueCount);
+        assertThat(oldSqlCalls.get(0).params()).hasSize(oldSqlParams);
     }
 
     @Test

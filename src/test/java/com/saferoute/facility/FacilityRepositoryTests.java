@@ -52,19 +52,19 @@ class FacilityRepositoryTests {
 
     @Test
     @DisplayName("1km 안 화장실을 가까운 순으로, 지금 열었는지와 함께 준다 (2.2km·CCTV는 빠짐)")
-    void toiletsWithin1kmSortedByDistanceWithOpenStatus() {
+    void nearToiletsInOrder() {
         boolean wheelchairOnly = false;
-        int radiusM = 1000;
+        int radius = 1000;
 
-        List<Facility> foundToilets = repo.near(LAT, LON, "toilet", wheelchairOnly, radiusM);
+        List<Facility> toilets = repo.near(LAT, LON, "toilet", wheelchairOnly, radius);
 
-        assertThat(foundToilets).extracting(Facility::name)
+        assertThat(toilets).extracting(Facility::name)
                 .containsExactly("시험 화장실 24시간", "시험 화장실 닫힘", "시험 장애인 화장실");
-        assertThat(foundToilets).extracting(Facility::nowStatus).containsExactly("이용 가능", "닫힘", "이용 가능");
-        assertThat(foundToilets.get(0).distanceM()).isBetween(100, 120); // 위도 0.001도 ≈ 111m
-        Facility accessibleToilet = foundToilets.get(2);
-        assertThat(accessibleToilet.modes()).containsExactly("senior", "wheelchair");
-        assertThat(accessibleToilet.wheelchair()).isTrue();
+        assertThat(toilets).extracting(Facility::nowStatus).containsExactly("이용 가능", "닫힘", "이용 가능");
+        assertThat(toilets.get(0).distanceM()).isBetween(100, 120); // 위도 0.001도 ≈ 111m
+        Facility wheelchairToilet = toilets.get(2);
+        assertThat(wheelchairToilet.modes()).containsExactly("senior", "wheelchair");
+        assertThat(wheelchairToilet.wheelchair()).isTrue();
     }
 
     @Test

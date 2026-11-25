@@ -20,13 +20,13 @@ class WeatherJudgeTests {
     private static final ZonedDateTime NOW = ZonedDateTime.of(2026, 11, 3, 10, 50, 0, 0, KmaClient.KOREA);
 
     private final KmaClient kma = mock(KmaClient.class);
-    private static final double HEATWAVE_MIN_TEMP_C = 33;
-    private static final double COLD_WAVE_MAX_TEMP_C = -10;
-    private static final int PM10_BAD_LEVEL = 81;
-    private static final int PM25_BAD_LEVEL = 36;
+    private static final double HOT_TEMP = 33;
+    private static final double COLD_TEMP = -10;
+    private static final int PM10_BAD = 81;
+    private static final int PM25_BAD = 36;
 
     private final SituationProperties props = new SituationProperties(
-            HEATWAVE_MIN_TEMP_C, COLD_WAVE_MAX_TEMP_C, PM10_BAD_LEVEL, PM25_BAD_LEVEL);
+            HOT_TEMP, COLD_TEMP, PM10_BAD, PM25_BAD);
     private final WeatherJudge judge = new WeatherJudge(kma, props);
 
     private WeatherResult judgeWith(WeatherNow w) {
@@ -54,26 +54,26 @@ class WeatherJudgeTests {
     @ParameterizedTest(name = "기온 {0}도 → 더위 {1}")
     @CsvSource({"33.0, true", "32.9, false"})
     @DisplayName("더위 기준 33도: 딱 33도부터 더위, 바로 아래(32.9도)는 더위 아님")
-    void heatwaveFrom33Degrees(double temperatureC, boolean expectedHeatwave) {
-        WeatherResult result = judgeWith(weatherWithOnlyTemperature(temperatureC));
+    void hotFrom33(double temp, boolean isHot) {
+        WeatherResult result = judgeWith(onlyTemp(temp));
 
-        assertThat(result.heat()).isEqualTo(expectedHeatwave);
+        assertThat(result.heat()).isEqualTo(isHot);
     }
 
     @ParameterizedTest(name = "기온 {0}도 → 추위 {1}")
     @CsvSource({"-10.0, true", "-9.9, false"})
     @DisplayName("추위 기준 -10도: 딱 -10도부터 추위, 바로 위(-9.9도)는 추위 아님")
-    void coldWaveFromMinus10Degrees(double temperatureC, boolean expectedColdWave) {
-        WeatherResult result = judgeWith(weatherWithOnlyTemperature(temperatureC));
+    void coldFromMinus10(double temp, boolean isCold) {
+        WeatherResult result = judgeWith(onlyTemp(temp));
 
-        assertThat(result.cold()).isEqualTo(expectedColdWave);
+        assertThat(result.cold()).isEqualTo(isCold);
     }
 
     /** 기온만 바꾸고 비·눈은 없는 날씨 (다른 값이 결과에 끼어들지 않게) */
-    private static WeatherNow weatherWithOnlyTemperature(double temperatureC) {
-        double noRainMm = 0.0;
-        int noRainOrSnow = 0;
-        return new WeatherNow(temperatureC, noRainMm, noRainOrSnow, "시험 시각");
+    private static WeatherNow onlyTemp(double temp) {
+        double noRain = 0.0;
+        int noSnow = 0;
+        return new WeatherNow(temp, noRain, noSnow, "시험 시각");
     }
 
     @Test
