@@ -16,6 +16,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.Executors;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /** 가짜 DB·가짜 광주버스정보로 정류장 묶기·정렬·실패·기억해 두기를 확인 (인터넷·DB 없이 돈다) */
@@ -86,16 +87,18 @@ class BusServiceTests {
     }
 
     @Test
+    @DisplayName("같은 정류장을 30초 안(20초 뒤)에 다시 물으면 버스 API를 또 부르지 않고 기억한 답을 준다")
     void sameStopWithin30SecondsAsksOnce() {
+        int stopId = 1230;
         when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(A));
-        when(bis.arrivals(1230)).thenReturn(List.of(SOON));
+        when(bis.arrivals(stopId)).thenReturn(List.of(SOON));
 
         service.nearby(LAT, LON);
-        clock.move(Duration.ofSeconds(20));
-        BusNearbyResponse again = service.nearby(LAT, LON);
+        clock.move(Duration.ofSeconds(20)); // 진짜로 기다리지 않고 시계만 20초 앞으로
+        BusNearbyResponse askedAgain = service.nearby(LAT, LON);
 
-        assertThat(again.stops().get(0).arrivals()).containsExactly(SOON);
-        verify(bis, times(1)).arrivals(eq(1230));
+        assertThat(askedAgain.stops().get(0).arrivals()).containsExactly(SOON);
+        verify(bis, times(1)).arrivals(eq(stopId)); // 두 번 물었지만 API는 한 번만
     }
 
     @Test

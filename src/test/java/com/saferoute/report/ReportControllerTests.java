@@ -1,8 +1,10 @@
 package com.saferoute.report;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -14,7 +16,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -30,16 +34,27 @@ class ReportControllerTests {
             .setControllerAdvice(new ApiErrorHandler()).build();
 
     @Test
+    @DisplayName("사진 1장 붙인 턱 신고를 보내면 201과 새 번호를 돌려주고, 종류·모드·위치가 저장소까지 그대로 간다")
     void postWithPhotoGives201() throws Exception {
-        when(repo.insert(any(), any(), any(), any())).thenReturn(12L);
-        MockMultipartFile photo = new MockMultipartFile("photos", "a.jpg", "image/jpeg", ReportServiceTests.JPG);
+        long savedReportId = 12L;
+        when(repo.insert(any(), any(), any(), any())).thenReturn(savedReportId);
+        MockMultipartFile onePhoto = new MockMultipartFile("photos", "a.jpg", "image/jpeg", ReportServiceTests.JPG);
 
-        mvc.perform(multipart("/api/reports").file(photo)
-                        .param("type", "curb").param("lat", "35.14").param("lon", "126.93").param("mode", "wheelchair"))
+        mvc.perform(multipart("/api/reports").file(onePhoto)
+                        .param("type", "curb")
+                        .param("lat", "35.14")
+                        .param("lon", "126.93")
+                        .param("mode", "wheelchair"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(12))
+                .andExpect(jsonPath("$.id").value(savedReportId))
                 .andExpect(jsonPath("$.status").value("open"))
                 .andExpect(jsonPath("$.photoCount").value(1));
+
+        ArgumentCaptor<NewReport> saved = ArgumentCaptor.forClass(NewReport.class);
+        verify(repo).insert(saved.capture(), any(), any(), any());
+        assertThat(saved.getValue().type()).isEqualTo("curb");
+        assertThat(saved.getValue().mode()).isEqualTo("wheelchair");
+        assertThat(saved.getValue().lat()).isEqualTo(35.14);
     }
 
     @Test
