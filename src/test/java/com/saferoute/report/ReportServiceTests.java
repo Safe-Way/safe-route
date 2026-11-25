@@ -67,22 +67,22 @@ class ReportServiceTests {
 
     @Test
     @DisplayName("위도가 NaN(숫자 아님)이면 400으로 거절한다 — NaN은 범위 비교를 몰래 통과하던 버그(#302)")
-    void notANumberLatitudeIsRejected() {
-        double notANumberLat = Double.NaN;
-        double normalLon = 126.93;
+    void rejectsLatitudeThatIsNotANumber() {
+        double latitudeNotANumber = Double.NaN;
+        double normalLongitude = 126.93;
 
-        assertThatThrownBy(() -> checkOnlyPlace(notANumberLat, normalLon))
+        assertThatThrownBy(() -> checkReportWithOnlyLocation(latitudeNotANumber, normalLongitude))
                 .isInstanceOf(ReportException.class)
                 .hasMessageContaining("lat, lon");
     }
 
     @Test
     @DisplayName("경도가 무한대여도 400으로 거절한다")
-    void infiniteLongitudeIsRejected() {
-        double normalLat = 35.14;
-        double infiniteLon = Double.POSITIVE_INFINITY;
+    void rejectsInfiniteLongitude() {
+        double normalLatitude = 35.14;
+        double infiniteLongitude = Double.POSITIVE_INFINITY;
 
-        assertThatThrownBy(() -> checkOnlyPlace(normalLat, infiniteLon))
+        assertThatThrownBy(() -> checkReportWithOnlyLocation(normalLatitude, infiniteLongitude))
                 .isInstanceOf(ReportException.class)
                 .hasMessageContaining("lat, lon");
     }
@@ -90,26 +90,27 @@ class ReportServiceTests {
     @ParameterizedTest(name = "위도 {0}, 경도 {1} → 받아들임")
     @CsvSource({"90.0, 180.0", "-90.0, -180.0"})
     @DisplayName("위도 ±90·경도 ±180 딱 끝값은 받아들인다")
-    void edgeOfTheEarthIsAccepted(double lat, double lon) {
-        NewReport accepted = checkOnlyPlace(lat, lon);
+    void acceptsLatitude90AndLongitude180(double latitude, double longitude) {
+        NewReport accepted = checkReportWithOnlyLocation(latitude, longitude);
 
-        assertThat(accepted.lat()).isEqualTo(lat);
+        assertThat(accepted.lat()).isEqualTo(latitude);
     }
 
     @ParameterizedTest(name = "위도 {0}, 경도 {1} → 거절")
     @CsvSource({"90.1, 126.93", "35.14, 180.1"})
     @DisplayName("끝값을 조금이라도 넘으면 거절한다")
-    void pastTheEdgeIsRejected(double lat, double lon) {
-        assertThatThrownBy(() -> checkOnlyPlace(lat, lon)).isInstanceOf(ReportException.class);
+    void rejectsLatitudeOver90OrLongitudeOver180(double latitude, double longitude) {
+        assertThatThrownBy(() -> checkReportWithOnlyLocation(latitude, longitude))
+                .isInstanceOf(ReportException.class);
     }
 
     /** 위치만 넣고 모드·메모·정확도·사진은 비운 '턱' 신고 검사 */
-    private NewReport checkOnlyPlace(double lat, double lon) {
+    private NewReport checkReportWithOnlyLocation(double latitude, double longitude) {
         String noMode = null;
         String noMemo = null;
         Integer noAccuracyM = null;
         List<MultipartFile> noPhotos = null;
-        return service.check("curb", lat, lon, noMode, noMemo, noAccuracyM, noPhotos);
+        return service.check("curb", latitude, longitude, noMode, noMemo, noAccuracyM, noPhotos);
     }
 
     @Test

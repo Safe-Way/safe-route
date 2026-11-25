@@ -35,7 +35,7 @@ class ReportControllerTests {
 
     @Test
     @DisplayName("사진 1장 붙인 턱 신고를 보내면 201과 새 번호를 돌려주고, 종류·모드·위치가 저장소까지 그대로 간다")
-    void postWithPhotoGives201() throws Exception {
+    void reportWithOnePhotoReturns201AndIsSaved() throws Exception {
         long savedReportId = 12L;
         when(repo.insert(any(), any(), any(), any())).thenReturn(savedReportId);
         MockMultipartFile onePhoto = new MockMultipartFile("photos", "a.jpg", "image/jpeg", ReportServiceTests.JPG);
@@ -50,11 +50,11 @@ class ReportControllerTests {
                 .andExpect(jsonPath("$.status").value("open"))
                 .andExpect(jsonPath("$.photoCount").value(1));
 
-        ArgumentCaptor<NewReport> saved = ArgumentCaptor.forClass(NewReport.class);
-        verify(repo).insert(saved.capture(), any(), any(), any());
-        assertThat(saved.getValue().type()).isEqualTo("curb");
-        assertThat(saved.getValue().mode()).isEqualTo("wheelchair");
-        assertThat(saved.getValue().lat()).isEqualTo(35.14);
+        ArgumentCaptor<NewReport> savedReport = ArgumentCaptor.forClass(NewReport.class);
+        verify(repo).insert(savedReport.capture(), any(), any(), any());
+        assertThat(savedReport.getValue().type()).isEqualTo("curb");
+        assertThat(savedReport.getValue().mode()).isEqualTo("wheelchair");
+        assertThat(savedReport.getValue().lat()).isEqualTo(35.14);
     }
 
     @Test

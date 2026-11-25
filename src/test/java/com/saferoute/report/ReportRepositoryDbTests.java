@@ -17,14 +17,14 @@ class ReportRepositoryDbTests {
     private final FakeDb db = new FakeDb().generatedKey(7L);
     private final ReportRepository repo = new ReportRepository(db.jdbc());
 
-    private static NewReport report(Integer accuracy) {
+    private static NewReport curbReportWithAccuracy(Integer accuracy) {
         return new NewReport("curb", "wheelchair", "턱이 높아요", 35.147, 126.92, accuracy, List.of());
     }
 
     @Test
     @DisplayName("신고를 신고한 사람 해시와 함께 저장한다")
     void insertWithReporterHash() {
-        long id = repo.insert(report(12), 99L, "voice", "abc");
+        long id = repo.insert(curbReportWithAccuracy(12), 99L, "voice", "abc");
 
         assertThat(id).isEqualTo(7L);
         FakeDb.Call c = db.call("INSERT INTO road_report (");
@@ -36,7 +36,7 @@ class ReportRepositoryDbTests {
     @Test
     @DisplayName("정확도·가까운 길이 없으면 빈 값, 경로는 기본값으로 저장한다")
     void insertWithoutAccuracyEdgeAndDefaultVia() {
-        repo.insert(report(null), null);
+        repo.insert(curbReportWithAccuracy(null), null);
 
         assertThat(db.call("INSERT INTO road_report (").params())
                 .containsExactly("curb", "wheelchair", "턱이 높아요", 126.92, 35.147, 126.92, 35.147, null, null, "photo",
@@ -45,19 +45,19 @@ class ReportRepositoryDbTests {
 
     @Test
     @DisplayName("033 이전 DB면 옛 칸으로 저장한다 (새 칸은 처음 한 번만 시도)")
-    void insertFallsBackBeforeMigration033() {
+    void savesWithOldSqlWhenDbHasNoHashColumn() {
         String newSqlWithHashColumn = ", reporter_hash) VALUES";
         String oldSqlWithoutHash = "edge_id, via) VALUES";
         db.fails(newSqlWithHashColumn, "Unknown column 'reporter_hash'"); // 033 이전 DB 흉내
-        NewReport curbReport = report(5);
-        long nearEdgeId = 1L;
-        String sentWithPhoto = "photo";
+        NewReport curbReport = curbReportWithAccuracy(5);
+        long roadSegmentId = 1L;
+        String reportedVia = "photo";
         String reporterHash = "abc";
         long expectedNewId = 7L;   // 맨 위 FakeDb.generatedKey(7L)가 돌려주는 번호
         int oldSqlValueCount = 10; // 옛 INSERT 문의 ? 개수
 
-        long firstId = repo.insert(curbReport, nearEdgeId, sentWithPhoto, reporterHash);
-        long secondId = repo.insert(curbReport, nearEdgeId, sentWithPhoto, reporterHash);
+        long firstId = repo.insert(curbReport, roadSegmentId, reportedVia, reporterHash);
+        long secondId = repo.insert(curbReport, roadSegmentId, reportedVia, reporterHash);
 
         assertThat(firstId).isEqualTo(expectedNewId);
         assertThat(secondId).isEqualTo(expectedNewId);

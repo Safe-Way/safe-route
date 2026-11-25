@@ -41,7 +41,7 @@ class AppChatServiceTests {
                 .setControllerAdvice(new ApiErrorHandler()).build();
     }
 
-    static AppChatRequest said(String... userLines) {
+    static AppChatRequest userSaid(String... userLines) {
         List<AppChatRequest.Line> h = new java.util.ArrayList<>();
         for (String s : userLines) {
             h.add(new AppChatRequest.Line(true, s));
@@ -51,7 +51,7 @@ class AppChatServiceTests {
 
     @Test
     @DisplayName("처음 설정: 제미나이가 앱에 없는 값(HUGE·ROCKET)이나 중복을 줘도 앱이 아는 값만 남긴다")
-    void setupPicksOnlyAppValues() {
+    void setupKeepsOnlyValuesTheAppKnows() {
         String geminiAnswerWithUnknownValues = """
                 {"type":"pick","mode":"SENIOR","textSize":"HUGE","voiceGuide":true,"sosButton":true,
                  "extraMapItems":["TOILET","ROCKET","TOILET"],"reason":"어머님이 천천히 걸으셔서 어르신 모드로 맞췄어요.",
@@ -59,7 +59,7 @@ class AppChatServiceTests {
                 """;
         when(gemini.structured(anyString(), any(), any())).thenReturn(geminiAnswerWithUnknownValues);
 
-        Map<String, Object> setting = service.setup(said("우리 엄마가 70대인데 다리가 좀 불편해요"));
+        Map<String, Object> setting = service.setup(userSaid("우리 엄마가 70대인데 다리가 좀 불편해요"));
 
         assertThat(setting).containsEntry("type", "pick")
                 .containsEntry("mode", "SENIOR")                     // 아는 값은 그대로
@@ -93,7 +93,7 @@ class AppChatServiceTests {
                  "voiceGuide":true,"sosButton":false,"addMapItems":[],"removeMapItems":[],"nearbyKind":"toilet",
                  "placeQuery":"","choices":[]}
                 """);
-        Map<String, Object> r = service.map(said("화장실 어디야"));
+        Map<String, Object> r = service.map(userSaid("화장실 어디야"));
         assertThat(r).isEqualTo(Map.of("action", "nearby", "say", "가까운 화장실을 찾아볼게요.", "nearbyKind", "toilet"));
     }
 
@@ -104,7 +104,7 @@ class AppChatServiceTests {
                  "voiceGuide":true,"sosButton":false,"addMapItems":["SUBWAY","X"],"removeMapItems":[],
                  "nearbyKind":"none","placeQuery":"","choices":[]}
                 """);
-        Map<String, Object> r = service.map(said("글씨가 안 보여"));
+        Map<String, Object> r = service.map(userSaid("글씨가 안 보여"));
         assertThat(r).containsEntry("textSize", "LARGE").containsEntry("mode", null)
                 .containsEntry("addMapItems", List.of("SUBWAY"));
     }
@@ -118,19 +118,19 @@ class AppChatServiceTests {
                         .content("{\"history\":[{\"fromUser\":true,\"text\":\"택시 불러 줘\"}]}"))
                 .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.code").value("AI_UNAVAILABLE"));
         when(gemini.structured(anyString(), any(), any())).thenReturn("not json");
-        assertThatThrownBy(() -> service.map(said("안녕"))).isInstanceOf(AppChatException.class)
+        assertThatThrownBy(() -> service.map(userSaid("안녕"))).isInstanceOf(AppChatException.class)
                 .extracting("code").isEqualTo("AI_UNAVAILABLE");
         when(gemini.structured(anyString(), any(), any())).thenReturn(null);
-        assertThatThrownBy(() -> service.setup(said("안녕"))).extracting("code").isEqualTo("AI_UNAVAILABLE");
+        assertThatThrownBy(() -> service.setup(userSaid("안녕"))).extracting("code").isEqualTo("AI_UNAVAILABLE");
     }
 
     @Test
     @DisplayName("API 키가 없으면 제미나이를 한 번도 부르지 않고 AI_UNAVAILABLE(앱이 자체 규칙을 쓰라는 뜻)로 답한다")
-    void noKeyMeansUnavailableWithoutCalling() {
+    void noApiKeyMeansGeminiIsNeverCalled() {
         boolean hasApiKey = false;
         when(gemini.available()).thenReturn(hasApiKey);
 
-        assertThatThrownBy(() -> service.setup(said("안녕")))
+        assertThatThrownBy(() -> service.setup(userSaid("안녕")))
                 .extracting("code").isEqualTo("AI_UNAVAILABLE");
         verify(gemini, never()).structured(anyString(), any(), any());
     }
