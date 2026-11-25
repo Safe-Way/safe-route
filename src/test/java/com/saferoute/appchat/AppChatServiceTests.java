@@ -35,8 +35,8 @@ class AppChatServiceTests {
 
     @BeforeEach
     void setUp() {
-        boolean hasApiKey = true; // 기본은 키가 있는 서버. 키 없는 상황은 그 테스트에서만 바꾼다
-        when(gemini.available()).thenReturn(hasApiKey);
+        boolean hasKey = true; // 기본은 키가 있는 서버. 키 없는 상황은 그 테스트에서만 바꾼다
+        when(gemini.available()).thenReturn(hasKey);
         mvc = MockMvcBuilders.standaloneSetup(new AppChatController(service))
                 .setControllerAdvice(new ApiErrorHandler()).build();
     }
@@ -51,13 +51,13 @@ class AppChatServiceTests {
 
     @Test
     @DisplayName("처음 설정: 제미나이가 앱에 없는 값(HUGE·ROCKET)이나 중복을 줘도 앱이 아는 값만 남긴다")
-    void setupKeepsOnlyValuesTheAppKnows() {
-        String geminiAnswerWithUnknownValues = """
+    void setupKeepsKnownValues() {
+        String geminiAnswer = """
                 {"type":"pick","mode":"SENIOR","textSize":"HUGE","voiceGuide":true,"sosButton":true,
                  "extraMapItems":["TOILET","ROCKET","TOILET"],"reason":"어머님이 천천히 걸으셔서 어르신 모드로 맞췄어요.",
                  "question":"","choices":[]}
                 """;
-        when(gemini.structured(anyString(), any(), any())).thenReturn(geminiAnswerWithUnknownValues);
+        when(gemini.structured(anyString(), any(), any())).thenReturn(geminiAnswer);
 
         Map<String, Object> setting = service.setup(userSaid("우리 엄마가 70대인데 다리가 좀 불편해요"));
 
@@ -126,9 +126,9 @@ class AppChatServiceTests {
 
     @Test
     @DisplayName("API 키가 없으면 제미나이를 한 번도 부르지 않고 AI_UNAVAILABLE(앱이 자체 규칙을 쓰라는 뜻)로 답한다")
-    void noApiKeyMeansGeminiIsNeverCalled() {
-        boolean hasApiKey = false;
-        when(gemini.available()).thenReturn(hasApiKey);
+    void noKeyNoGemini() {
+        boolean hasKey = false;
+        when(gemini.available()).thenReturn(hasKey);
 
         assertThatThrownBy(() -> service.setup(userSaid("안녕")))
                 .extracting("code").isEqualTo("AI_UNAVAILABLE");

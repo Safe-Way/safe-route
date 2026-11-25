@@ -241,21 +241,21 @@ class GeminiBrainTests {
 
     @Test
     @DisplayName("제미나이가 도구 결과(50m)에 없는 숫자(20m)를 지어내면 그 답을 버리고 규칙 문장으로 진짜 거리를 말한다")
-    void madeUpDistanceIsReplacedByRuleSentence() {
-        String geminiAsksForNearbyToilet = """
+    void fakeDistanceReplaced() {
+        String askToilet = """
                 {"candidates":[{"content":{"role":"model","parts":[
                   {"functionCall":{"name":"find_nearby","args":{"kind":"toilet"}}}]}}]}
                 """;
-        String geminiSaysMadeUpDistance = """
+        String fakeAnswer = """
                 {"candidates":[{"content":{"role":"model","parts":[{"text":"화장실은 20m 앞이에요."}]}}]}
                 """;
-        server.expect(requestTo(URL)).andRespond(withSuccess(geminiAsksForNearbyToilet, MediaType.APPLICATION_JSON));
-        server.expect(requestTo(URL)).andRespond(withSuccess(geminiSaysMadeUpDistance, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL)).andRespond(withSuccess(askToilet, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL)).andRespond(withSuccess(fakeAnswer, MediaType.APPLICATION_JSON));
 
         AssistantReply reply = ask("화장실 급해");
 
-        boolean answeredByGemini = reply.ai();
-        assertThat(answeredByGemini).isFalse();
+        boolean byGemini = reply.ai();
+        assertThat(byGemini).isFalse();
         assertThat(reply.say())
                 .contains("50m")           // setUp의 가짜 시설 DB에 있는 진짜 거리
                 .doesNotContain("20m");    // 제미나이가 지어낸 거리
