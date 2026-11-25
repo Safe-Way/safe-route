@@ -10,6 +10,7 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.route.api.RouteRequest;
@@ -90,12 +91,21 @@ class ModeRulesTests {
     }
 
     @Test
+    @DisplayName("가로등이 북쪽 길에만 있으면: 밤 9시엔 조금 돌아도 밝은 북쪽 길, 낮 12시엔 어두운 지름길")
     void nightPrefersLightOverDarkShortcut() {
-        // 북쪽 길에만 등 → 밤에는 북쪽, 낮(어른)에는 지름길
-        List<Poi> lights = List.of(Poi.at("light", 126.93055, LAT + 0.0002), Poi.at("light", N_NEAR[0], N_NEAR[1]),
-                Poi.at("light", 126.93165, LAT + 0.0002));
-        assertThat(north(route(diamond(0.0004), lights, at(21), "adult", "auto"))).isTrue();
-        assertThat(north(route(diamond(0.0004), lights, at(12), "adult", "auto"))).isFalse();
+        List<Poi> lightsOnlyOnNorthRoad = List.of(Poi.at("light", 126.93055, LAT + 0.0002),
+                Poi.at("light", N_NEAR[0], N_NEAR[1]), Poi.at("light", 126.93165, LAT + 0.0002));
+        RoadGraph shortcutAndNorthRoad = diamond(0.0004); // 북쪽 길이 지름길보다 조금 먼 마름모 길
+        ZonedDateTime nineAtNight = at(21);
+        ZonedDateTime noon = at(12);
+        String adult = "adult";
+        String nightByClock = "auto"; // 밤인지는 시각으로 정함
+
+        RouteResult nightRoute = route(shortcutAndNorthRoad, lightsOnlyOnNorthRoad, nineAtNight, adult, nightByClock);
+        RouteResult dayRoute = route(shortcutAndNorthRoad, lightsOnlyOnNorthRoad, noon, adult, nightByClock);
+
+        assertThat(north(nightRoute)).as("밤에는 밝은 북쪽 길").isTrue();
+        assertThat(north(dayRoute)).as("낮에는 지름길").isFalse();
     }
 
     @Test

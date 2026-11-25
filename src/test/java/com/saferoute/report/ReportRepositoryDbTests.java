@@ -44,18 +44,27 @@ class ReportRepositoryDbTests {
     }
 
     @Test
-    @DisplayName("033 이전 DB면 옛 칸으로 저장한다")
+    @DisplayName("033 이전 DB면 옛 칸으로 저장한다 (새 칸은 처음 한 번만 시도)")
     void insertFallsBackBeforeMigration033() {
-        db.fails(", reporter_hash) VALUES", "Unknown column 'reporter_hash'");
+        String newSqlWithHashColumn = ", reporter_hash) VALUES";
+        String oldSqlWithoutHash = "edge_id, via) VALUES";
+        db.fails(newSqlWithHashColumn, "Unknown column 'reporter_hash'"); // 033 이전 DB 흉내
+        NewReport curbReport = report(5);
+        long nearEdgeId = 1L;
+        String sentWithPhoto = "photo";
+        String reporterHash = "abc";
+        long expectedNewId = 7L;   // 맨 위 FakeDb.generatedKey(7L)가 돌려주는 번호
+        int oldSqlValueCount = 10; // 옛 INSERT 문의 ? 개수
 
-        assertThat(repo.insert(report(5), 1L, "photo", "abc")).isEqualTo(7L);
-        assertThat(repo.insert(report(5), 1L, "photo", "abc")).isEqualTo(7L);
+        long firstId = repo.insert(curbReport, nearEdgeId, sentWithPhoto, reporterHash);
+        long secondId = repo.insert(curbReport, nearEdgeId, sentWithPhoto, reporterHash);
 
-        // 처음 한 번만 새 칸으로 해 보고, 그 뒤로는 예전 SQL만
-        assertThat(db.calls(", reporter_hash) VALUES")).hasSize(1);
-        List<FakeDb.Call> old = db.calls("edge_id, via) VALUES");
-        assertThat(old).hasSize(2);
-        assertThat(old.get(0).params()).hasSize(10);
+        assertThat(firstId).isEqualTo(expectedNewId);
+        assertThat(secondId).isEqualTo(expectedNewId);
+        assertThat(db.calls(newSqlWithHashColumn)).hasSize(1);
+        List<FakeDb.Call> oldSqlCalls = db.calls(oldSqlWithoutHash);
+        assertThat(oldSqlCalls).hasSize(2);
+        assertThat(oldSqlCalls.get(0).params()).hasSize(oldSqlValueCount);
     }
 
     @Test
