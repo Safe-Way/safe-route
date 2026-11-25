@@ -241,7 +241,7 @@ class GeminiBrainTests {
 
     @Test
     @DisplayName("제미나이가 도구 결과(50m)에 없는 숫자(20m)를 지어내면 그 답을 버리고 규칙 문장으로 진짜 거리를 말한다")
-    void madeUpNumberFallsBackToRuleSentence() {
+    void madeUpDistanceIsReplacedByRuleSentence() {
         String geminiAsksForNearbyToilet = """
                 {"candidates":[{"content":{"role":"model","parts":[
                   {"functionCall":{"name":"find_nearby","args":{"kind":"toilet"}}}]}}]}
