@@ -1,5 +1,8 @@
 package com.saferoute.route;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import java.io.IOException;
 import java.time.Clock;
 import java.time.ZoneId;
@@ -18,15 +21,20 @@ import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
 import org.springframework.core.io.ClassPathResource;
 
+import com.saferoute.route.api.RouteError;
+import com.saferoute.route.api.RouteException;
+import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.data.PreferenceSource;
 import com.saferoute.route.data.InMemoryRoadGraphSource;
 import com.saferoute.route.data.PoiSource;
+import com.saferoute.route.data.RoadGraphSource;
 import com.saferoute.route.engine.event.RoadEvent;
 import com.saferoute.route.engine.event.RoadReport;
 import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.score.RouteScorer;
 import com.saferoute.situation.NightJudge;
+import com.saferoute.situation.WeatherDustService;
 import com.saferoute.route.engine.explain.RouteResultAssembler;
 import com.saferoute.route.engine.facility.FacilityCounter;
 import com.saferoute.route.engine.geo.Geo;
@@ -53,14 +61,29 @@ final class TestRoutes {
     static final double[] M_P = {126.93110, LAT};
     static final double[] T_P = {126.93220, LAT};
 
+    /** 위도 1도의 길이(m). 같은 경도에서 위도만 바꾸면 Geo.distance가 정확히 이 비율이다 */
+    static final double M_PER_LAT = Geo.distance(0, 0, 0, 1);
+
     /** 어두운 길: 길 성질은 없고, 등이 없는 쪽이라 어둡다 (밝기는 poi로 계산) */
     static final EdgePenalty DARK = EdgePenalty.NONE;
+    static final EdgePenalty STAIRS = new EdgePenalty(Map.of(Penalty.STAIRS, 1.0));
+    static final EdgePenalty CURB = new EdgePenalty(Map.of(Penalty.CURB, 1.0));
+    /** A파트가 그린 지하 길처럼 지붕 있고 지하 */
+    static final EdgePenalty UNDER = new EdgePenalty(Map.of(Penalty.COVERED, 1.0, Penalty.UNDERGROUND, 1.0));
+
+    /** S_P에서 동쪽 약 365m. shortcutOrAround의 도착 */
+    static final double[] E_P = {126.934, LAT};
 
     private TestRoutes() {
     }
 
-    /** 밝은 길 꼭짓점 N의 위도를 정해 우회 정도를 바꾼다 (0.0006이면 약 1.2배, 0.0015면 약 1.9배) */
+    /** 밝은 길 꼭짓점 N의 위도를 정해 우회 정도를 바꾼다 (0.0004면 약 1.09배, 0.0006이면 약 1.2배, 0.0015면 약 1.9배) */
     static RoadGraph diamond(double northLatOffset) {
+        return diamond(northLatOffset, DARK);
+    }
+
+    /** diamond에서 지름길 첫 길 S–M(10)만 성질 shortcutPenalty */
+    static RoadGraph diamond(double northLatOffset, EdgePenalty shortcutPenalty) {
         double[] nP = {126.93110, LAT + northLatOffset};
         Map<Long, double[]> nodes = new LinkedHashMap<>();
         nodes.put(S, S_P);
@@ -68,12 +91,28 @@ final class TestRoutes {
         nodes.put(T, T_P);
         nodes.put(N, nP);
         List<RoadEdge> edges = new ArrayList<>();
-        edges.add(edge(10, S, M, S_P, M_P, DARK));
+        edges.add(edge(10, S, M, S_P, M_P, shortcutPenalty));
         edges.add(edge(11, M, T, M_P, T_P, DARK));
         edges.add(edge(12, S, N, S_P, nP, EdgePenalty.NONE));
         // 일부러 거꾸로 저장한 길: 걷는 방향과 반대로 저장돼 있어도 선이 이어져야 한다
         edges.add(edge(13, T, N, T_P, nP, EdgePenalty.NONE));
         return new RoadGraph(nodes, edges);
+    }
+
+    /** 성질 p인 지름길 S_P–E_P(약 365m)와, 가운데에서 북쪽 northM으로 돌아가는 보통 길 (노드 1 S_P, 2 E_P, 3 꼭짓점) */
+    static RoadGraph shortcutOrAround(EdgePenalty p, double northM) {
+        double[] n = north(new double[] {126.932, LAT}, northM);
+        return new RoadGraph(Map.of(1L, S_P, 2L, E_P, 3L, n), List.of(edge(1, 1, 2, S_P, E_P, p),
+                edge(2, 1, 3, S_P, n, EdgePenalty.NONE), edge(3, 3, 2, n, E_P, EdgePenalty.NONE)));
+    }
+
+    /**
+     * S–M–T 직선 길 + 북쪽 6km에 길과 이어지지 않은 노드 99.
+     * 99는 서비스 지역(노드 전체를 감싼 사각형)을 북쪽으로 넓히는 용도이고, 붙이기는 가장 큰 덩어리에만 하므로 99에는 안 붙는다
+     */
+    static RoadGraph lineWithFarNode() {
+        return new RoadGraph(Map.of(S, S_P, M, M_P, T, T_P, 99L, north(S_P, 6000)), List.of(
+                edge(1, S, M, S_P, M_P, EdgePenalty.NONE), edge(2, M, T, M_P, T_P, EdgePenalty.NONE)));
     }
 
     /**
@@ -107,9 +146,88 @@ final class TestRoutes {
         return new RoadGraph(nodes, edges);
     }
 
+    /** g에 노드와 길을 더한 새 도로망 */
+    static RoadGraph plus(RoadGraph g, Map<Long, double[]> nodes, RoadEdge... edges) {
+        Map<Long, double[]> n = new LinkedHashMap<>(g.nodes());
+        n.putAll(nodes);
+        List<RoadEdge> e = new ArrayList<>(g.graph().edgeSet());
+        e.addAll(List.of(edges));
+        return new RoadGraph(n, e);
+    }
+
     static RoadEdge edge(long id, long from, long to, double[] a, double[] b, EdgePenalty p) {
         List<double[]> line = List.of(a, b);
         return new RoadEdge(id, from, to, Geo.length(line), "footway", line, p);
+    }
+
+    /** 길 종류(highway)와 인도 태그(sidewalk)가 있는 곧은 길 */
+    static RoadEdge road(long id, long from, long to, double[] a, double[] b, String highway, String sidewalk) {
+        List<double[]> line = List.of(a, b);
+        return new RoadEdge(id, from, to, Geo.length(line), highway, line, EdgePenalty.NONE, sidewalk);
+    }
+
+    /** S에서 동쪽 eastM, 북쪽 northM(m) 떨어진 점 {경도, 위도} */
+    static double[] xy(double eastM, double northM) {
+        return north(east(S_P, eastM), northM);
+    }
+
+    /** p에서 정북으로 m만큼 간 점 */
+    static double[] north(double[] p, double m) {
+        return new double[] {p[0], p[1] + m / M_PER_LAT};
+    }
+
+    /** p에서 정동으로 m만큼 간 점 */
+    static double[] east(double[] p, double m) {
+        return new double[] {p[0] + m / (M_PER_LAT * Math.cos(Math.toRadians(p[1]))), p[1]};
+    }
+
+    // 경곗값 검사용. 이름에 쪽(이하·미만)을 넣지 않아 <, <= 규칙 어디에나 쓴다
+
+    /** 거리 경계 바로 아래 (m) */
+    static double justBelow(double limitM) {
+        return limitM - 0.01;
+    }
+
+    /** 거리 경계 바로 위 (m) */
+    static double justAbove(double limitM) {
+        return limitM + 0.01;
+    }
+
+    /** 안내하는 경로가 지름길(위도 LAT)에서 북쪽으로 돌아가는지 */
+    static boolean north(RouteResult r) {
+        return safe(r).geometry().stream().anyMatch(p -> p[1] > LAT + 0.0001);
+    }
+
+    /** 부른 결과의 오류 종류. 오류 없이 끝나면 null */
+    static RouteError errorOf(Runnable call) {
+        try {
+            call.run();
+            return null;
+        } catch (RouteException e) {
+            return e.error();
+        }
+    }
+
+    static void assertError(Runnable call, RouteError expected) {
+        assertThatThrownBy(call::run)
+                .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(expected));
+    }
+
+    static void assertNoRoute(Runnable call) {
+        assertError(call, RouteError.NO_ROUTE);
+    }
+
+    /** NO_ROUTE이고 문장이 message */
+    static void assertNoRoute(Runnable call, String message) {
+        assertThatThrownBy(call::run).isInstanceOfSatisfying(RouteException.class, e -> {
+            assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE);
+            assertThat(e.getMessage()).isEqualTo(message);
+        });
+    }
+
+    /** 안내하는 경로 (응답 routes의 마지막) */
+    static RouteResult.Route safe(RouteResult r) {
+        return r.routes().get(r.routes().size() - 1);
     }
 
     /** 스프링 없이 실제 부품을 이어 만든 RouteService. 시각은 2026-10-30 hour시(서울)로 고정 */
@@ -122,9 +240,15 @@ final class TestRoutes {
     }
 
     static RouteService service(RoadGraph graph, PoiSource pois, ZonedDateTime now, RouteProperties props) {
-        return new RouteService(new InMemoryRoadGraphSource(graph), pois, new NightJudge(), new RouteScorer(props),
+        return service(new InMemoryRoadGraphSource(graph), pois, now, props, PreferenceSource.NONE, null);
+    }
+
+    /** 도로망 출처·사람 선호·날씨까지 정하는 RouteService. weather가 null이면 날씨를 묻지 않는다 */
+    static RouteService service(RoadGraphSource roads, PoiSource pois, ZonedDateTime now, RouteProperties props,
+            PreferenceSource preferences, WeatherDustService weather) {
+        return new RouteService(roads, pois, new NightJudge(), new RouteScorer(props),
                 new RouteResultAssembler(new FacilityCounter(props), props),
-                props, Clock.fixed(now.toInstant(), now.getZone()), PreferenceSource.NONE, null);
+                props, Clock.fixed(now.toInstant(), now.getZone()), preferences, weather);
     }
 
     /** 2026-10-30(금) hour시 서울 */
@@ -196,6 +320,38 @@ final class TestRoutes {
     /** 24시간 이용할 수 있는 길가 비상벨 (밤 도움 시설) */
     static Poi outdoorBell(long id, double lon, double lat) {
         return new Poi("bell", "가로변", 0, lon, lat, 0, 24 * 60, "매일", null, null, null, null, null, null, id, 1);
+    }
+
+    /** diamond(0.0006)의 밝은 길(S–N–T) 위에 등 6개, CCTV 2곳(3대), 비상벨 1개. 어두운 지름길에는 아무것도 없다 */
+    static List<Poi> brightSideFacilities() {
+        List<Poi> f = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            double t = (i + 1) / 7.0;
+            double lon = i < 3 ? 126.93000 + 0.0011 * t * 2 : 126.93220 - 0.0011 * (1 - t) * 2;
+            double lat = LAT + 0.0006 * (i < 3 ? t * 2 : (1 - t) * 2);
+            f.add(plain("light", i, lon, lat, 1));
+        }
+        f.add(plain("cctv", 10, 126.93110, 35.14060, 2));
+        f.add(plain("cctv", 11, 126.93060, 35.14030, 1));
+        f.add(outdoorBell(20, 126.93160, 35.14030));
+        return f;
+    }
+
+    static final List<String> ALL_MODES = List.of("adult", "child", "senior", "wheelchair");
+
+    /** at 자리의 신고. 피할 모드·비용만 더할 모드는 뷰가 종류로 정하는 목록과 같게 만든다 (migration 032) */
+    static RoadReport report(String type, double[] at) {
+        List<String> avoid = switch (type) {
+            case "obstacle", "accident", "construction" -> ALL_MODES;
+            case "curb", "steep", "broken" -> List.of("senior", "wheelchair");
+            default -> List.of();
+        };
+        List<String> cost = switch (type) {
+            case "curb", "steep", "broken" -> List.of("adult", "child");
+            case "obstacle", "accident", "construction" -> List.of();
+            default -> ALL_MODES;
+        };
+        return new RoadReport(3, type, at[0], at[1], LocalDate.of(2026, 11, 16), avoid, cost);
     }
 
     /**

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,10 +22,13 @@ import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
 
 /** 도로망 읽기에서 DB 없이 확인할 수 있는 부분 */
+@DisplayName("도로망 읽기 (DB 없이)")
 class MysqlRoadGraphSourceTests {
 
     @Test
+    @DisplayName("비포장으로 확인된 재질만 비포장이고 포장·다진 흙·모름은 아니다")
     void unpavedOnlyWhenConfirmed() {
+        // 모르는 값은 감점하지 않음 (route.yml)
         assertThat(MysqlRoadGraphSource.isUnpaved("dirt")).isTrue();
         assertThat(MysqlRoadGraphSource.isUnpaved("Gravel ")).isTrue();
         assertThat(MysqlRoadGraphSource.isUnpaved("cobblestone")).isTrue();
@@ -35,6 +39,7 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    @DisplayName("재질을 모르면 길 종류와 등산 난이도로 바닥을 정한다")
     void surfaceFromRoadTypeWhenUnknown() {
         // 재질이 있으면 재질이 먼저
         assertThat(MysqlRoadGraphSource.classify("dirt", "residential", null, null, null, null, null)).isEqualTo(MysqlRoadGraphSource.Surface.UNPAVED);
@@ -55,7 +60,9 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    @DisplayName("ford가 stepping_stones·yes면 징검다리이고 no·없음은 아니다")
     void fordMeansSteppingStonesOrWaterCrossing() {
+        // route.yml wheelchair.exclude ford
         assertThat(MysqlRoadGraphSource.isFord("stepping_stones")).isTrue();
         assertThat(MysqlRoadGraphSource.isFord("yes")).isTrue();
         assertThat(MysqlRoadGraphSource.isFord("no")).isFalse();
@@ -63,6 +70,7 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    @DisplayName("태그에서 차로 수·일방통행·폭을 읽고 못 읽으면 null이다")
     void lanesOnewayWidthFromTags() {
         // 폭은 단위 표기가 섞여 앞의 숫자만
         assertThat(MysqlRoadGraphSource.widthM("7")).isEqualTo(7.0);
@@ -82,25 +90,32 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    @DisplayName("인도 쪽은 sidewalk 태그 먼저, 없으면 sidewalk:both·left·right로 정한다")
     void sidewalkFromTags() {
+        // 한쪽만 알면 정하지 않는다
         assertThat(MysqlRoadGraphSource.sidewalk("right", null, null, null)).isEqualTo("right");
         assertThat(MysqlRoadGraphSource.sidewalk("none", null, null, null)).isEqualTo("no");
         // sidewalk가 없으면 sidewalk:both·left·right. separate(따로 그림)도 그쪽에 인도가 있다
         assertThat(MysqlRoadGraphSource.sidewalk(null, "separate", null, null)).isEqualTo("both");
         assertThat(MysqlRoadGraphSource.sidewalk(null, null, "no", "separate")).isEqualTo("right");
         assertThat(MysqlRoadGraphSource.sidewalk(null, null, "no", "no")).isEqualTo("no");
+        assertThat(MysqlRoadGraphSource.sidewalk(null, null, "yes", "no")).isEqualTo("left");
+        assertThat(MysqlRoadGraphSource.sidewalk(null, null, "yes", "separate")).isEqualTo("both");
         // 한쪽만 알면 다른 쪽을 몰라 정하지 않는다
         assertThat(MysqlRoadGraphSource.sidewalk(null, null, null, "yes")).isNull();
+        assertThat(MysqlRoadGraphSource.sidewalk(null, null, "yes", null)).isNull();
         assertThat(MysqlRoadGraphSource.sidewalk(null, null, null, null)).isNull();
     }
 
     @Test
+    @DisplayName("WKT LINESTRING을 {경도, 위도} 점 목록으로 읽는다")
     void parsesLineString() {
         assertThat(MysqlRoadGraphSource.parseLineString("LINESTRING(126.93 35.14,126.931 35.141)"))
                 .containsExactly(new double[] {126.93, 35.14}, new double[] {126.931, 35.141});
     }
 
     @Test
+    @DisplayName("지하 출구 한 줄을 못 읽어도 그 출구만 빼고 도로망을 읽는다")
     void badAttachEdgeIsSkippedNotFatal() {
         // 지하 출구 한 줄을 못 읽어도 도로망 전체를 읽는다 (그 출구만 잇지 않음)
         assertThat(MysqlRoadGraphSource.attachEdge("127396")).isEqualTo(127396L);
@@ -110,6 +125,7 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    @DisplayName("광장 길은 지하 표시 없이 읽고 휠체어 확인된 줄은 광장 표시도 없다")
     void plazaRowsAreReadAsPlainWalkways() {
         // 광장 길(w13)은 지하 길과 같은 표에서 읽되 지하 표시를 붙이지 않는다 (늘 요청 도로망에 들어감)
         // wheelchair = yes로 확인된 줄은 광장 표시도 없다(휠체어가 씀). 태그 없음은 광장 그대로 (11-16)
@@ -149,6 +165,7 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    @DisplayName("태그가 없으면 보도 자료의 인도 쪽·폭을 쓴다")
     void sidewalkSideAndWidthFromDataWhenNoTag() throws Exception {
         // 태그가 없으면 보도 자료 쪽·폭. 폭 1.2m < 1.5m면 좁은 인도
         RoadEdge e = readRow(Map.of("length_m", 50.0, "w_side", "left", "w_width", 1.2));
@@ -162,6 +179,7 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    @DisplayName("OSM 인도 태그가 있으면 보도 자료보다 먼저이고 자료 폭은 쓰지 않는다")
     void sidewalkTagWinsOverData() throws Exception {
         RoadEdge e = readRow(Map.of("length_m", 50.0, "sw", "no", "w_side", "both", "w_width", 1.0));
         assertThat(e.sidewalk()).isEqualTo("no");
@@ -170,6 +188,7 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    @DisplayName("20m보다 짧은 길은 보도 자료를 쓰지 않는다")
     void shortEdgeIgnoresSidewalkData() throws Exception {
         // 20m보다 짧은 길(교차로 조각)은 자료를 쓰지 않아 모름
         RoadEdge e = readRow(Map.of("length_m", 10.0, "w_side", "both", "w_width", 1.0, "w_material", "unpaved"));
@@ -179,6 +198,7 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    @DisplayName("인도가 있는 차도는 인도 재질을 바닥 재질로 본다")
     void sidewalkMaterialIsTheWalkingSurfaceOfARoad() throws Exception {
         // 인도가 있는 차도는 인도 재질이 바닥: 자료 unpaved면 차도가 아스팔트여도 비포장
         assertThat(readRow(Map.of("length_m", 50.0, "surface", "asphalt", "w_side", "both", "w_material", "unpaved"))
@@ -195,6 +215,7 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    @DisplayName("보도 자료(edge_sidewalk)는 도로망 길에만 붙이고 지하·광장 줄은 NULL이다")
     void sidewalkDataIsJoinedOnRoadEdgesOnly() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         new MysqlRoadGraphSource(jdbc, com.saferoute.route.RouteTestProps.load()).covers(126.92, 35.14);
@@ -207,6 +228,7 @@ class MysqlRoadGraphSourceTests {
     }
 
     @Test
+    @DisplayName("건너는 자리는 횡단보도 poi만 읽고 신호등 점은 읽지 않는다")
     void crosswalkPointsAreCrosswalkPoiOnly() {
         // 응답 crossAt의 큰 길 건너는 자리 (specs/014): 신호등 점(교차로 가운데)은 읽지 않는다
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
@@ -214,5 +236,16 @@ class MysqlRoadGraphSourceTests {
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         verify(jdbc, times(3)).query(sql.capture(), any(RowMapper.class));
         assertThat(sql.getAllValues().get(2)).isEqualTo("SELECT lon, lat FROM poi WHERE kind = 'crosswalk'");
+    }
+
+    @Test
+    @DisplayName("보도 자료 인도 폭이 1.5m 미만이면 좁은 인도이고 같으면 아니다")
+    void sidewalkNarrowerThan1Point5mIsNarrow() throws Exception {
+        // narrow-sidewalk-m (route.yml narrow-sidewalk-m, 2026-11-13)
+        double narrow = com.saferoute.route.RouteTestProps.load().narrowSidewalkM();
+        assertThat(readRow(Map.of("length_m", 50.0, "w_side", "both", "w_width", narrow - 0.01)).penalty()
+                .get(Penalty.NARROW_SIDEWALK)).isEqualTo(1.0);
+        assertThat(readRow(Map.of("length_m", 50.0, "w_side", "both", "w_width", narrow)).penalty()
+                .get(Penalty.NARROW_SIDEWALK)).isZero();
     }
 }

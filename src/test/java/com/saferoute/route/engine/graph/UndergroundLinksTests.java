@@ -5,12 +5,14 @@ import static org.assertj.core.api.Assertions.within;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.RoadEdge.EdgePenalty;
 
 /** 역 출구를 지상 길 위 수직의 발에 잇기 (비 오는 날 지하 길, 2026-11-09) */
+@DisplayName("역 출구 잇기")
 class UndergroundLinksTests {
 
     static final double LAT = 35.14;
@@ -34,7 +36,9 @@ class UndergroundLinksTests {
     }
 
     @Test
+    @DisplayName("출구가 길 가운데에 붙으면 길을 둘로 나누고 지붕 없는 연결 길을 더한다")
     void exitInTheMiddleSplitsTheRoadAndAddsALink() {
+        // 나눈 길은 성질 유지 (2026-11-09)
         List<RoadEdge> out = UndergroundLinks.attach(List.of(ROAD), List.of(X1));
 
         List<RoadEdge> pieces = pieces(out);
@@ -66,7 +70,9 @@ class UndergroundLinksTests {
     }
 
     @Test
+    @DisplayName("한 길에 출구가 여럿이면 길 처음에서 가까운 차례로 나눈다")
     void twoExitsOnOneRoadSplitInOrderAlongTheRoad() {
+        // UndergroundLinks.attach
         // 거꾸로 넣어도 길 처음에서 가까운 차례로 나눈다 (평동역 1·2번 출구가 같은 길)
         List<RoadEdge> out = UndergroundLinks.attach(List.of(ROAD), List.of(X2, X1));
 
@@ -83,10 +89,31 @@ class UndergroundLinksTests {
         assertThat(links(out)).extracting(RoadEdge::from).containsExactly(X1.node(), X2.node());
         assertThat(links(out).get(0).to()).isEqualTo(pieces.get(0).to());
         assertThat(links(out).get(1).to()).isEqualTo(pieces.get(1).to());
+        // 새 발 점 번호는 NODE_BASE부터 내려가며 서로 다르다
+        assertThat(List.of(pieces.get(0).to(), pieces.get(1).to())).doesNotHaveDuplicates()
+                .allSatisfy(n -> assertThat(n).isLessThanOrEqualTo(UndergroundLinks.NODE_BASE));
     }
 
     @Test
+    @DisplayName("발이 앞 발 가까이면 길을 또 나누지 않고 앞 발 점에 잇는다")
+    void exitWhoseFootIsNextToThePreviousFootSharesIt() {
+        // SPLIT_MIN_M 안 (UndergroundLinks.attach)
+        UndergroundLinks.Exit next = new UndergroundLinks.Exit(-3001604,
+                new double[] {X1.point()[0] + eastDeg(RoadGraph.SPLIT_MIN_M - 0.01), LAT - 0.0002}, 100);
+        List<RoadEdge> out = UndergroundLinks.attach(List.of(ROAD), List.of(X1, next));
+
+        assertThat(pieces(out)).hasSize(2);
+        assertThat(links(out)).extracting(RoadEdge::to).containsOnly(pieces(out).get(0).to());
+        // SPLIT_MIN_M보다 떨어지면 따로 나눈다
+        UndergroundLinks.Exit apart = new UndergroundLinks.Exit(-3001605,
+                new double[] {X1.point()[0] + eastDeg(RoadGraph.SPLIT_MIN_M + 0.01), LAT - 0.0002}, 100);
+        assertThat(pieces(UndergroundLinks.attach(List.of(ROAD), List.of(X1, apart)))).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("발이 길 끝 가까이면 길을 나누지 않고 그 끝 점에 잇는다")
     void exitNearAnEndJoinsThatEndWithoutSplitting() {
+        // SPLIT_MIN_M 안 (UndergroundLinks.attach)
         // 길 처음에서 1m 안에 발이 내린다
         UndergroundLinks.Exit x = new UndergroundLinks.Exit(-3000101, new double[] {126.930005, LAT + 0.0001}, 100);
         List<RoadEdge> out = UndergroundLinks.attach(List.of(ROAD), List.of(x));
@@ -95,9 +122,25 @@ class UndergroundLinksTests {
         RoadEdge link = links(out).get(0);
         assertThat(link.to()).isEqualTo(1);
         assertThat(link.geometry().get(1)).isEqualTo(A);
+        // 길 마지막 점(노드 2) 쪽도 같다
+        UndergroundLinks.Exit y = new UndergroundLinks.Exit(-3000102,
+                new double[] {B[0] - eastDeg(RoadGraph.SPLIT_MIN_M - 0.01), LAT + 0.0001}, 100);
+        List<RoadEdge> atEnd = UndergroundLinks.attach(List.of(ROAD), List.of(y));
+        assertThat(atEnd).hasSize(2).contains(ROAD);
+        assertThat(links(atEnd).get(0).to()).isEqualTo(2);
+        assertThat(links(atEnd).get(0).geometry().get(1)).isEqualTo(B);
+        UndergroundLinks.Exit z = new UndergroundLinks.Exit(-3000103,
+                new double[] {B[0] - eastDeg(RoadGraph.SPLIT_MIN_M + 0.01), LAT + 0.0001}, 100);
+        assertThat(pieces(UndergroundLinks.attach(List.of(ROAD), List.of(z)))).hasSize(2);
+    }
+
+    /** 위도 LAT에서 동쪽 m만큼의 경도 차 */
+    static double eastDeg(double m) {
+        return m / (Geo.distance(0, 0, 0, 1) * Math.cos(Math.toRadians(LAT)));
     }
 
     @Test
+    @DisplayName("붙일 길이 읽은 도로망에 없는 출구는 잇지 않는다")
     void exitWhoseRoadIsNotLoadedIsLeftOut() {
         UndergroundLinks.Exit x = new UndergroundLinks.Exit(-3000101, X1.point(), 999);
         assertThat(UndergroundLinks.attach(List.of(ROAD), List.of(x))).containsExactly(ROAD);
@@ -110,14 +153,18 @@ class UndergroundLinksTests {
     }
 
     @Test
+    @DisplayName("출구 점이 이미 모든 모드가 쓰는 지상 길 끝이면 잇지 않는다")
     void exitAlreadyOnAUsableSurfaceEdgeGetsNoLink() {
+        // UndergroundLinks.attach, 2026-11-16
         // 휠체어 확인한 광장 선(광장 표시 없음)이 출구 점에 닿은 문화전당역 4번 출구: 곧은 연결 길을 더하지 않는다 (2026-11-16)
         RoadEdge plazaYes = surface(200, null);
         assertThat(UndergroundLinks.attach(List.of(ROAD, plazaYes), List.of(X1))).containsExactly(ROAD, plazaYes);
     }
 
     @Test
+    @DisplayName("계단·광장 선·지하 길만 닿은 출구는 그대로 지상 길에 잇는다")
     void exitTouchingOnlyStairsOrUnknownPlazaKeepsItsLink() {
+        // UndergroundLinks.attach
         // 계단·높낮이 모르는 광장 선으로는 휠체어가 못 나가므로 그대로 잇는다. 지하 길도 지상 길로 치지 않는다
         List<RoadEdge> out = UndergroundLinks.attach(
                 List.of(ROAD, surface(201, Penalty.STAIRS), surface(202, Penalty.PLAZA), surface(203, Penalty.UNDERGROUND)),

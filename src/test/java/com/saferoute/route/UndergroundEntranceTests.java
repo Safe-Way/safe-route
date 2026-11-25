@@ -1,19 +1,21 @@
 package com.saferoute.route;
 
-import static com.saferoute.route.RainRouteTests.UNDER;
-import static com.saferoute.route.RainRouteTests.safe;
-import static com.saferoute.route.RainRouteTests.xy;
+import static com.saferoute.route.TestRoutes.UNDER;
+import static com.saferoute.route.TestRoutes.safe;
+import static com.saferoute.route.TestRoutes.xy;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteRequest.Place;
 import com.saferoute.route.api.RouteResult;
 import com.saferoute.route.data.InMemoryRoadGraphSource;
+import com.saferoute.route.data.PreferenceSource;
 import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.Penalty;
 import com.saferoute.route.engine.graph.RoadEdge;
@@ -31,6 +33,7 @@ import com.saferoute.route.engine.graph.UndergroundLinks;
  * </pre>
  * 카카오 지하상가 점은 서쪽 끝(15m, XW3 옆)이고, 출발은 동쪽 끝(900m)
  */
+@DisplayName("지하 시설 들어가는 출구")
 class UndergroundEntranceTests {
 
     static final EdgePenalty UNDER_STAIRS = new EdgePenalty(
@@ -74,7 +77,8 @@ class UndergroundEntranceTests {
     }
 
     static RouteResult route(String name, String mode, String rain) {
-        RouteService s = RainRouteTests.service(new InMemoryRoadGraphSource(GRAPH, EXITS, PLACES), null);
+        RouteService s = TestRoutes.service(new InMemoryRoadGraphSource(GRAPH, EXITS, PLACES), TestRoutes.pois(List.of()),
+                TestRoutes.at(12), TestRoutes.props(), PreferenceSource.NONE, null);
         return s.route(new RouteRequest(new Place(FROM[1], FROM[0], null), new Place(MALL[1], MALL[0], name), "off", mode,
                 null, rain));
     }
@@ -89,6 +93,7 @@ class UndergroundEntranceTests {
     }
 
     @Test
+    @DisplayName("맑은 날은 그 모드가 쓸 수 있는 가장 가까운 출구에서 끝난다")
     void clearDayEndsAtTheNearestExitTheModeCanUse() {
         // 어른: 동쪽에서 오면 가장 가까운 계단 출구(XE5)에서 끝난다. 서쪽 끝 카카오 점까지 지상으로 700m 넘게 걷지 않는다
         RouteResult adult = route("금남지하상가", "adult", "off");
@@ -121,6 +126,7 @@ class UndergroundEntranceTests {
     }
 
     @Test
+    @DisplayName("이름이 없거나 다른 장소 이름이면 고른 좌표로 간다")
     void noOrOtherNameKeepsTheDestination() {
         // 역 이름 뒤에 다른 말이 붙으면(출구·주차장) 사용자가 고른 그 좌표로 간다
         for (String name : new String[] {null, "스타벅스 금남로점", "문화전당역 4번 출구", "문화전당역4번출구",
@@ -132,6 +138,7 @@ class UndergroundEntranceTests {
     }
 
     @Test
+    @DisplayName("비 오는 날은 지하로 들어가 가까운 지하 점에서 끝나고 다시 올라오지 않는다")
     void rainArrivesInsideWithoutComingUpAgain() {
         // 비 오고 운행 시간 안: 지하상가 점 어디든 닿으면 도착. 동쪽 출구로 내려가 가까운 지하상가 점(M1)에서 끝나고 서쪽 출구로 올라오지 않는다
         RouteResult adult = route("금남지하상가", "adult", "on");
@@ -148,7 +155,61 @@ class UndergroundEntranceTests {
     }
 
     @Test
+    @DisplayName("휠체어 출발점을 다시 붙여도 도착은 들어가는 출구이고 출발점 알림만 붙는다")
+    void wheelchairStartBehindStairsIsResnappedAndStillEndsAtTheEntrance() {
+        // 도착점 근처 알림은 없다 (RouteService.attempt, 2026-11-16)
+        // 출발점은 FROM 북쪽 30m 보행로(계단으로만 FROM과 이어짐)에서 3m 위
+        double[] w = xy(880, 30), e = xy(920, 30);
+        RoadGraph g = TestRoutes.plus(GRAPH, Map.of(41L, w, 42L, e), TestRoutes.edge(40, 41, 42, w, e, EdgePenalty.NONE),
+                TestRoutes.edge(41, 42, 4, e, FROM, TestRoutes.STAIRS));
+        double[] start = xy(900, 33);
+        RouteService s = TestRoutes.service(new InMemoryRoadGraphSource(g, EXITS, PLACES),
+                TestRoutes.pois(List.of()), TestRoutes.at(12), TestRoutes.props(), PreferenceSource.NONE, null);
+
+        RouteResult r = s.route(new RouteRequest(new Place(start[1], start[0], null), new Place(MALL[1], MALL[0], "금남지하상가"),
+                "off", "wheelchair", null, "off"));
+        assertThat(end(r)).containsExactly(xy(700, 20));
+        assertThat(entrance(r)).hasSize(1);
+        assertThat(r.explanation().notes()).filteredOn(n -> n.kind().equals("snap")).singleElement()
+                .satisfies(n -> assertThat(n.text()).startsWith("출발점"));
+    }
+
+    @Test
+    @DisplayName("들어가는 곳은 길 비용과 모드 기준 비용 합이 가장 적은 출구다")
+    void entranceIsTheExitWithTheLeastRouteAndCriteriaCost() {
+        // 앞 점에서 잰 비용, λ = 1 (RouteService.entrance, 2026-11-16)
+        // 출발 (100, 0) → 노드 3 (0, 0). 3에서 북쪽 골목 50m 끝 출구 XA(연결 10m), 남쪽 보행로 55m 끝 출구 XB(연결 10m).
+        // 길이로는 북쪽(60m)이 가깝지만, 어린이 낮 기준을 보호구역 3·도움 시설 1·골목길 1로 두면(시설 없음)
+        // 북쪽 50×6 + 10×5 = 350, 남쪽 65×5 = 325라 남쪽이다
+        long xa = -3002001, xb = -3002002, hall = -1002000;
+        Map<Long, double[]> nodes = Map.of(1L, xy(100, 0), 3L, xy(0, 0), 5L, xy(0, 50), 6L, xy(0, -55),
+                xa, xy(10, 50), xb, xy(10, -55), hall, xy(30, 0));
+        RoadGraph g = new RoadGraph(nodes, List.of(
+                TestRoutes.edge(50, 1, 3, nodes.get(1L), nodes.get(3L), EdgePenalty.NONE),
+                TestRoutes.road(51, 3, 5, nodes.get(3L), nodes.get(5L), "residential", null),
+                TestRoutes.edge(52, 3, 6, nodes.get(3L), nodes.get(6L), EdgePenalty.NONE),
+                under(53, xa, hall, "steps", "문화전당역 1번 출구 계단", nodes),
+                under(54, xb, hall, "steps", "문화전당역 2번 출구 계단", nodes)));
+        List<UndergroundLinks.Exit> exits = List.of(new UndergroundLinks.Exit(xa, nodes.get(xa), 51),
+                new UndergroundLinks.Exit(xb, nodes.get(xb), 52));
+        RouteProperties props = TestRoutes.props("route.profiles.child.day.weights.school=3",
+                "route.profiles.child.day.weights.help=1", "route.profiles.child.day.weights.alley=1");
+        RouteService s = TestRoutes.service(new InMemoryRoadGraphSource(g, exits, Map.of(hall, "문화전당역 대합실")),
+                TestRoutes.pois(List.of()), TestRoutes.at(12), props, PreferenceSource.NONE, null);
+        double[] from = nodes.get(1L);
+        double[] to = xy(30, 0);
+
+        RouteResult r = s.route(new RouteRequest(new Place(from[1], from[0], null), new Place(to[1], to[0], "문화전당역"),
+                "off", "child", null, "off"));
+        assertThat(end(r)).containsExactly(nodes.get(xb));
+        assertThat(entrance(r)).containsExactly(
+                RouteResult.Note.info("entrance", "문화전당역은 문화전당역 2번 출구(계단)로 들어가요"));
+    }
+
+    @Test
+    @DisplayName("지하 장소 이름은 띄어쓰기를 무시하고 역 이름으로도 찾는다")
     void placeNamesMatchWithoutSpacesOrByStation() {
+        // 출구 번호까지 쓴 이름이나 없는 역은 맞추지 않는다
         assertThat(RouteService.undergroundPlace("금남 지하상가", PLACES)).containsExactlyInAnyOrder(M1, M2);
         assertThat(RouteService.undergroundPlace("금남로4가역 광주1호선", PLACES)).containsExactly(CW);
         assertThat(RouteService.undergroundPlace("문화전당역", PLACES)).containsExactly(CE);

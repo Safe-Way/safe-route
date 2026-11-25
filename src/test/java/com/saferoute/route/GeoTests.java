@@ -5,21 +5,25 @@ import static org.assertj.core.api.Assertions.within;
 
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.geo.Geo;
 
 /** 거리·범위 계산 */
+@DisplayName("거리·범위 계산")
 class GeoTests {
 
     @Test
+    @DisplayName("두 점 거리는 MySQL ST_Distance_Sphere와 0.5m 안으로 같다")
     void distanceMatchesMysqlDistanceSphere() {
         // DatabaseConnectionTests에서 MySQL ST_Distance_Sphere가 100.02m로 잰 두 점
         assertThat(Geo.distance(126.9300, 35.1400, 126.9311, 35.1400)).isCloseTo(100.0, within(0.5));
     }
 
     @Test
+    @DisplayName("두 점 거리는 순서와 상관없고 같은 점이면 0이다")
     void distanceIsSymmetricAndZeroForSamePoint() {
         double[] a = {126.93, 35.14};
         double[] b = {126.94, 35.15};
@@ -28,6 +32,7 @@ class GeoTests {
     }
 
     @Test
+    @DisplayName("선 길이는 이웃한 점 사이 거리의 합이고 점 하나면 0이다")
     void lengthAddsSegments() {
         double[] a = {126.9300, 35.1400};
         double[] b = {126.9311, 35.1400};
@@ -37,6 +42,7 @@ class GeoTests {
     }
 
     @Test
+    @DisplayName("점–선분 거리는 수직의 발이 안이면 수직 거리, 밖이면 가까운 끝점까지다")
     void distanceToSegmentPerpendicularAndBeyondEnds() {
         double[] a = {126.9300, 35.1400};
         double[] b = {126.9322, 35.1400}; // 동쪽으로 약 200m
@@ -50,6 +56,7 @@ class GeoTests {
     }
 
     @Test
+    @DisplayName("점–선 거리는 가장 가까운 선분까지, 점 하나인 선은 그 점까지다")
     void distanceToLineTakesClosestSegment() {
         List<double[]> line = List.of(new double[] {126.9300, 35.1400}, new double[] {126.9311, 35.1400},
                 new double[] {126.9311, 35.1420});
@@ -60,7 +67,9 @@ class GeoTests {
     }
 
     @Test
+    @DisplayName("감싼 사각형은 사방으로 margin(m)만큼 넓힌다")
     void bboxAroundAddsMarginOnEverySide() {
+        // route.yml search-margin-m에 쓰임
         BBox box = BBox.around(List.of(new double[] {126.93, 35.14}, new double[] {126.94, 35.15}), 500);
 
         assertThat(Geo.distance(box.minLon(), 35.14, 126.93, 35.14)).isCloseTo(500, within(5.0));
@@ -71,6 +80,7 @@ class GeoTests {
     }
 
     @Test
+    @DisplayName("사각형 WKT는 경도·위도 순서이고 첫 점으로 닫는다")
     void bboxWktIsLonLatOrderAndClosed() {
         BBox box = new BBox(126.9, 35.1, 127.0, 35.2);
 
@@ -78,6 +88,7 @@ class GeoTests {
     }
 
     @Test
+    @DisplayName("선 위 위치는 시작점부터 거리와 왼쪽·오른쪽으로 준다")
     void alongGivesDistanceFromStartAndSide() {
         // 동쪽으로 약 100m 가다가 북쪽으로 약 100m 꺾는 선
         List<double[]> line = List.of(new double[] {126.9300, 35.1400}, new double[] {126.9311, 35.1400},
@@ -93,5 +104,13 @@ class GeoTests {
         assertThat(south.left()).isFalse();
         assertThat(east.atM()).isCloseTo(100 + 55.6, within(2.0));
         assertThat(east.left()).isFalse();       // 북쪽으로 갈 때 동쪽은 오른쪽
+
+        // 북동쪽으로 곧게 가는 선(동·북 100m씩). 가운데(약 70.7m 지점)에서 남동쪽으로 10m 떨어진 점은 오른쪽
+        List<double[]> diagonal = List.of(TestRoutes.xy(0, 0), TestRoutes.xy(100, 100));
+        double side = 10 / Math.sqrt(2);
+        Geo.Along beside = Geo.along(TestRoutes.xy(50 + side, 50 - side), diagonal);
+        assertThat(beside.atM()).isCloseTo(50 * Math.sqrt(2), within(0.5));
+        assertThat(beside.offsetM()).isCloseTo(10, within(0.5));
+        assertThat(beside.left()).isFalse();
     }
 }

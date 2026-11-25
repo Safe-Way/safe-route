@@ -1,4 +1,4 @@
-package com.saferoute.route;
+package com.saferoute.route.data;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -8,11 +8,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import com.saferoute.route.data.MysqlPoiSource;
 import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.geo.BBox;
 
@@ -21,13 +21,16 @@ import com.saferoute.route.engine.geo.BBox;
  * CI는 빈 표로 돌므로 쿼리가 도는지와 schema.sql의 공휴일만 보고, 시설 개수는 데이터가 있을 때만 확인한다.
  */
 @SpringBootTest
-class MysqlPoiSourceTests {
+@DisplayName("시설 DB 읽기 (실제 DB)")
+class MysqlPoiSourceDbTests {
 
     @Autowired
     MysqlPoiSource source;
 
     @Test
+    @DisplayName("실제 DB에서 사각형 안 시설·공휴일·신고를 읽는다")
     void readsPoiAroundAsianCultureCenter() {
+        // DB 설정이 있어야 돈다
         double[] center = {126.9204, 35.1466}; // 국립아시아문화전당
         BBox box = BBox.around(List.of(center), 1000);
 

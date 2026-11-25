@@ -2,9 +2,16 @@ package com.saferoute.route;
 
 import static com.saferoute.route.TestRoutes.LAT;
 import static com.saferoute.route.TestRoutes.M_P;
+import static com.saferoute.route.TestRoutes.STAIRS;
 import static com.saferoute.route.TestRoutes.S_P;
 import static com.saferoute.route.TestRoutes.T_P;
+import static com.saferoute.route.TestRoutes.assertError;
+import static com.saferoute.route.TestRoutes.assertNoRoute;
+import static com.saferoute.route.TestRoutes.east;
 import static com.saferoute.route.TestRoutes.edge;
+import static com.saferoute.route.TestRoutes.justAbove;
+import static com.saferoute.route.TestRoutes.justBelow;
+import static com.saferoute.route.TestRoutes.north;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -14,12 +21,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import tools.jackson.databind.json.JsonMapper;
 
 import com.saferoute.route.api.RouteError;
-import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteRequest.Place;
 import com.saferoute.route.api.RouteResult;
@@ -32,18 +39,8 @@ import com.saferoute.route.engine.graph.RoadGraph;
 import com.saferoute.route.engine.search.RoadPath;
 
 /** 걷기 들를 곳 (진행표 w10, plan 005, 2026-11-10). 구간마다 찾아 이은 뒤 응답을 한 번만 만든다 */
+@DisplayName("들를 곳")
 class RouteStopsTests {
-
-    static final double M_PER_LAT = Geo.distance(0, 0, 0, 1);
-    static final EdgePenalty STAIRS = new EdgePenalty(Map.of(Penalty.STAIRS, 1.0));
-
-    static double[] north(double[] p, double m) {
-        return new double[] {p[0], p[1] + m / M_PER_LAT};
-    }
-
-    static double[] east(double[] p, double m) {
-        return new double[] {p[0] + m / (M_PER_LAT * Math.cos(Math.toRadians(p[1]))), p[1]};
-    }
 
     static Place place(double[] p, String name) {
         return new Place(p[1], p[0], name);
@@ -67,8 +64,7 @@ class RouteStopsTests {
     }
 
     static RoadEdge road(long id, long from, long to, double[] a, double[] b, String sidewalk) {
-        List<double[]> line = List.of(a, b);
-        return new RoadEdge(id, from, to, Geo.length(line), "residential", line, EdgePenalty.NONE, sidewalk);
+        return TestRoutes.road(id, from, to, a, b, "residential", sidewalk);
     }
 
     /** 경로 선을 따라 그 점(의 수직의 발)까지 간 거리 */
@@ -77,7 +73,9 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("경로는 들를 곳을 지나고 atM은 출발부터 경로 선을 따라 잰 거리다")
     void oneStopIsOnTheRouteAndAtMIsMeasuredFromTheStart() {
+        // 진행표 w10, plan 005
         double spacing = 100;
         RoadGraph g = TestRoutes.grid(5, spacing, (r, c) -> false);
         double[] origin = g.point(0);
@@ -110,16 +108,14 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("최단·안전 경로는 들를 곳 자리(atM)를 각자 잰다")
     void shortestAndSafeHaveTheirOwnAtM() {
         // 다이아몬드(밤에 밝은 북쪽 길로 도는 S → T) 뒤에 동쪽 100m 길 T–U. 들를 곳 T, 도착 U
         double[] u = east(T_P, 100);
-        RoadGraph d = TestRoutes.diamond(0.0006);
-        List<RoadEdge> edges = new ArrayList<>(d.graph().edgeSet());
-        edges.add(edge(14, TestRoutes.T, 5, T_P, u, EdgePenalty.NONE));
-        Map<Long, double[]> nodes = new LinkedHashMap<>(d.nodes());
-        nodes.put(5L, u);
-        RouteService s = TestRoutes.service(new RoadGraph(nodes, edges),
-                TestRoutes.pois(RouteServiceTests.brightSideFacilities()), 21);
+        RoadGraph g = TestRoutes.plus(TestRoutes.diamond(0.0006), Map.of(5L, u),
+                edge(14, TestRoutes.T, 5, T_P, u, EdgePenalty.NONE));
+        RouteService s = TestRoutes.service(g,
+                TestRoutes.pois(TestRoutes.brightSideFacilities()), 21);
 
         RouteResult r = s.route(request(S_P, u, "adult", place(T_P, "편의점")));
 
@@ -136,25 +132,47 @@ class RouteStopsTests {
     }
 
     @Test
-    void tooManyStopsOrTheSameStopTwiceIsBadParam() {
+    @DisplayName("들를 곳이 너무 많거나 lat·lon이 없으면 입력 오류다")
+    void tooManyStopsOrMissingCoordinatesIsBadParam() {
+        // RouteService.MAX_STOPS곳까지 (진행표 w10). 같은 곳 두 번은 stopsCloserThan1mAreTheSameStop
         RouteService s = service(TestRoutes.diamond(0.0006), 12);
         double[] n = {126.93110, LAT + 0.0006};
 
-        assertThatThrownBy(() -> s.route(request(S_P, T_P, "adult", place(M_P, "1"), place(n, "2"), place(M_P, "3"),
-                place(n, "4")))).isInstanceOf(IllegalArgumentException.class).hasMessage("stops는 최대 3곳입니다");
-        // 이어지지 않은 두 들를 곳이 같은 곳(같은 좌표)
-        assertThatThrownBy(() -> s.route(request(S_P, T_P, "adult", place(M_P, "1"), place(n, "2"),
-                place(M_P, "3")))).isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("같은 들를 곳이 두 번 있습니다");
-        // 붙어 있는 다른 가게(10m)는 같은 곳이 아니다 (사용자 결정 11-10)
-        assertThat(s.route(request(S_P, T_P, "adult", place(M_P, "1"), place(n, "2"), place(east(M_P, 10), "3")))
-                .routes()).isNotEmpty();
+        // 지름길 M–T 위 10m 간격으로 MAX_STOPS곳은 받고, 한 곳 더하면 거절한다
+        List<Place> max = new ArrayList<>();
+        for (int i = 0; i < RouteService.MAX_STOPS; i++) {
+            max.add(place(east(M_P, 10 * i), String.valueOf(i + 1)));
+        }
+        List<Place> over = new ArrayList<>(max);
+        over.add(place(n, "넘침"));
+        assertThat(s.route(request(S_P, T_P, "adult", max.toArray(Place[]::new))).routes()).isNotEmpty();
+        assertThatThrownBy(() -> s.route(request(S_P, T_P, "adult", over.toArray(Place[]::new))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("stops는 최대 %d곳입니다".formatted(RouteService.MAX_STOPS));
         assertThatThrownBy(() -> s.route(request(S_P, T_P, "adult", new Place(null, M_P[0], "편의점"))))
                 .isInstanceOf(IllegalArgumentException.class).hasMessage("stops의 lat·lon이 필요합니다");
     }
 
     @Test
+    @DisplayName("들를 곳 둘이 1m 미만이면 같은 곳으로 보고 거절한다")
+    void stopsCloserThan1mAreTheSameStop() {
+        // RouteService.SAME_STOP_M (사용자 결정 11-10)
+        // 좌표 거리라 경계값 자체는 못 만들어 경계 ±0.01m로 본다
+        RouteService s = service(TestRoutes.diamond(0.0006), 12);
+        double[] n = {126.93110, LAT + 0.0006};
+
+        assertThatThrownBy(() -> s.route(request(S_P, T_P, "adult", place(M_P, "1"), place(n, "2"),
+                place(east(M_P, justBelow(RouteService.SAME_STOP_M)), "3")))).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("같은 들를 곳이 두 번 있습니다");
+        assertThat(s.route(request(S_P, T_P, "adult", place(M_P, "1"), place(n, "2"),
+                place(east(M_P, justAbove(RouteService.SAME_STOP_M)), "3")))
+                .routes()).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("왕복은 SAME_POINT이고 들를 곳이 출발·도착 가까이 있는 것은 안내한다")
     void roundTripIsSamePointButAStopNextToAPointIsRouted() {
+        // 사용자 결정 11-10
         RouteService s = service(TestRoutes.diamond(0.0006), 12);
 
         // 왕복은 받지 않는다 (사용자 결정 11-10)
@@ -169,7 +187,9 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("TOO_FAR는 구간 직선거리 합으로 재고 들를 곳이 도로망 밖이면 OUT_OF_AREA다")
     void tooFarAddsUpEveryLeg() {
+        // RouteService.validate
         RouteService s = service(TestRoutes.diamond(0.0006), 12);
 
         // 구간은 3km씩이지만 합이 6km
@@ -181,13 +201,11 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("들를 곳이 행사 반경 안이면 행사를 피하지 않는다")
     void festivalAtAStopIsNotAvoided() {
         // RoadEventTests와 같은 다이아몬드: 지름길 한가운데 M에 반경 30m 행사. 노인은 원래 북쪽으로 돌아 피한다.
         // 남쪽 아무 길 없는 곳에 노드 하나를 둬 도로망 범위를 넓힌다
-        RoadGraph d = TestRoutes.diamond(0.0004);
-        Map<Long, double[]> nodes = new LinkedHashMap<>(d.nodes());
-        nodes.put(99L, north(M_P, -300));
-        RoadGraph g = new RoadGraph(nodes, new ArrayList<>(d.graph().edgeSet()));
+        RoadGraph g = TestRoutes.plus(TestRoutes.diamond(0.0004), Map.of(99L, north(M_P, -300)));
         RoadEvent fest = new RoadEvent(1, "행사", "충장축제", null, null, M_P[0], M_P[1], 30, null);
         RouteService s = TestRoutes.service(g, TestRoutes.pois(List.of(), List.of(fest)), 12);
 
@@ -220,6 +238,7 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("길을 못 찾은 구간은 오류 문장에 그 들를 곳·도착지 이름을 넣는다")
     void blockedLegNamesTheStop() {
         RoadGraph g = pocket(70);
         RouteService s = service(g, 12);
@@ -243,6 +262,7 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("들를 곳이 길에서 너무 멀어 못 붙여도 그 이름으로 알린다")
     void stopFarFromAnyRoadNamesTheStop() {
         double[] a = {126.93, LAT};
         double[] b = east(a, 365);
@@ -254,6 +274,7 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("휠체어는 들를 곳 구간에서도 계단을 지나지 않는다")
     void wheelchairNeverTakesStairsOnAStopLeg() {
         // S –계단 200m– X – D(동쪽 200m). 계단 없이는 북쪽 N으로 돈다
         double[] s = {126.93, LAT};
@@ -278,6 +299,7 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("계단·꺾는 곳 자리는 구간을 이은 전체 경로를 따라 잰다")
     void stairsAndTurnsAreMeasuredAlongTheWholeRoute() {
         // S – X(200m, 들를 곳) –계단 100m– Y – D(Y 북쪽 100m). 계단과 꺾는 곳은 둘째 구간에 있다
         double[] s = {126.93, LAT};
@@ -305,6 +327,7 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("휠체어 들를 곳을 다시 붙여도 이은 경로의 꺾는 방향·인도 쪽이 맞다")
     void wheelchairMovedStopKeepsDirectionsOnTheJoinedRoute() {
         // 들를 곳 D는 계단 뒤 20m: 휠체어는 T에 다시 붙인다. 그다음 구간 T → U는 거꾸로 저장한 차도
         RoadGraph g = pocket(20);
@@ -327,6 +350,7 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("막다른 들를 곳에서 되돌아와도 걷는 방향의 인도 쪽이 맞다")
     void uTurnAtADeadEndStopKeepsDirections() {
         // S – J(200m) – D(동쪽 200m), J 북쪽 100m 막다른 길 끝 X가 들를 곳. J–X는 인도 왼쪽 차도
         double[] s = {126.93, LAT};
@@ -348,6 +372,7 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("구간을 이을 때 길마다 걷는 방향(forward)을 지키고 이음 점은 한 번만 넣는다")
     void joinedPathKeepsDirectionAcrossLegs() {
         double[] a = {126.93, LAT};
         double[] b = east(a, 100);
@@ -370,9 +395,10 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("빈 들를 곳 목록은 들를 곳이 없는 요청과 응답이 같다")
     void noStopsIsTheSameAsBefore() {
         RouteService s = TestRoutes.service(TestRoutes.diamond(0.0006),
-                TestRoutes.pois(RouteServiceTests.brightSideFacilities()), 21);
+                TestRoutes.pois(TestRoutes.brightSideFacilities()), 21);
         JsonMapper json = JsonMapper.builder().build();
         Place from = place(S_P, "출발");
         Place to = place(T_P, "도착");
@@ -385,6 +411,7 @@ class RouteStopsTests {
     }
 
     @Test
+    @DisplayName("들를 곳 3곳이면 네 구간을 이어 atM이 차례로 늘고 선이 끊기지 않는다")
     void threeStopsJoinFourLegs() {
         RoadGraph g = TestRoutes.grid(6, 100, (r, c) -> false);
         double[] origin = g.point(0);
@@ -417,7 +444,8 @@ class RouteStopsTests {
     }
 
     @Test
-    void unpavedNoteNeverSaysAvoidingIsShorter() {
+    @DisplayName("비포장을 피하면 더 걷는 거리는 구간을 이은 전체 경로로 잰다")
+    void unpavedDetourIsMeasuredOverTheWholeJoinedRoute() {
         // 휠체어 밤. 첫 구간 S → X: 비포장 지름길 100m, 포장 길로 돌면 약 130m(한도 1.2배를 넘어 비포장을 지난다).
         // 둘째 구간 X → D: 어두운 지름길 600m, 등이 줄지은 북쪽 길 약 690m(1.15배, 밝은 길로 돈다)
         double[] s = {126.93, LAT};
@@ -445,33 +473,62 @@ class RouteStopsTests {
         RouteResult.Route safe = r.routes().get(r.routes().size() - 1);
         assertThat(safe.unpavedM()).isBetween(99, 101);
         assertThat(safe.distanceM()).isBetween(785, 795); // 둘째 구간은 밝은 길로 돌았다
-        // 피하는 길 = 첫 구간 포장 길(+30m) + 둘째 구간 같은 밝은 길. 예전에는 둘째 구간 최단과 이어 −60m가 나왔다
+        // 피하는 길 = 첫 구간 포장 길(+30m) + 둘째 구간 같은 밝은 길
         assertThat(r.explanation().notes()).filteredOn(n -> n.kind().equals("unpaved")).singleElement()
-                .satisfies(n -> assertThat(n.text()).matches("비포장길 약 100m를 지납니다\\. 비포장을 피하면 (29|30|31)m.* 더 걸립니다"));
+                .satisfies(n -> assertThat(n.text()).matches("비포장길 약 100m를 지납니다\\. 비포장을 피하면 (29|30|31)m 더 걸립니다"));
     }
 
     @Test
-    void requestJsonReadsStops() {
-        RouteRequest req = JsonMapper.builder().build().readValue("""
-                {"origin":{"lat":35.1466,"lon":126.9204},"destination":{"lat":35.1467,"lon":126.9198},
-                 "stops":[{"name":"다이소","lat":35.1480,"lon":126.9170}]}
-                """, RouteRequest.class);
+    @DisplayName("조건부 제외 없이 가는 길은 구간마다 다 있을 때만 있다고 본다")
+    void stairFreeWayMustExistOnEveryLeg() {
+        // RouteService.join
+        // 노인, 첫 구간 S → T는 계단 없음, 둘째 구간 T → U는 계단뿐
+        double[] u = east(T_P, 60);
+        RoadGraph g = TestRoutes.plus(TestRoutes.diamond(0.0004), Map.of(5L, u), edge(14, TestRoutes.T, 5, T_P, u, STAIRS));
 
-        assertThat(req.stops()).containsExactly(new Place(35.1480, 126.9170, "다이소"));
-        assertThat(JsonMapper.builder().build().readValue("""
-                {"origin":{"lat":35.1466,"lon":126.9204},"destination":{"lat":35.1467,"lon":126.9198}}
-                """, RouteRequest.class).stops()).isNull();
+        RouteResult r = service(g, 12).route(request(S_P, u, "senior", place(T_P, "편의점")));
+
+        assertThat(r.explanation().notes()).contains(RouteResult.Note.warn("stairs", "계단 1곳을 지납니다. 계단을 피하는 길은 없습니다"));
     }
 
-    private static void assertError(Runnable call, RouteError expected) {
-        assertThatThrownBy(call::run)
-                .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(expected));
+    @Test
+    @DisplayName("들를 곳으로 구간을 다시 이어도 골목길 칸이 그대로 온다")
+    void alleyFieldsSurviveJoiningStops() {
+        // 들를 곳이 있으면 경로를 구간마다 찾아 다시 잇는데(withStops) 골목길 칸도 그대로 온다
+        double[] nP = {126.93110, LAT + 0.0004};
+        RoadGraph g = new RoadGraph(Map.of(1L, S_P, 2L, M_P, 3L, T_P, 4L, nP), List.of(
+                road(10, 1, 2, S_P, M_P, null), road(11, 2, 3, M_P, T_P, null),
+                TestRoutes.road(12, 1, 4, S_P, nP, "tertiary", null), TestRoutes.road(13, 3, 4, T_P, nP, "tertiary", null)));
+
+        RouteResult r = service(g, 12).route(request(S_P, T_P, "adult", place(M_P, "가게")));
+
+        assertThat(r.routes().get(0).stops()).hasSize(1);
+        assertThat(r.routes().get(0).alleyM()).isEqualTo(200);
+        assertThat(r.routes().get(0).alleys()).hasSize(1);
     }
 
-    private static void assertNoRoute(Runnable call, String message) {
-        assertThatThrownBy(call::run).isInstanceOfSatisfying(RouteException.class, e -> {
-            assertThat(e.error()).isEqualTo(RouteError.NO_ROUTE);
-            assertThat(e.getMessage()).isEqualTo(message);
-        });
+    @Test
+    @DisplayName("SAME_POINT는 들를 곳이 있든 없든 직선거리로만 정한다")
+    void samePointIsJudgedByStraightDistanceWithOrWithoutStops() {
+        // 큰길 S–T 가운데 북쪽 30~60m의 막다른 보행로 P1–P2. 80m 떨어진 두 점이 모두 P2에 붙는다.
+        // SAME_POINT는 직선거리로만 정하므로 들를 곳이 있어도 똑같이 안내한다
+        double[] s = {126.93, LAT};
+        double[] t = {126.934, LAT};
+        double[] mid = {(s[0] + t[0]) / 2, LAT};
+        double[] p1 = north(mid, 30);
+        double[] p2 = north(mid, 60);
+        RoadGraph g = graph(List.of(s, t, p1, p2, east(t, 180), east(s, -180)), List.of(
+                edge(1, 1, 2, s, t, EdgePenalty.NONE), edge(4, 2, 5, t, east(t, 180), EdgePenalty.NONE),
+                edge(5, 6, 1, east(s, -180), s, EdgePenalty.NONE),
+                edge(2, 2, 3, t, p1, STAIRS), edge(3, 3, 4, p1, p2, EdgePenalty.NONE)));
+        Place a = place(east(p2, 40), null);
+        Place b = place(east(p2, -40), null);
+        RouteService svc = service(g, 12);
+
+        RouteResult direct = svc.route(new RouteRequest(a, b, "off", "adult"));
+        RouteResult via = svc.route(new RouteRequest(a, b, "off", "adult", null, null,
+                List.of(new Place(b.lat(), b.lon() + 0.00001, "가게")), null));
+
+        assertThat(via.routes().get(0).distanceM()).isEqualTo(direct.routes().get(0).distanceM()).isBetween(75, 85);
     }
 }
