@@ -9,7 +9,13 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** 적재에 쓰는 좌표 변환과 CSV 읽기 확인 (DB 없이 돈다) */
+/**
+ * 적재에 쓰는 좌표 변환과 CSV 읽기 확인 (DB 없이 돈다).
+ * <p>무엇을: 메르카토르 → 경도·위도 변환, 한국 범위 검사, CSV 한 줄 나누기, 데이터셋별 원본 한 줄 → FacilityRow 변환.
+ * <p>어떻게: 공공데이터 원본에서 가져온 한 줄(값 일부)을 JSON 글자로 넣고 FacilityImporter.toRow 결과만 본다.
+ * 파일·DB 는 쓰지 않는다 (FacilityImporter 에 JdbcTemplate 대신 null).
+ * <p>왜: 칸 이름 하나만 틀려도 그 종류 시설의 좌표·이름이 통째로 비거나, 시설이 엉뚱한 곳에 찍힌다.
+ */
 @DisplayName("적재 도우미: 좌표 변환·CSV 읽기")
 class IngestHelpersTests {
 
@@ -26,6 +32,7 @@ class IngestHelpersTests {
     @Test
     @DisplayName("한국 밖 좌표는 버린다")
     void outsideKoreaIsRejected() {
+        // 원본에 좌표가 비면 0 으로 오는 일이 있다. (0, 0) 은 적도 바다 위라 버려야 하고, 광주(조선대 근처)는 남아야 한다
         assertThat(Mercator.inKorea(0, 0)).isFalse();
         assertThat(Mercator.inKorea(126.93, 35.14)).isTrue();
     }
@@ -33,6 +40,8 @@ class IngestHelpersTests {
     @Test
     @DisplayName("CSV: 따옴표 안의 쉼표는 나누지 않는다")
     void csvKeepsCommasInsideQuotes() {
+        // 주소에 쉼표가 든 칸, 빈 칸, 따옴표 두 개("")로 쓴 따옴표 글자를 한 줄에 다 넣었다.
+        // 쉼표로만 나누면 칸이 밀려 위도·경도 자리에 다른 값이 들어간다
         List<String> f = FacilityImporter.parseCsvLine("a,\"서울특별시 종로구, 1\",,\"따옴표 \"\"안\"\"\"");
         assertThat(f).containsExactly("a", "서울특별시 종로구, 1", "", "따옴표 \"안\"");
     }
@@ -47,6 +56,7 @@ class IngestHelpersTests {
         for (FacilityImporter.RegionalCsv rc : FacilityImporter.REGIONAL) {
             assertThat(FacilityTable.of(rc.type()).table()).isEqualTo(rc.type());
         }
+        // 전국 CCTV CSV 는 위 목록과 따로 읽어서 하나 더 본다
         assertThat(FacilityTable.of("cctv")).isEqualTo(FacilityTable.CCTV);
     }
 
@@ -62,6 +72,8 @@ class IngestHelpersTests {
     @DisplayName("한파쉼터: 경도·위도 칸과 종류 이름을 쓴다")
     void coldShelterRowUsesLonLatAndKindNames() {
         // 재난안전데이터 한파쉼터 원본 한 줄 (값 일부)
+        // 종류 코드 "001" 은 "공공시설"로, 번호는 숫자(11110515083865)로 와도 글자로, 시도·시군구 코드는 번호 앞자리에서.
+        // 숫자 20 은 attrs 에 "20" 글자로 남고, null 인 칸(SNDY_OPER_BGNG_HR)은 attrs 에 넣지 않는다
         String item = """
                 {"REARE_NM": "청운효자동주민센터", "RONA_DADDR": "서울특별시 종로구 자하문로 92 (궁정동)",
                  "UTZTN_PSBLTY_TNOP": 20, "WKDY_OPER_BGNG_HR": "0900", "WKDY_OPER_END_HR": "1800",
@@ -85,6 +97,8 @@ class IngestHelpersTests {
     @DisplayName("보안등 표준데이터: 등 개수와 줄 해시를 쓴다")
     void securityLightStdRowUsesCountAndRowHash() {
         // 전국보안등정보표준데이터 원본 한 줄. 원본 번호가 없어 줄 전체로 번호를 만든다
+        // 같은 줄을 두 번 바꿔도 번호가 같아야 다시 적재할 때 INSERT IGNORE 가 겹친 줄을 걸러 낸다.
+        // 도로명주소(rdnmadr)가 비어 지번주소(lnmadr)를 쓰고, 개수 칸(installationCo)은 attrs 에 또 넣지 않는다
         String item = """
                 {"lmpLcNm": "신학리102", "installationCo": "2", "rdnmadr": "",
                  "lnmadr": "전남광주통합특별시 무안군 무안읍 신학리 188",
@@ -111,6 +125,7 @@ class IngestHelpersTests {
     @DisplayName("육교: 장애인 편의 종류를 세부 종류로 둔다")
     void footbridgeRowKeepsHandicapTypeAsKind() {
         // 전국육교정보표준데이터 원본 한 줄 (값 일부). 장애인 편의시설 종류가 세부 종류가 된다
+        // 이 세부 종류가 나중에 poi.sub 로 가서(scripts/build_poi.py), "승강기"인 육교만 엘리베이터 육교로 잡힌다
         String item = """
                 {"ovrpsNm": "크라운호텔앞보도육교", "rdnmadr": "서울특별시 용산구 녹사평대로 132",
                  "lctnLotnoAddr": "", "latitude": "37.53072639", "longitude": "126.9911211",
@@ -167,6 +182,7 @@ class IngestHelpersTests {
     @Test
     @DisplayName("넣는 SQL에 개수 칸은 그 칸이 있는 표에만 붙인다")
     void insertSqlAddsCountColumnOnlyWhereItExists() {
+        // CCTV는 camera_count 칸이 있어 물음표가 하나 더, 경찰 표는 없어서 geom 다음 attrs 로 끝난다
         assertThat(FacilityImporter.insertSql(FacilityTable.CCTV))
                 .startsWith("INSERT IGNORE INTO cctv ")
                 .contains(", camera_count)")
