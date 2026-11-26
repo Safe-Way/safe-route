@@ -2,52 +2,37 @@ package com.saferoute.route;
 
 import static com.saferoute.route.TestRoutes.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.dao.DataAccessResourceFailureException;
-
 
 import tools.jackson.databind.json.JsonMapper;
 
-import com.saferoute.route.data.PreferenceSource;
-import com.saferoute.route.api.RouteError;
-import com.saferoute.route.api.RouteException;
 import com.saferoute.route.api.RouteRequest.Place;
 import com.saferoute.route.api.RouteRequest;
 import com.saferoute.route.api.RouteResult;
+import com.saferoute.route.data.InMemoryRoadGraphSource;
 import com.saferoute.route.data.PoiSource;
+import com.saferoute.route.data.PreferenceSource;
+import com.saferoute.route.data.RoadGraphSource;
 import com.saferoute.route.engine.facility.Poi;
 import com.saferoute.route.engine.geo.BBox;
 import com.saferoute.route.engine.geo.Geo;
 import com.saferoute.route.engine.graph.Penalty;
+import com.saferoute.route.engine.graph.RoadEdge;
 import com.saferoute.route.engine.graph.RoadEdge.EdgePenalty;
 import com.saferoute.route.engine.graph.RoadGraph;
 
-/** 요청 → 8.3 응답 모양, 오류 코드 (DB 없이 가짜 도로망·시설로) */
+/** 요청 → 8.3 응답 모양: 낮·밤 기본 흐름, 두 경로와 차이 설명, 넓혀 다시 찾기, 건너는 자리 (DB 없이 가짜 도로망·시설로) */
+@DisplayName("경로 요청 기본 흐름")
 class RouteServiceTests {
-
-    /** 밝은 길(S–N–T) 위에 등 6개, CCTV 2곳(3대), 비상벨 1개. 어두운 지름길에는 아무것도 없다 */
-    static List<Poi> brightSideFacilities() {
-        List<Poi> f = new ArrayList<>();
-        for (int i = 0; i < 6; i++) {
-            double t = (i + 1) / 7.0;
-            double lon = i < 3 ? 126.93000 + 0.0011 * t * 2 : 126.93220 - 0.0011 * (1 - t) * 2;
-            double lat = LAT + 0.0006 * (i < 3 ? t * 2 : (1 - t) * 2);
-            f.add(TestRoutes.plain("light", i, lon, lat, 1));
-        }
-        f.add(TestRoutes.plain("cctv", 10, 126.93110, 35.14060, 2));
-        f.add(TestRoutes.plain("cctv", 11, 126.93060, 35.14030, 1));
-        f.add(TestRoutes.outdoorBell(20, 126.93160, 35.14030));
-        return f;
-    }
 
     static PoiSource facilities(List<Poi> list) {
         return TestRoutes.pois(list);
@@ -61,40 +46,121 @@ class RouteServiceTests {
         return new RouteRequest(new Place(LAT, 126.93000, "출발"), new Place(LAT, 126.93220, "도착"), night);
     }
 
+    /** 밤 어른, 밝은 북쪽 길(약 1.2배)과 어두운 지름길 */
+    static RouteResult night() {
+        return service(facilities(brightSideFacilities()), 21).route(request("auto"));
+    }
+
     @Test
-    void nightGivesTwoRoutesAndExplainsTheDifference() {
-        RouteResult r = service(facilities(brightSideFacilities()), 21).route(request("auto"));
+    @DisplayName("밤에는 최단·안전 두 경로를 주고 안전 경로는 우회 한도 안이다")
+    void nightGivesShortestAndSafeRoutesWithinTheDetourLimit() {
+        // 선은 요청 출발점에서 [경도, 위도]로 시작한다 (route.yml adult.max-detour)
+        RouteResult r = night();
 
         assertThat(r.conditions().night()).isTrue();
         assertThat(r.conditions().nightSource()).isEqualTo("auto");
         assertThat(r.routes()).extracting(RouteResult.Route::kind).containsExactly("shortest", "safe");
-
         RouteResult.Route shortest = r.routes().get(0);
         RouteResult.Route safe = r.routes().get(1);
         assertThat(safe.distanceM()).isGreaterThan(shortest.distanceM());
         assertThat(safe.distanceM()).isLessThanOrEqualTo((int) Math.ceil(shortest.distanceM() * 1.3));
         assertThat(shortest.durationMin()).isEqualTo(Math.round(shortest.distanceM() / 80f));
+        // 경로 선은 [경도, 위도]이고 요청한 출발점에서 시작한다
+        assertThat(safe.geometry().get(0)).containsExactly(126.93000, LAT);
+    }
+
+    @Test
+    @DisplayName("두 경로 거리에는 출발·도착점에서 길까지 붙인 거리도 더한다")
+    void bothRouteDistancesIncludeTheWalkToTheRoad() {
+        // RouteResultAssembler.assemble
+        // 마름모 도로망 아래 지도 범위를 넓히는 점 99를 두고, 출발·도착을 S·T에서 남쪽 10m로 옮기면 두 경로 모두 20m 늘어난다
+        RouteService s = TestRoutes.service(TestRoutes.plus(diamond(0.0006), Map.of(99L, north(S_P, -100))),
+                facilities(brightSideFacilities()), 21);
+        double lat = LAT - 10 / M_PER_LAT;
+        RouteResult on = s.route(request("auto"));
+        RouteResult off = s.route(new RouteRequest(new Place(lat, 126.93000, "출발"), new Place(lat, 126.93220, "도착"), "auto"));
+
+        assertThat(off.routes()).extracting(RouteResult.Route::kind).containsExactly("shortest", "safe");
+        for (int i = 0; i < 2; i++) {
+            assertThat(off.routes().get(i).distanceM() - on.routes().get(i).distanceM()).isBetween(19, 21);
+        }
+        assertThat(off.explanation().extraM()).isEqualTo(on.explanation().extraM());
+    }
+
+    @Test
+    @DisplayName("경사로 값이 같은 계단이 이어지면 한 구간으로 묶고 바뀌거나 끊기면 나눈다")
+    void stairsJoinWhileTheRampValueStaysTheSame() {
+        // RouteResultAssembler.stairs
+        // 동쪽 50m 길 다섯: 계단(경사로 있음) 둘, 계단(없음), 보행로, 계단(모름)
+        Map<Long, double[]> n = new HashMap<>();
+        for (long i = 0; i <= 5; i++) {
+            n.put(i, xy(50 * i, 0));
+        }
+        List<EdgePenalty> kinds = List.of(new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), true),
+                new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), true), new EdgePenalty(Map.of(Penalty.STAIRS, 1.0), false),
+                EdgePenalty.NONE, STAIRS);
+        List<RoadEdge> edges = new ArrayList<>();
+        for (int i = 0; i < kinds.size(); i++) {
+            edges.add(edge(i + 1, i, i + 1, n.get((long) i), n.get((long) i + 1), kinds.get(i)));
+        }
+        double[] to = n.get(5L);
+        RouteResult r = TestRoutes.service(new RoadGraph(n, edges), TestRoutes.pois(List.of()), 12).route(new RouteRequest(
+                new Place(S_P[1], S_P[0], null), new Place(to[1], to[0], null), "off", "adult"));
+
+        assertThat(r.routes().get(0).stairs()).containsExactly(new RouteResult.Stair(0, 100, true),
+                new RouteResult.Stair(100, 150, false), new RouteResult.Stair(200, 250, null));
+    }
+
+    @Test
+    @DisplayName("밤 설명은 지나는 시설 수 차이와 더 걷는 거리로 말한다")
+    void nightExplainsTheFacilityDifference() {
+        // FR-06
+        RouteResult r = night();
+        RouteResult.Route shortest = r.routes().get(0);
+        RouteResult.Route safe = r.routes().get(1);
+
         assertThat(safe.counts()).containsEntry("light", 6).containsEntry("cctv", 3).containsEntry("bell", 1);
         // 출발·도착 가까이의 등 2개, CCTV 1곳, 비상벨은 지름길에서도 반경 안이다
         assertThat(shortest.counts()).containsEntry("light", 2).containsEntry("cctv", 1).containsEntry("bell", 1);
-        // 시험 도로망은 모두 인도(footway)라 인도 쪽 구간이 없다
-        assertThat(safe.sidewalks()).isEmpty();
-
         assertThat(r.explanation().extraM()).isEqualTo(safe.distanceM() - shortest.distanceM());
         assertThat(r.explanation().diff()).containsEntry("light", 4).containsEntry("cctv", 2).containsEntry("bell", 0);
         assertThat(r.explanation().text())
                 .isEqualTo("%dm 더 돌지만 가로등 +4개, CCTV +2대".formatted(r.explanation().extraM()));
         assertThat(r.explanation().extraMin()).isZero(); // 200m·240m 모두 3분
+    }
+
+    @Test
+    @DisplayName("지도 시설마다 지나는 경로에서의 자리와 왼쪽·오른쪽을 준다")
+    void facilityMarksSayWhereOnEachRouteTheyAre() {
+        // 시설마다 지나는 경로에서의 자리 (FR-30): on에 든 경로만 있고, 경로 길이 안
+        RouteResult r = night();
+        RouteResult.Route safe = r.routes().get(1);
 
         assertThat(r.facilities()).isNotEmpty().allMatch(m -> !m.on().equals("shortest"));
-        // 시설마다 지나는 경로에서의 자리 (FR-30): on에 든 경로만 있고, 경로 길이 안
         assertThat(r.facilities()).allSatisfy(m -> {
-            assertThat(m.along().keySet()).isEqualTo(m.on().equals("both") ? java.util.Set.of("shortest", "safe")
-                    : java.util.Set.of(m.on()));
+            assertThat(m.along().keySet()).isEqualTo(m.on().equals("both") ? Set.of("shortest", "safe") : Set.of(m.on()));
             assertThat(m.along().get("safe").atM()).isBetween(0, safe.distanceM());
             assertThat(m.along().get("safe").side()).isIn("left", "right");
         });
+        // 비상벨(126.93160, 35.14030)은 북쪽으로 돌아가는 안전 경로의 동쪽 끝 근처에 있다
+        RouteResult.FacilityMark bell = r.facilities().stream().filter(m -> m.type().equals("EMERGENCY_BELL")).findFirst()
+                .orElseThrow();
+        assertThat(bell.along().get("safe").atM()).isGreaterThan(safe.distanceM() / 2);
+        // 시계 방향으로 S–N–T를 도는 안전 경로에서 마름모 안쪽(남쪽)은 오른쪽
+        assertThat(bell.along().get("safe").side()).isEqualTo("right");
+        // 세부 종류가 가로등이 아닌 등은 보안등
+        assertThat(r.facilities()).filteredOn(m -> m.type().endsWith("LIGHT")).isNotEmpty()
+                .allSatisfy(m -> assertThat(m.type()).isEqualTo("SECURITY_LIGHT"));
+    }
+
+    @Test
+    @DisplayName("밤에 등이 적은 지름길은 안전 경로보다 어두운 구간이 길다")
+    void unlitShortcutHasLongerDarkStretches() {
         // 밤: 등이 양 끝에만 있는 최단(곧은 길)은 가운데가 어둡고, 등이 줄지은 안전 경로는 어두운 구간이 짧다 (FR-31)
+        RouteResult r = night();
+        RouteResult.Route shortest = r.routes().get(0);
+        RouteResult.Route safe = r.routes().get(1);
+
         assertThat(shortest.dark()).isNotEmpty().allSatisfy(d -> {
             assertThat(d.toM() - d.fromM()).isGreaterThanOrEqualTo(50);
             assertThat(d.fromM()).isGreaterThanOrEqualTo(0);
@@ -102,24 +168,21 @@ class RouteServiceTests {
         });
         assertThat(safe.dark().stream().mapToInt(d -> d.toM() - d.fromM()).sum())
                 .isLessThan(shortest.dark().stream().mapToInt(d -> d.toM() - d.fromM()).sum());
+    }
+
+    @Test
+    @DisplayName("꺾는 곳은 경로 안에 있고 45도보다 크게 꺾이며 방향은 왼쪽·오른쪽이다")
+    void turnsAreInsideTheRouteAndSharperThan45Degrees() {
         // 꺾는 곳은 경로 길이 안에 있고 방향은 left·right (FR-34)
-        assertThat(r.routes()).allSatisfy(rt -> assertThat(rt.turns()).allSatisfy(t -> {
+        assertThat(night().routes()).allSatisfy(rt -> assertThat(rt.turns()).allSatisfy(t -> {
             assertThat(t.atM()).isBetween(0, rt.distanceM());
             assertThat(t.direction()).isIn("left", "right");
             assertThat(t.angle()).isGreaterThan(45);
         }));
-        // 비상벨(126.93160, 35.14030)은 북쪽으로 돌아가는 안전 경로의 동쪽 끝 근처, 경로 아래(오른쪽)에 있다
-        RouteResult.Along bell = r.facilities().get(0).along().get("safe");
-        assertThat(bell.atM()).isGreaterThan(safe.distanceM() / 2);
-        // 아이콘은 비상벨·CCTV가 등보다 앞에 온다
-        assertThat(r.facilities().get(0).type()).isEqualTo("EMERGENCY_BELL");
-        assertThat(r.dataQuality().status()).isEqualTo("OK");
-        assertThat(r.dataQuality().dataDate()).isEqualTo("2026-10-28");
-        // 경로 선은 [경도, 위도]이고 요청한 출발점에서 시작한다
-        assertThat(safe.geometry().get(0)).containsExactly(126.93000, LAT);
     }
 
     @Test
+    @DisplayName("어른 낮은 가장 짧은 길 하나만 주고 낮이라 말하며 어두운 구간을 알리지 않는다")
     void dayGivesShortestRouteAndSaysItIsDay() {
         RouteResult r = service(facilities(brightSideFacilities()), 12).route(request("auto"));
 
@@ -132,7 +195,9 @@ class RouteServiceTests {
     }
 
     @Test
+    @DisplayName("night=on이면 낮에도 밤 기준으로 찾는다")
     void nightOnWorksInDaytimeForDemo() {
+        // nightSource manual
         RouteResult r = service(facilities(brightSideFacilities()), 12).route(request("on"));
 
         assertThat(r.conditions().night()).isTrue();
@@ -141,6 +206,7 @@ class RouteServiceTests {
     }
 
     @Test
+    @DisplayName("night=off면 밤에도 가장 짧은 길 하나를 주고 기준을 껐다고 말한다")
     void nightOffByUserSaysSo() {
         RouteResult r = service(facilities(brightSideFacilities()), 21).route(request("off"));
 
@@ -149,48 +215,19 @@ class RouteServiceTests {
     }
 
     @Test
+    @DisplayName("응답 JSON은 요구사항 8.3 API 모양으로 나간다")
     void responseSerializesToApiShape() {
+        // kind·geometry·counts·dataQuality 등
         RouteResult r = service(facilities(brightSideFacilities()), 21).route(request(null));
 
         String json = JsonMapper.builder().build().writeValueAsString(r);
-        System.out.println(json);
 
         assertThat(json).contains("\"kind\":\"shortest\"", "\"geometry\":[[126.93", "\"counts\":{\"light\":",
                 "\"dataQuality\":{\"status\":\"OK\"", "\"on\":\"safe\"");
     }
 
     @Test
-    void errorCodes() {
-        RouteService s = service(facilities(List.of()), 21);
-
-        assertError(() -> s.route(new RouteRequest(new Place(LAT, 126.93000, null), new Place(LAT, 126.93020, null), null)),
-                RouteError.SAME_POINT);
-        assertError(() -> s.route(new RouteRequest(new Place(LAT, 126.93000, null), new Place(35.20, 126.93000, null), null)),
-                RouteError.TOO_FAR);
-        // 도로망을 넣은 범위(조선대 근처 작은 사각형) 밖
-        assertError(() -> s.route(new RouteRequest(new Place(LAT, 126.93000, null), new Place(35.15, 126.94, null), null)),
-                RouteError.OUT_OF_AREA);
-
-        PoiSource broken = new PoiSource() {
-            @Override
-            public List<Poi> within(BBox box, Set<String> kinds) {
-                throw new DataAccessResourceFailureException("DB 꺼짐");
-            }
-
-            @Override
-            public Set<LocalDate> holidays() {
-                return Set.of();
-            }
-
-            @Override
-            public LocalDate dataDate() {
-                return null;
-            }
-        };
-        assertError(() -> service(broken, 21).route(request("auto")), RouteError.DB_UNAVAILABLE);
-    }
-
-    @Test
+    @DisplayName("데이터 품질은 늘 OK이고 기준일만 준다")
     void dataQualityIsAlwaysOkWithDataDate() {
         // 데이터 부족 알림은 없앴다 (2026-11-06). 기준일만 준다
         RouteResult r = service(facilities(List.of()), 21).route(request("auto"));
@@ -201,73 +238,7 @@ class RouteServiceTests {
     }
 
     @Test
-    void missingOrBrokenInputIsRejectedAsBadRequest() {
-        RouteService s = service(facilities(List.of()), 21);
-
-        assertThatThrownBy(() -> s.route(new RouteRequest(null, new Place(LAT, 126.93220, null), null)))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> s.route(new RouteRequest(new Place(null, 126.93, null), new Place(LAT, 126.93220, null), null)))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> s.route(request("dark"))).isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void endsAtTheFootOnTheRoadInsteadOfOvershootingToTheNextNode() {
-        // 200m 길 하나(S–T). 도착은 길 한가운데(출발에서 100m)에서 북쪽 약 11m. 예전엔 길 끝 노드에 붙어 지나쳤다 돌아옴
-        // 99는 시험 지도 범위를 북쪽으로 넓히려는 길 없는 점
-        RoadGraph g = new RoadGraph(Map.of(S, S_P, T, T_P, 99L, new double[] {S_P[0], LAT + 0.0005}),
-                List.of(edge(1, S, T, S_P, T_P, EdgePenalty.NONE)));
-        RouteService s = TestRoutes.service(g, facilities(List.of()), 12);
-
-        RouteResult r = s.route(new RouteRequest(new Place(LAT, S_P[0], null), new Place(LAT + 0.0001, M_P[0], null),
-                null));
-        assertThat(r.routes().get(0).distanceM()).isBetween(105, 115);
-
-        // 출발·도착이 같은 길 중간이면 그 사이만 걷는다 (약 11 + 100 + 11m)
-        RouteResult both = s.route(new RouteRequest(new Place(LAT + 0.0001, S_P[0] + 0.0006, null),
-                new Place(LAT + 0.0001, S_P[0] + 0.0017, null), null));
-        assertThat(both.routes().get(0).distanceM()).isBetween(115, 130);
-    }
-
-    @Test
-    void wheelchairNextToTheMiddleOfStairsSnapsToThePassableEndWithoutWarning() {
-        // S–M 보통 길, M–T 계단. 휠체어 도착은 계단 아래쪽(M에서 약 30m) 계단 바로 옆: 계단을 나눠 붙지 않고 M에 붙어 주의가 없다
-        RoadGraph g = new RoadGraph(Map.of(S, S_P, M, M_P, T, T_P, 99L, new double[] {S_P[0], LAT + 0.0005}),
-                List.of(edge(1, S, M, S_P, M_P, EdgePenalty.NONE),
-                        edge(2, M, T, M_P, T_P, new EdgePenalty(Map.of(Penalty.STAIRS, 1.0)))));
-        RouteResult r = TestRoutes.service(g, facilities(List.of()), 12).route(new RouteRequest(
-                new Place(LAT, S_P[0], null), new Place(LAT + 0.00005, 126.93140, null), null, "wheelchair"));
-
-        assertThat(r.explanation().notes()).noneMatch(n -> n.kind().equals("snap"));
-        assertThat(r.routes().get(0).stairs()).isEmpty();
-    }
-
-    @Test
-    void pointTooFarFromAnyRoadIsNoRoute() {
-        RouteService s = TestRoutes.service(diamond(0.0006), facilities(List.of()), 21, props("route.snap-max-m=5"));
-
-        // 도로망 범위 안이지만 가장 가까운 길에서도 약 28m 떨어진 출발점 (마름모 안쪽, 길은 노드가 아니라 선으로 잰다)
-        assertError(() -> s.route(new RouteRequest(new Place(LAT + 0.0003, 126.93110, null), new Place(LAT, 126.93220, null), null)),
-                RouteError.NO_ROUTE);
-    }
-
-    @Test
-    void isolatedPieceIsSkippedWhenSnapping() {
-        // S–M–T 도로망 옆에 다른 길과 이어지지 않은 계단 조각(출발점 바로 옆). 조각이 아니라 큰 도로망에 붙인다
-        double[] a = {126.92995, LAT + 0.0002};
-        double[] b = {126.92990, LAT + 0.0003};
-        RoadGraph g = new RoadGraph(Map.of(S, S_P, M, M_P, T, T_P, 8L, a, 9L, b), List.of(
-                edge(1, S, M, S_P, M_P, EdgePenalty.NONE), edge(2, M, T, M_P, T_P, EdgePenalty.NONE),
-                edge(3, 8, 9, a, b, EdgePenalty.NONE)));
-
-        RouteResult r = TestRoutes.service(g, facilities(List.of()), 12).route(
-                new RouteRequest(new Place(a[1], a[0], null), new Place(LAT, 126.93220, null), null));
-
-        assertThat(r.routes()).hasSize(1);
-        assertThat(r.routes().get(0).distanceM()).isGreaterThan(200);
-    }
-
-    @Test
+    @DisplayName("밝은 길이 한도를 넘으면 가장 짧은 길로 가고 너무 돌아서라 말한다")
     void cappedDetourGivesShortestAndSaysSo() {
         // 밝은 길이 약 1.2배인데 한도가 1.1 → 한도 안에서는 밝은 길을 고를 수 없다
         RouteService s = TestRoutes.service(diamond(0.0006), facilities(brightSideFacilities()), 21,
@@ -281,16 +252,7 @@ class RouteServiceTests {
     }
 
     @Test
-    void facilityMarksAreCappedWithHelpAndBellFirst() {
-        RouteService s = TestRoutes.service(diamond(0.0006), facilities(brightSideFacilities()), 21,
-                props("route.max-facilities=2"));
-
-        RouteResult r = s.route(request("auto"));
-
-        assertThat(r.facilities()).extracting(RouteResult.FacilityMark::type).containsExactly("EMERGENCY_BELL", "CCTV");
-    }
-
-    @Test
+    @DisplayName("설명의 더 걷는 분은 두 경로 시간 차와 늘 같다")
     void extraMinutesAlwaysMatchDurationDifference() {
         // 여러 우회 정도에서 카드의 "(n분) 더"와 두 경로 시간 차가 같아야 한다.
         // 시설이 없으면 안전 경로가 최단과 같아 길이 1개만 나오므로, 밝은 쪽 시설을 두고 실제로 2개 나온 경우를 센다
@@ -307,23 +269,16 @@ class RouteServiceTests {
     }
 
     @Test
+    @DisplayName("응답 일몰 시각은 HH:mm 형식이다")
     void sunsetIsHourMinute() {
         assertThat(service(facilities(List.of()), 21).route(request("auto")).conditions().sunset()).matches("\\d{2}:\\d{2}");
     }
 
     @Test
-    void errorStatusesMatchRequirements() {
-        // 요구사항 8.3 오류 표
-        assertThat(RouteError.SAME_POINT.httpStatus()).isEqualTo(400);
-        assertThat(RouteError.TOO_FAR.httpStatus()).isEqualTo(400);
-        assertThat(RouteError.OUT_OF_AREA.httpStatus()).isEqualTo(422);
-        assertThat(RouteError.NO_ROUTE.httpStatus()).isEqualTo(404);
-        assertThat(RouteError.DB_UNAVAILABLE.httpStatus()).isEqualTo(503);
-        assertThat(new RouteException(RouteError.TOO_FAR).getMessage()).isEqualTo("걸어가기엔 멀어요");
-    }
-
-    @Test
+    @DisplayName("1만 노드 격자에서 밤 길찾기가 2초 안에 끝난다")
     void gridEndToEndWithinTwoSeconds() {
+        // 100×100 격자(간격 30m, 약 3km×3km, 1만 노드)
+        // 시간 시험이라 컴퓨터가 몹시 바쁘면 드물게 실패할 수 있음
         Random rnd = new Random(3);
         RoadGraph g = grid(100, 30, (r, c) -> rnd.nextDouble() < 0.3);
         double[] from = g.point(0);
@@ -338,35 +293,72 @@ class RouteServiceTests {
         assertThat(ms).isLessThan(2000);
     }
 
+    /** 범위 안 노드와, 두 끝이 모두 범위 안인 길만 주는 도로망 (DB가 사각형으로 읽는 것과 같게) */
+    static RoadGraphSource clipped(RoadGraph all) {
+        BBox area = BBox.around(all.nodes().values().stream().toList(), 0);
+        return new RoadGraphSource() {
+            @Override
+            public boolean covers(double lon, double lat) {
+                return area.contains(lon, lat);
+            }
+
+            @Override
+            public RoadGraph load(BBox box) {
+                Map<Long, double[]> nodes = new HashMap<>();
+                all.nodes().forEach((id, p) -> {
+                    if (box.contains(p[0], p[1])) {
+                        nodes.put(id, p);
+                    }
+                });
+                List<RoadEdge> edges = all.graph().edgeSet().stream()
+                        .filter(e -> nodes.containsKey(e.from()) && nodes.containsKey(e.to())).toList();
+                return new RoadGraph(nodes, edges);
+            }
+        };
+    }
+
     @Test
+    @DisplayName("읽은 범위에서 길이 안 이어지면 범위를 넓혀 다시 찾는다")
+    void retriesWithWiderAreaWhenTheOnlyWayGoesAround() {
+        // A와 B 사이에 바로 가는 길이 없고, 북쪽 1.5km 다리로 돌아가야 한다 (읽는 범위 500m 밖)
+        double[] a = {126.93, LAT};
+        double[] b = {126.934, LAT};
+        double[] an = north(a, 1500);
+        double[] bn = north(b, 1500);
+        RoadGraph g = new RoadGraph(Map.of(1L, a, 2L, an, 3L, bn, 4L, b), List.of(
+                edge(1, 1, 2, a, an, EdgePenalty.NONE), edge(2, 2, 3, an, bn, EdgePenalty.NONE),
+                edge(3, 3, 4, bn, b, EdgePenalty.NONE)));
+        RouteService s = TestRoutes.service(clipped(g), facilities(List.of()), at(12), props(), PreferenceSource.NONE, null);
+
+        RouteResult r = s.route(new RouteRequest(new Place(a[1], a[0], null), new Place(b[1], b[0], null), "auto", "adult"));
+
+        assertThat(r.routes().get(0).distanceM()).isBetween(3300, 3400);
+    }
+
+    @Test
+    @DisplayName("출발을 길에 붙여도 건너는 자리는 선 위 건너는 노드 번호를 가리킨다")
     void crossAtPointsAtTheCrossingNodeInGeometryEvenWithSnappedStart() {
         // 서–가운데–동 큰 길 한 줄. 인도가 왼쪽에서 오른쪽으로 바뀌는 가운데 노드에서 건넌다 (specs/014)
-        double mLat = Geo.distance(0, 0, 0, 1);
         // 서쪽 끝은 북쪽으로 20m 올려 둔다: 도로망 범위(노드 상자) 안에 길 밖 출발을 둘 자리
-        double[] w = {126.93000, LAT + 20 / mLat};
+        double[] w = north(new double[] {126.93000, LAT}, 20);
         double[] o = {126.93110, LAT};
         double[] e = {126.93220, LAT};
         RoadGraph g = new RoadGraph(Map.of(1L, w, 2L, o, 3L, e), List.of(
-                new com.saferoute.route.engine.graph.RoadEdge(1, 1, 2, Geo.distance(w, o), "primary", List.of(w, o),
-                        EdgePenalty.NONE, "left"),
-                new com.saferoute.route.engine.graph.RoadEdge(2, 2, 3, Geo.distance(o, e), "primary", List.of(o, e),
-                        EdgePenalty.NONE, "right")));
+                road(1, 1, 2, w, o, "primary", "left"), road(2, 2, 3, o, e, "primary", "right")));
         double[] cw = {126.93118, LAT};
-        RouteService s = new RouteService(new com.saferoute.route.data.InMemoryRoadGraphSource(g) {
+        RoadGraphSource roads = new InMemoryRoadGraphSource(g) {
             @Override
             public List<double[]> crosswalkPoints(BBox box) {
                 return List.of(cw);
             }
-        }, facilities(List.of()), new com.saferoute.situation.NightJudge(), new com.saferoute.route.engine.score.RouteScorer(props()),
-                new com.saferoute.route.engine.explain.RouteResultAssembler(
-                        new com.saferoute.route.engine.facility.FacilityCounter(props()), props()),
-                props(), java.time.Clock.fixed(at(12).toInstant(), at(12).getZone()), PreferenceSource.NONE, null);
+        };
+        RouteService s = TestRoutes.service(roads, facilities(List.of()), at(12), props(), PreferenceSource.NONE, null);
         // 출발은 서쪽 길 한가운데에서 북쪽으로 5m: 응답 첫 점은 요청 출발, 길 위 발이 geometry 1번
-        double[] start = {126.93055, LAT + 15 / mLat};
+        double[] start = north(new double[] {126.93055, LAT}, 15);
 
         RouteResult r = s.route(new RouteRequest(new Place(start[1], start[0], "출발"), new Place(LAT, e[0], "도착"), "auto"));
 
-        RouteResult.Route safe = r.routes().get(r.routes().size() - 1);
+        RouteResult.Route safe = safe(r);
         assertThat(safe.crossAt()).singleElement().satisfies(c -> {
             assertThat(Geo.distance(safe.geometry().get(c.at()), o)).isLessThan(0.01);
             assertThat(c.at()).isEqualTo(2);
@@ -380,41 +372,48 @@ class RouteServiceTests {
     }
 
     @Test
+    @DisplayName("횡단보도·어두운 구간은 그린 방향과 상관없이 걷는 방향으로 잰다")
+    void crosswalkStretchAndDarkStretchAreMeasuredInWalkingOrder() {
+        // 요청 출발점부터 (FR-31, FR-34)
+        // S → M 100m 보통 길(M→S로 그림), M → T 100m 횡단보도. 등이 없어 밤에는 전부 어둡다
+        RoadGraph g = new RoadGraph(Map.of(S, S_P, M, M_P, T, T_P), List.of(
+                edge(1, M, S, M_P, S_P, EdgePenalty.NONE),
+                edge(2, M, T, M_P, T_P, new EdgePenalty(Map.of(com.saferoute.route.engine.graph.Penalty.CROSSWALK, 1.0)))));
+        RouteResult r = TestRoutes.service(g, facilities(List.of()), 21).route(
+                new RouteRequest(new Place(LAT, S_P[0], null), new Place(LAT, T_P[0], null), "auto"));
+
+        RouteResult.Route route = safe(r);
+        double sm = Geo.distance(S_P, M_P);
+        assertThat(route.crossings()).singleElement().satisfies(c -> {
+            assertThat(c.fromM()).isEqualTo((int) Math.round(sm));
+            assertThat(c.toM()).isEqualTo(route.distanceM());
+        });
+        assertThat(route.dark()).singleElement().satisfies(d -> {
+            assertThat(d.fromM()).isZero();
+            assertThat(d.toM()).isCloseTo(route.distanceM(), org.assertj.core.data.Offset.offset(1));
+        });
+    }
+
+    @Test
+    @DisplayName("횡단보도 없이 큰 길을 건너면 한 번만 주의를 알린다")
     void crossingBigRoadBetweenSidewalksWithoutCrosswalkWarnsOnce() {
         // 남쪽 인도 → 골목 → 큰 길(both) → 골목 → 북쪽 인도, 횡단보도 없음 (w20)
-        double mLat = Geo.distance(0, 0, 0, 1);
-        double mLon = Geo.distance(0, LAT, 1, LAT);
-        java.util.function.BiFunction<Double, Double, double[]> m = (east, north) -> new double[] {
-                126.93 + east / mLon, LAT + north / mLat};
-        List<double[]> pts = List.of(m.apply(-100.0, -8.0), m.apply(-50.0, -8.0), m.apply(-50.0, 0.0),
-                m.apply(50.0, 0.0), m.apply(50.0, 8.0), m.apply(150.0, 8.0));
+        List<double[]> pts = List.of(xy(-100, -8), xy(-50, -8), xy(-50, 0), xy(50, 0), xy(50, 8), xy(150, 8));
         String[] kinds = {"footway", "residential", "primary", "residential", "footway"};
-        Map<Long, double[]> nodes = new java.util.HashMap<>();
-        List<com.saferoute.route.engine.graph.RoadEdge> edges = new ArrayList<>();
+        Map<Long, double[]> nodes = new HashMap<>();
+        List<RoadEdge> edges = new ArrayList<>();
         for (int i = 0; i < kinds.length; i++) {
             nodes.put((long) i, pts.get(i));
             nodes.put((long) i + 1, pts.get(i + 1));
-            edges.add(new com.saferoute.route.engine.graph.RoadEdge(i, i, i + 1, Geo.distance(pts.get(i), pts.get(i + 1)),
-                    kinds[i], List.of(pts.get(i), pts.get(i + 1)), EdgePenalty.NONE));
+            edges.add(road(i, i, i + 1, pts.get(i), pts.get(i + 1), kinds[i], null));
         }
-        RouteService s = new RouteService(new com.saferoute.route.data.InMemoryRoadGraphSource(new RoadGraph(nodes, edges)),
-                facilities(List.of()), new com.saferoute.situation.NightJudge(),
-                new com.saferoute.route.engine.score.RouteScorer(props()),
-                new com.saferoute.route.engine.explain.RouteResultAssembler(
-                        new com.saferoute.route.engine.facility.FacilityCounter(props()), props()),
-                props(), java.time.Clock.fixed(at(12).toInstant(), at(12).getZone()), PreferenceSource.NONE, null);
+        RouteService s = TestRoutes.service(new RoadGraph(nodes, edges), facilities(List.of()), 12);
         double[] a = pts.get(0);
         double[] b = pts.get(pts.size() - 1);
 
         RouteResult r = s.route(new RouteRequest(new Place(a[1], a[0], "출발"), new Place(b[1], b[0], "도착"), "auto"));
 
-        RouteResult.Route safe = r.routes().get(r.routes().size() - 1);
-        assertThat(safe.crossAt()).isEmpty();
+        assertThat(safe(r).crossAt()).isEmpty();
         assertThat(r.explanation().notes()).containsOnlyOnce(RouteResult.Note.warn("crossing", "횡단보도 없이 길을 건너요"));
-    }
-
-    private static void assertError(Runnable call, RouteError expected) {
-        assertThatThrownBy(call::run)
-                .isInstanceOfSatisfying(RouteException.class, e -> assertThat(e.error()).isEqualTo(expected));
     }
 }

@@ -21,6 +21,7 @@ import java.time.ZoneId;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.client.match.MockRestRequestMatchers;
 import org.springframework.test.web.client.ExpectedCount;
@@ -239,17 +240,25 @@ class GeminiBrainTests {
     }
 
     @Test
-    void madeUpNumberFallsBackToRuleSentence() {
-        server.expect(requestTo(URL)).andRespond(withSuccess("""
+    @DisplayName("제미나이가 도구 결과(50m)에 없는 숫자(20m)를 지어내면 그 답을 버리고 규칙 문장으로 진짜 거리를 말한다")
+    void fakeDistanceReplaced() {
+        String askToilet = """
                 {"candidates":[{"content":{"role":"model","parts":[
                   {"functionCall":{"name":"find_nearby","args":{"kind":"toilet"}}}]}}]}
-                """, MediaType.APPLICATION_JSON));
-        server.expect(requestTo(URL)).andRespond(withSuccess("""
+                """;
+        String fakeAnswer = """
                 {"candidates":[{"content":{"role":"model","parts":[{"text":"화장실은 20m 앞이에요."}]}}]}
-                """, MediaType.APPLICATION_JSON));
-        AssistantReply r = ask("화장실 급해");
-        assertThat(r.ai()).isFalse();
-        assertThat(r.say()).contains("50m").doesNotContain("20m");
+                """;
+        server.expect(requestTo(URL)).andRespond(withSuccess(askToilet, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL)).andRespond(withSuccess(fakeAnswer, MediaType.APPLICATION_JSON));
+
+        AssistantReply reply = ask("화장실 급해");
+
+        boolean byGemini = reply.ai();
+        assertThat(byGemini).isFalse();
+        assertThat(reply.say())
+                .contains("50m")           // setUp의 가짜 시설 DB에 있는 진짜 거리
+                .doesNotContain("20m");    // 제미나이가 지어낸 거리
     }
 
     @Test

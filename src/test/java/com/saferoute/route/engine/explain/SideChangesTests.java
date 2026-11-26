@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.route.engine.geo.Geo;
@@ -18,6 +19,7 @@ import com.saferoute.route.engine.graph.RoadGraph;
 import com.saferoute.route.engine.search.RoadPath;
 
 /** 큰 길을 건너는 곳과 횡단보도 자리 (specs/014) */
+@DisplayName("큰 길 건너는 자리")
 class SideChangesTests {
 
     private static final double LAT = 35.14;
@@ -27,6 +29,7 @@ class SideChangesTests {
             3L, at(0, 100), 4L, at(0, -100));
 
     @Test
+    @DisplayName("큰 길에서 걷는 쪽이 left ↔ right로 바뀌는 노드에서 그 길 횡단보도로 건넌다")
     void leftToRightUsesCrosswalkOnTheBigRoad() {
         for (String highway : List.of("primary", "tertiary")) {
             RoadEdge in = road(1, 1, 0, highway, "left");
@@ -48,6 +51,7 @@ class SideChangesTests {
     }
 
     @Test
+    @DisplayName("인도 쪽은 걷는 방향 기준이라 거꾸로 걷는 길은 쪽을 바꿔 비교한다")
     void edgeWalkedAgainstDrawnDirectionFlipsSide() {
         // 동쪽 길을 2→0으로 그렸고 인도는 그린 방향 왼쪽: 0→2로 걸으면 오른쪽
         RoadEdge in = road(1, 1, 0, "primary", "left");
@@ -63,7 +67,9 @@ class SideChangesTests {
     }
 
     @Test
+    @DisplayName("같은 길로 되돌아가는 곳은 쪽이 뒤집혀도 건넌 것이 아니다")
     void turningBackOnSameEdgeIsNotACrossing() {
+        // SideChanges.find
         // 들를 곳(노드 0)에서 같은 길로 되돌아간다: 걷는 쪽은 right → left로 바뀌지만 건너지 않았다
         RoadEdge in = road(1, 1, 0, "primary", "right");
         RoadPath p = new RoadPath(List.of(in, in), List.of(at(-100, 0), at(0, 0), at(-100, 0)), 2 * in.lengthM());
@@ -72,7 +78,9 @@ class SideChangesTests {
     }
 
     @Test
+    @DisplayName("노드 30m 안이면서 큰 길 선 5m 안인 횡단보도가 없으면 보내지 않는다")
     void noCrosswalkWithin30mOrOnlyOffTheLineSendsNothing() {
+        // NEAR_M, LINE_M (1안)
         RoadEdge in = road(1, 1, 0, "primary", "left");
         RoadEdge out = road(2, 0, 2, "primary", "right");
 
@@ -82,27 +90,37 @@ class SideChangesTests {
     }
 
     @Test
+    @DisplayName("한쪽만 both면 큰 길 교차로에서 45°보다 크게 꺾을 때만 건넌다")
     void oneBothSideOnlyWhenTurningAtBigJunction() {
+        // 큰 길 교차로는 큰 길 3개 이상, TURN_DEG (민수 요청 ②)
         RoadEdge w = road(1, 1, 0, "primary", null);
-        RoadEdge e = road(2, 0, 2, "primary", null);
+        RoadEdge e = road(2, 0, 2, "primary", "right");
         RoadEdge n = road(3, 0, 3, "primary", "right");
         RoadEdge s = road(4, 0, 4, "primary", null);
         RoadGraph junction = graph(w, e, n, s);
         // 북쪽 갈래 위와 동쪽 갈래 위 횡단보도
         List<double[]> cw = List.of(at(0, 8), at(8, 0));
 
+        // both → right라도 곧장 지나면 보내지 않는다
         assertThat(SideChanges.along(path(w, e), 0, junction, cw)).isEmpty();
         // both → right: 꺾으면 북쪽 갈래 횡단보도에서 건넌다
         assertThat(SideChanges.along(path(w, n), 0, junction, cw)).singleElement().satisfies(c -> {
             assertThat(c.at()).isEqualTo(1);
             assertThat(c.lat()).isEqualTo(at(0, 8)[1]);
         });
+        // right → both도 같다: 북쪽에서 내려와 동쪽(both)으로 꺾으면 건넌다
+        RoadEdge fromNorth = road(5, 3, 0, "primary", "right");
+        RoadEdge eBoth = road(2, 0, 2, "primary", null);
+        assertThat(SideChanges.along(path(fromNorth, eBoth), 0, graph(fromNorth, eBoth, w, s), cw)).singleElement()
+                .satisfies(c -> assertThat(c.at()).isEqualTo(1));
         // 큰 길 2개뿐인 모퉁이는 꺾어도 건너지 않는다
         assertThat(SideChanges.along(path(w, n), 0, graph(w, n), cw)).isEmpty();
     }
 
     @Test
+    @DisplayName("앞뒤가 둘 다 both면 양쪽에 인도가 있어 보내지 않는다")
     void bothToBothIsNotACrossingEvenWhenTurning() {
+        // 진행표 w19
         // 앞뒤 모두 인도 태그 없는 양방향 큰 길(both): 양쪽에 인도가 있어 건널 필요가 없다 (w19, 지그재그)
         RoadEdge w = road(1, 1, 0, "primary", null);
         RoadEdge e = road(2, 0, 2, "primary", null);
@@ -116,10 +134,19 @@ class SideChangesTests {
     }
 
     @Test
+    @DisplayName("횡단보도 점이 없으면 큰 길과 만나는 횡단보도 길의 가운데로 건넌다")
     void footwayCrossingMiddleWhenNoPoint() {
+        // 큰 길 선과 만나거나 꼭짓점이 LINE_M 안에 닿는 footway=crossing
         RoadEdge in = road(1, 1, 0, "primary", "left");
         RoadEdge out = road(2, 0, 2, "primary", "right");
         RoadEdge zebra = crosswalk(10, 5, 6, at(10, -8), at(10, 8));
+        // 큰 길 선을 넘지 않고 끝이 선 3m 앞에서 멈춘 횡단보도 길도 닿은 것으로 본다
+        RoadEdge shortZebra = crosswalk(11, 7, 8, at(10, 3), at(10, 20));
+        assertThat(SideChanges.along(path(in, out), 0, graph(in, out, shortZebra), List.of()))
+                .singleElement().satisfies(c -> {
+                    assertThat(c.kind()).isEqualTo("footway");
+                    assertThat(c.lat()).isCloseTo(at(10, 11.5)[1], within(1e-9));
+                });
 
         assertThat(SideChanges.along(path(in, out), 0, graph(in, out, zebra), List.of()))
                 .singleElement().satisfies(c -> {
@@ -133,6 +160,7 @@ class SideChangesTests {
     }
 
     @Test
+    @DisplayName("at은 응답 geometry 점 번호라 앞 길들의 꺾임점까지 모두 센다")
     void atCountsEveryGeometryPointOfEarlierEdges() {
         // 들어오는 큰 길이 꺾임점 하나를 더 가진 선: 서쪽 끝(0번) – 꺾임점(1번) – 가운데 노드(2번)
         double[] bend = at(-50, 2);
@@ -146,7 +174,9 @@ class SideChangesTests {
     }
 
     @Test
+    @DisplayName("both 구간 앞뒤에 따로 그린 인도가 서로 반대쪽이면 그 구간에서 건넌다")
     void sidewalksOnOppositeSidesAroundBothStretchCrossOnIt() {
+        // 진행표 w20
         // 남쪽 인도 → 연결 골목 8m → 태그 없는 큰 길(both, 동쪽으로) → 북쪽 골목 7m → 골목 횡단보도 → 북쪽 인도 (w20)
         Map<Long, double[]> n = Map.of(1L, at(-100, -8), 2L, at(-50, -8), 3L, at(-50, 0), 4L, at(50, 0), 5L, at(50, 7),
                 6L, at(56, 7), 7L, at(150, 7));
@@ -168,6 +198,13 @@ class SideChangesTests {
             assertThat(c.kind()).isEqualTo("crossing");
         });
         assertThat(found.withoutCrosswalk()).isFalse();
+        // 출발 점을 앞에 붙여 경로 선이 응답 geometry 5번에서 시작해도 같은 구간 점을 가리킨다
+        assertThat(SideChanges.find(p, 5, g, List.of(cw)).crossAt()).singleElement()
+                .satisfies(c -> assertThat(c.at()).isEqualTo(7));
+        // 구간 선 LINE_M 안 횡단보도 점이 여럿이면 선에 가장 가까운 점
+        double[] closer = at(10, 1);
+        assertThat(SideChanges.find(p, 0, g, List.of(closer, at(-20, 3))).crossAt()).singleElement()
+                .satisfies(c -> assertThat(c.lon()).isEqualTo(closer[0]));
         // 횡단보도가 없으면 보내지 않고 알린다. 골목 횡단보도 길은 큰 길 선에서 7m라 쓰지 않는다
         SideChanges.Found none = SideChanges.find(p, 0, g, List.of());
         assertThat(none.crossAt()).isEmpty();
@@ -175,7 +212,9 @@ class SideChangesTests {
     }
 
     @Test
+    @DisplayName("쪽을 정한 both 구간이 바로 앞 큰 길 구간과 반대쪽이면 그 구간에서 건넌다")
     void bothStretchResolvedOppositeToPreviousTaggedStretchCrossesOnIt() {
+        // 인도로 쪽을 정함, left ↔ right (진행표 w20)
         // 남쪽 인도 태그(오른쪽) 큰 길 → 태그 없는 큰 길(both) → 북쪽 골목 7m → 북쪽 인도: both 구간에서 건넌다 (w20)
         Map<Long, double[]> n = Map.of(1L, at(-100, 0), 2L, at(0, 0), 3L, at(100, 0), 4L, at(100, 7), 5L, at(200, 7));
         RoadEdge tagged = road(1, 1, 2, "primary", "right", n);
@@ -189,9 +228,16 @@ class SideChangesTests {
         assertThat(SideChanges.find(p, 0, g, List.of(at(80, 0))).crossAt()).singleElement()
                 .satisfies(c -> assertThat(c.at()).isEqualTo(2));
         assertThat(SideChanges.find(p, 0, g, List.of()).withoutCrosswalk()).isTrue();
+        // 앞 큰 길 인도가 북쪽(왼쪽)이면 같은 쪽이라 건너지 않는다
+        RoadEdge sameSide = road(1, 1, 2, "primary", "left", n);
+        SideChanges.Found same = SideChanges.find(path(sameSide, big, alley, north), 0,
+                graph(sameSide, big, alley, north), List.of(at(80, 0)));
+        assertThat(same.crossAt()).isEmpty();
+        assertThat(same.withoutCrosswalk()).isFalse();
     }
 
     @Test
+    @DisplayName("both 구간 앞뒤 인도가 같은 쪽이면 건너지 않고 횡단보도 없음 주의도 없다")
     void sidewalksOnSameSideAroundBothStretchIsNoCrossing() {
         Map<Long, double[]> n = Map.of(1L, at(-100, 8), 2L, at(-50, 8), 3L, at(-50, 0), 4L, at(50, 0), 5L, at(50, 8),
                 6L, at(150, 8));
@@ -205,6 +251,82 @@ class SideChangesTests {
                 graph(before, link, big, alley, after), List.of());
         assertThat(found.crossAt()).isEmpty();
         assertThat(found.withoutCrosswalk()).isFalse();
+    }
+
+    @Test
+    @DisplayName("노드에서 이미 건너는 자리를 보낸 구간은 다시 보내지 않는다")
+    void stretchStartingAtNodeCrossingIsNotSentTwice() {
+        // 구간 규칙으로 다시 보내지 않음 (SideChanges.find)
+        // 남쪽 인도(right) 큰 길로 동쪽으로 와서 큰 길 교차로 0에서 북쪽(both)으로 꺾고, 북쪽 끝에서 서쪽 7m 골목 → 서쪽 인도
+        Map<Long, double[]> n = Map.of(1L, at(-100, 0), 0L, at(0, 0), 2L, at(100, 0), 4L, at(0, -100), 3L, at(0, 100),
+                5L, at(-7, 100), 6L, at(-7, 200));
+        RoadEdge tagged = road(1, 1, 0, "primary", "right", n);
+        RoadEdge east = road(2, 0, 2, "primary", null, n);
+        RoadEdge south = road(4, 0, 4, "primary", null, n);
+        RoadEdge big = road(3, 0, 3, "primary", null, n);
+        RoadEdge alley = road(5, 3, 5, "residential", null, n);
+        RoadEdge walk = road(6, 5, 6, "footway", null, n);
+
+        // 북쪽 구간은 서쪽 인도로 left가 되어 앞 구간(right)과 반대지만, 노드 0에서 이미 건넜다
+        SideChanges.Found found = SideChanges.find(path(tagged, big, alley, walk), 0,
+                graph(tagged, east, south, big, alley, walk), List.of(at(0, 8)));
+        assertThat(found.crossAt()).singleElement().satisfies(c -> assertThat(c.at()).isEqualTo(1));
+        assertThat(found.withoutCrosswalk()).isFalse();
+    }
+
+    @Test
+    @DisplayName("구간과 다른 노드에서 건너는 자리를 모두 보내고 at 순서로 늘어놓는다")
+    void stretchCrossingAndLaterNodeCrossingAreBothSentInOrder() {
+        // w20 구간(큰 길 both, 남쪽 인도 → 북쪽 인도) 뒤에 left → right로 바뀌는 큰 길 노드 8
+        Map<Long, double[]> n = Map.of(1L, at(-100, -8), 2L, at(-50, -8), 3L, at(-50, 0), 4L, at(50, 0), 5L, at(50, 7),
+                6L, at(56, 7), 7L, at(150, 7), 8L, at(250, 7), 9L, at(350, 7));
+        RoadEdge south = road(1, 1, 2, "footway", null, n);
+        RoadEdge link = road(2, 2, 3, "residential", null, n);
+        RoadEdge big = road(3, 3, 4, "primary", null, n);
+        RoadEdge alley = road(4, 4, 5, "residential", null, n);
+        RoadEdge zebra = crosswalk(5, 5, 6, n.get(5L), n.get(6L));
+        RoadEdge north = road(6, 6, 7, "footway", null, n);
+        RoadEdge left = road(7, 7, 8, "primary", "left", n);
+        RoadEdge right = road(8, 8, 9, "primary", "right", n);
+
+        assertThat(SideChanges.find(path(south, link, big, alley, zebra, north, left, right), 0,
+                graph(south, link, big, alley, zebra, north, left, right), List.of(at(258, 7), at(-20, 0))).crossAt())
+                .extracting(c -> c.at()).containsExactly(2, 7);
+    }
+
+    @Test
+    @DisplayName("횡단보도 점은 노드 30m·큰 길 선 5m 안이면 쓰고 넘으면 쓰지 않는다")
+    void crosswalkPointWithinNearAndLineLimitsCounts() {
+        // NEAR_M, LINE_M
+        RoadEdge in = road(1, 1, 0, "primary", "left");
+        RoadEdge out = road(2, 0, 2, "primary", "right");
+        RoadPath p = path(in, out);
+        RoadGraph g = graph(in, out);
+
+        assertThat(SideChanges.along(p, 0, g, List.of(at(SideChanges.NEAR_M - 0.01, 0)))).hasSize(1);
+        assertThat(SideChanges.along(p, 0, g, List.of(at(SideChanges.NEAR_M + 0.01, 0)))).isEmpty();
+        assertThat(SideChanges.along(p, 0, g, List.of(at(3, SideChanges.LINE_M - 0.01)))).hasSize(1);
+        assertThat(SideChanges.along(p, 0, g, List.of(at(3, SideChanges.LINE_M + 0.01)))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("한쪽만 both인 큰 길 교차로는 방향이 45°보다 크게 바뀌어야 꺾은 것이다")
+    void oneBothSideCountsOnlyTurnsSharperThanTurnDeg() {
+        // TURN_DEG
+        for (double turn : new double[] {SideChanges.TURN_DEG - 0.01, SideChanges.TURN_DEG + 0.01}) {
+            // 동쪽으로 와서 왼쪽(북쪽)으로 turn도 꺾는 갈래 노드 7
+            double h = Math.toRadians(90 - turn);
+            Map<Long, double[]> n = new HashMap<>(NODES);
+            n.put(7L, at(100 * Math.sin(h), 100 * Math.cos(h)));
+            RoadEdge w = road(1, 1, 0, "primary", null, n);
+            RoadEdge e = road(2, 0, 2, "primary", null, n);
+            RoadEdge s = road(4, 0, 4, "primary", null, n);
+            RoadEdge bend = road(7, 0, 7, "primary", "right", n);
+            double[] cw = at(8 * Math.sin(h), 8 * Math.cos(h));
+
+            assertThat(SideChanges.along(path(w, bend), 0, graph(w, e, s, bend), List.of(cw)))
+                    .hasSize(turn > SideChanges.TURN_DEG ? 1 : 0);
+        }
     }
 
     /** (126.93, LAT)에서 동쪽·북쪽으로 m만큼 떨어진 점 */

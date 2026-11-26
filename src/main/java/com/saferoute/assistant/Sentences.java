@@ -133,6 +133,9 @@ final class Sentences {
     /** 엔진 events[].kind 의 신고 (원일님 w11 RoadReport.KIND) */
     static final String REPORT = "신고";
 
+    /** 차가 막은 길 신고 (036 photo_label = vehicle) */
+    static final String VEHICLE_SAY = "가는 길에 차가 길을 막고 있다는 신고가 있어요(잠깐일 수 있어요).";
+
     /** recommend_trip 결과를 말로 */
     static String trip(Turn t) {
         TripRecommender.Plan plan = t.plan;
@@ -188,6 +191,10 @@ final class Sentences {
         for (Trip o : plan.scored().others()) {
             for (RouteResult.Event e : TripScorer.avoided(o)) {
                 if (walk && TripScorer.avoided(best).stream().noneMatch(b -> b.title().equals(e.title()))) {
+                    if (REPORT.equals(e.kind()) && TripRecommender.VEHICLE_TITLE.equals(e.title())) {
+                        sb.append(" 차가 길을 막고 있다는 신고가 있는 곳을 피해서 안내할게요.");
+                        continue;
+                    }
                     if (REPORT.equals(e.kind())) {
                         sb.append(" ").append(e.title()).append(" 신고가 있는 곳을 피해서 안내할게요.");
                         continue;
@@ -199,7 +206,10 @@ final class Sentences {
         }
         if (walk) {
             for (RouteResult.Event e : best.events()) {
-                if (REPORT.equals(e.kind())) {
+                if (REPORT.equals(e.kind()) && TripRecommender.VEHICLE_TITLE.equals(e.title())) {
+                    // 사진으로 차·오토바이라고 본 막는 물건 신고 (036). 3시간이면 풀리니 잠깐일 수 있다고 (11-23)
+                    sb.append(" ").append(VEHICLE_SAY);
+                } else if (REPORT.equals(e.kind())) {
                     // 신고는 title 이 종류 이름뿐이라 따옴표 없이 "가는 길에 공사 신고가 있어요."
                     sb.append(" 가는 길에 ").append(e.title()).append(" 신고가 있어요.");
                 } else {

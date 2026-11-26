@@ -16,6 +16,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.Executors;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /** 가짜 DB·가짜 광주버스정보로 정류장 묶기·정렬·실패·기억해 두기를 확인 (인터넷·DB 없이 돈다) */
@@ -23,27 +24,27 @@ class BusServiceTests {
 
     private static final double LAT = 35.1401;
     private static final double LON = 126.9336;
-    private static final BusStop A = new BusStop(1230, "조선대", "남광주", 35.1405, 126.9330, 60);
-    private static final BusStop B = new BusStop(1231, "조선대", "산수오거리", 35.1406, 126.9331, 70);
-    private static final BusArrival LATE = new BusArrival(2, "01", 14, 10, false, "무등산국립공원", "전대동창회관");
-    private static final BusArrival SOON = new BusArrival(15, "15", 3, 1, true, "광주역", "조선대");
-    private static final BusArrival UNKNOWN = new BusArrival(7, "07", null, null, false, "상무지구", "");
+    private static final BusStop STOP_NAMGWANGJU = new BusStop(1230, "조선대", "남광주", 35.1405, 126.9330, 60);
+    private static final BusStop STOP_SANSU = new BusStop(1231, "조선대", "산수오거리", 35.1406, 126.9331, 70);
+    private static final BusArrival BUS_01 = new BusArrival(2, "01", 14, 10, false, "무등산국립공원", "전대동창회관");
+    private static final BusArrival BUS_15 = new BusArrival(15, "15", 3, 1, true, "광주역", "조선대");
+    private static final BusArrival BUS_07 = new BusArrival(7, "07", null, null, false, "상무지구", "");
 
     private final BusStopRepository repo = mock(BusStopRepository.class);
-    private final GjBisClient bis = mock(GjBisClient.class);
+    private final GjBisClient busApi = mock(GjBisClient.class);
     private final MovableClock clock = new MovableClock();
-    private final BusService service = new BusService(repo, bis, clock, Executors.newFixedThreadPool(2));
+    private final BusService service = new BusService(repo, busApi, clock, Executors.newFixedThreadPool(2));
 
     @Test
     void stopsKeepDistanceOrderAndBusesSoonestFirst() {
-        when(repo.near(LAT, LON, BusService.RADIUS_M, BusService.MAX_STOPS)).thenReturn(List.of(A, B));
-        when(bis.arrivals(1230)).thenReturn(List.of(LATE, UNKNOWN, SOON));
-        when(bis.arrivals(1231)).thenReturn(List.of());
+        when(repo.near(LAT, LON, BusService.RADIUS_M, BusService.MAX_STOPS)).thenReturn(List.of(STOP_NAMGWANGJU, STOP_SANSU));
+        when(busApi.arrivals(1230)).thenReturn(List.of(BUS_01, BUS_07, BUS_15));
+        when(busApi.arrivals(1231)).thenReturn(List.of());
 
         BusNearbyResponse r = service.nearby(LAT, LON);
 
         assertThat(r.stops()).extracting(StopArrivals::id).containsExactly(1230, 1231);
-        assertThat(r.stops().get(0).arrivals()).containsExactly(SOON, LATE, UNKNOWN);
+        assertThat(r.stops().get(0).arrivals()).containsExactly(BUS_15, BUS_01, BUS_07);
         assertThat(r.stops().get(0).available()).isTrue();
         assertThat(r.stops().get(1).arrivals()).isEmpty();
         assertThat(r.stops().get(1).available()).isTrue();
@@ -51,23 +52,23 @@ class BusServiceTests {
 
     @Test
     void oneStopFailingKeepsTheOthers() {
-        when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(A, B));
-        when(bis.arrivals(1230)).thenThrow(new BusUnavailableException("고장", null));
-        when(bis.arrivals(1231)).thenReturn(List.of(SOON));
+        when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(STOP_NAMGWANGJU, STOP_SANSU));
+        when(busApi.arrivals(1230)).thenThrow(new BusUnavailableException("고장", null));
+        when(busApi.arrivals(1231)).thenReturn(List.of(BUS_15));
 
         BusNearbyResponse r = service.nearby(LAT, LON);
 
         assertThat(r.stops().get(0).available()).isFalse();
         assertThat(r.stops().get(0).arrivals()).isEmpty();
-        assertThat(r.stops().get(1).arrivals()).containsExactly(SOON);
+        assertThat(r.stops().get(1).arrivals()).containsExactly(BUS_15);
     }
 
     @Test
     void slowStopDoesNotHoldTheAnswer() {
-        when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(A));
-        when(bis.arrivals(1230)).thenAnswer(i -> {
+        when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(STOP_NAMGWANGJU));
+        when(busApi.arrivals(1230)).thenAnswer(i -> {
             Thread.sleep(5_000);
-            return List.of(SOON);
+            return List.of(BUS_15);
         });
 
         long started = System.nanoTime();
@@ -86,34 +87,36 @@ class BusServiceTests {
     }
 
     @Test
-    void sameStopWithin30SecondsAsksOnce() {
-        when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(A));
-        when(bis.arrivals(1230)).thenReturn(List.of(SOON));
+    @DisplayName("같은 정류장을 30초 안(20초 뒤)에 다시 물으면 버스 API를 또 부르지 않고 기억한 답을 준다")
+    void sameStopCallsApiOnce() {
+        int stopId = 1230;
+        when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(STOP_NAMGWANGJU));
+        when(busApi.arrivals(stopId)).thenReturn(List.of(BUS_15));
 
         service.nearby(LAT, LON);
-        clock.move(Duration.ofSeconds(20));
-        BusNearbyResponse again = service.nearby(LAT, LON);
+        clock.move(Duration.ofSeconds(20)); // 진짜로 기다리지 않고 시계만 20초 앞으로
+        BusNearbyResponse secondReply = service.nearby(LAT, LON);
 
-        assertThat(again.stops().get(0).arrivals()).containsExactly(SOON);
-        verify(bis, times(1)).arrivals(eq(1230));
+        assertThat(secondReply.stops().get(0).arrivals()).containsExactly(BUS_15);
+        verify(busApi, times(1)).arrivals(eq(stopId)); // 두 번 물었지만 API는 한 번만
     }
 
     @Test
     void asksAgainAfter30Seconds() {
-        when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(A));
-        when(bis.arrivals(1230)).thenReturn(List.of(SOON));
+        when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(STOP_NAMGWANGJU));
+        when(busApi.arrivals(1230)).thenReturn(List.of(BUS_15));
 
         service.nearby(LAT, LON);
         clock.move(Duration.ofSeconds(31));
         service.nearby(LAT, LON);
 
-        verify(bis, times(2)).arrivals(eq(1230));
+        verify(busApi, times(2)).arrivals(eq(1230));
     }
 
     @Test
     void failureIsNotKept() {
-        when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(A));
-        when(bis.arrivals(1230)).thenThrow(new BusUnavailableException("고장", null)).thenReturn(List.of(SOON));
+        when(repo.near(anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(List.of(STOP_NAMGWANGJU));
+        when(busApi.arrivals(1230)).thenThrow(new BusUnavailableException("고장", null)).thenReturn(List.of(BUS_15));
 
         service.nearby(LAT, LON);
         BusNearbyResponse second = service.nearby(LAT, LON);
@@ -129,7 +132,7 @@ class BusServiceTests {
 
     @Test
     void locationsGetStopCoordinatesInLineOrder() {
-        when(bis.locations(2)).thenReturn(List.of(FAR, NOT_IN_TABLE, NEAR));
+        when(busApi.locations(2)).thenReturn(List.of(FAR, NOT_IN_TABLE, NEAR));
         when(repo.byIds(org.mockito.ArgumentMatchers.anyCollection())).thenReturn(java.util.Map.of(
                 852, new BusStop(852, "전대동창회관", "전남대", 35.17, 126.91, 0),
                 1205, new BusStop(1205, "조선대", "남광주", 35.14, 126.93, 0)));
@@ -145,7 +148,7 @@ class BusServiceTests {
 
     @Test
     void locationFailureIsUnavailableAndNotKept() {
-        when(bis.locations(2)).thenThrow(new BusUnavailableException("고장", null)).thenReturn(List.of());
+        when(busApi.locations(2)).thenThrow(new BusUnavailableException("고장", null)).thenReturn(List.of());
 
         assertThat(service.locations(2).available()).isFalse();
         assertThat(service.locations(2).available()).isTrue();
@@ -153,16 +156,16 @@ class BusServiceTests {
 
     @Test
     void locationsKept15Seconds() {
-        when(bis.locations(2)).thenReturn(List.of());
+        when(busApi.locations(2)).thenReturn(List.of());
 
         service.locations(2);
         clock.move(Duration.ofSeconds(10));
         service.locations(2);
-        verify(bis, times(1)).locations(2);
+        verify(busApi, times(1)).locations(2);
 
         clock.move(Duration.ofSeconds(6));
         service.locations(2);
-        verify(bis, times(2)).locations(2);
+        verify(busApi, times(2)).locations(2);
     }
 
     /** 시간을 마음대로 옮길 수 있는 시계 */

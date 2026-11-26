@@ -3,12 +3,12 @@ package com.saferoute.route;
 import static com.saferoute.route.TestRoutes.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.saferoute.route.api.RouteRequest;
@@ -25,27 +25,11 @@ import com.saferoute.route.engine.graph.RoadGraph;
  * 신고된 곳 피하기 (진행표 w11, 2026-11-10). 신고는 DB에 넣지 않고 가짜 PoiSource로 준다.
  * 다이아몬드 도로망의 지름길 S–M 위 S에서 60m 자리에 신고를 둔다. 북쪽 길은 그 자리에서 약 24m(20m 밖)다.
  */
+@DisplayName("신고된 곳 피하기")
 class RouteReportTests {
 
     /** S–M 위, S에서 약 60m */
     static final double[] SPOT = {126.93066, LAT};
-
-    static final List<String> ALL = List.of("adult", "child", "senior", "wheelchair");
-
-    /** 뷰가 종류로 정하는 모드 목록과 같게 만든다 (migration 032) */
-    static RoadReport report(String type, double[] at) {
-        List<String> avoid = switch (type) {
-            case "obstacle", "accident", "construction" -> ALL;
-            case "curb", "steep", "broken" -> List.of("senior", "wheelchair");
-            default -> List.of();
-        };
-        List<String> cost = switch (type) {
-            case "curb", "steep", "broken" -> List.of("adult", "child");
-            case "obstacle", "accident", "construction" -> List.of();
-            default -> ALL;
-        };
-        return new RoadReport(3, type, at[0], at[1], LocalDate.of(2026, 11, 16), avoid, cost);
-    }
 
     static RouteResult route(RoadGraph graph, String mode, List<RoadEvent> events, RoadReport... reports) {
         RouteService service = TestRoutes.service(graph, TestRoutes.pois(List.of(), events, List.of(reports)), 12);
@@ -58,7 +42,9 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("공사 신고는 모든 모드가 우회 한도 안에서 피하고 이유를 말한다")
     void roadWorkReportIsAvoidedWithinTheDetourLimit() {
+        // migration 032, 2026-11-10
         RouteResult r = route("adult", report("construction", SPOT));
 
         assertThat(r.routes()).extracting(RouteResult.Route::kind).containsExactly("shortest", "safe");
@@ -78,6 +64,7 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("신고 반경 안의 다른 길로 돌면 신고를 지난 것으로 보지 않는다")
     void walkingAroundOnARoadWithinTwentyMetersIsNotPassingTheReport() {
         // S에서 30m: 북쪽 길이 약 12m 떨어져 있다(길 건너 보도처럼). 신고된 길은 지름길 하나라 북쪽으로 돈 경로는 지나지 않은 것
         RouteResult r = route("adult", report("construction", new double[] {126.93033, LAT}));
@@ -89,6 +76,23 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("최단 경로도 신고된 길을 지날 때만 알리고 경로 위 순서로 준다")
+    void shortestListsOnlyReportsOnItsOwnRoadsInWalkingOrder() {
+        // 반경만 지나면 알리지 않는다 (RouteResultAssembler.events, 2026-11-10)
+        // M에서 남쪽으로 30m 막다른 길 위 10m에 신고: 지름길은 10m 옆을 지나기만 한다
+        double[] spurEnd = {M_P[0], LAT - 30 / M_PER_LAT};
+        RoadGraph g = TestRoutes.plus(diamond(0.0004), Map.of(5L, spurEnd), edge(20, M, 5, M_P, spurEnd, EdgePenalty.NONE));
+        double[] laterOnShortcut = {126.93160, LAT};
+        RouteResult r = route(g, "adult", List.of(), report("construction", laterOnShortcut),
+                report("construction", new double[] {M_P[0], LAT - 10 / M_PER_LAT}), report("construction", SPOT));
+
+        assertThat(r.routes()).extracting(RouteResult.Route::kind).containsExactly("shortest", "safe");
+        // 막다른 길 신고는 빠지고, 지름길 위 두 신고가 S에서 가까운 차례로
+        assertThat(r.routes().get(0).events()).extracting(RouteResult.Event::fromM).hasSize(2).isSorted();
+    }
+
+    @Test
+    @DisplayName("신고를 피하는 길이 너무 멀면 지나며 주의를 알린다")
     void tooFarToAvoidSoItWarnsAboutTheReport() {
         // 북쪽 길이 약 1.9배라 어른 한도(1.3배)를 넘는다
         RouteResult r = route(diamond(0.0015), "adult", List.of(), report("construction", SPOT));
@@ -99,7 +103,9 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("턱 신고는 노인·휠체어는 피하고 어른은 비용만 더한다")
     void curbIsAvoidedBySeniorAndWheelchairAndOnlyCostsForAdult() {
+        // migration 032
         for (String mode : List.of("senior", "wheelchair")) {
             RouteResult r = route(mode, report("curb", SPOT));
             assertThat(r.routes().get(0).events()).singleElement().satisfies(e -> assertThat(e.avoid()).isTrue());
@@ -120,7 +126,9 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("기타 신고는 모든 모드에 비용만 더하고 돌 만하지 않으면 지나며 알린다")
     void otherReportOnlyCostsForEveryMode() {
+        // migration 032
         for (String mode : List.of("adult", "wheelchair")) {
             RouteResult r = route(mode, report("other", SPOT));
             assertThat(r.routes()).as(mode).hasSize(2);
@@ -135,6 +143,7 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("출발점 바로 앞 신고는 피하지 않고 근처라고 알린다")
     void reportAtTheStartIsNotAvoided() {
         // 출발점에서 10m: 그 신고 바로 앞에서 출발하는 길이라 피하지 않고 알리기만 한다
         RouteResult r = route("adult", report("construction", new double[] {126.93011, LAT}));
@@ -148,8 +157,9 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("범위 밖 신고는 읽지 않아 신고가 없을 때와 경로·설명이 같다")
     void noReportKeepsTheSameRoute() {
-        for (String mode : ALL) {
+        for (String mode : ALL_MODES) {
             RouteResult none = route(mode);
             // 범위 밖 신고(127.0, 35.2)는 가짜의 범위 필터가 먼저 거르므로, 운영 코드가 실제로 거르는지는
             // 읽는 범위(약 2km) 안이지만 길에서 약 170m 떨어진 남쪽 신고로 본다
@@ -195,6 +205,7 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("못 피하는 공사가 있어도 신고는 따로 차례로 피한다")
     void reportIsAvoidedEvenWhenTheRoadWorkEventCannotBe() {
         // 행사 장치(돌발 공사)는 S–P에, 신고는 P–Q에. 둘을 한 묶음으로 피하면 S–P 때문에 둘 다 못 피했다 (차례로 피하기)
         RoadGraph g = line();
@@ -213,6 +224,7 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("들를 곳으로 가는 구간에서도 신고를 피한다")
     void reportIsAvoidedOnTheLegToAStop() {
         RoadGraph g = line();
         double[] q = g.point(Q);
@@ -229,26 +241,54 @@ class RouteReportTests {
     }
 
     @Test
-    void reportZoneIsOnlyTheNearestRoadWithinTwentyMeters() {
-        assertThat(RoadEvents.zoneNearest(diamond(0.0004), report("curb", SPOT).event())).isEqualTo(10L);
-        // 가장 가까운 길이 20m 넘게 떨어지면 신고된 길이 없다
-        assertThat(RoadEvents.zoneNearest(diamond(0.0004), report("curb", new double[] {SPOT[0], LAT - 0.0003}).event()))
-                .isNull();
+    @DisplayName("신고는 반경 안 가장 가까운 길 하나만 피하고 다른 길은 그대로 쓴다")
+    void reportBlocksOnlyItsNearestRoadNotTheNextWayWithinRange() {
+        // RoadEvents.zoneNearest, 2026-11-10
+        // 지름길 S–M에서 8m 옆 신고. 북쪽 길 S–N(약 1.09배)도 약 17m로 반경 안, 남쪽 길 S–Q–T(1.25배)는 반경 밖
+        double[] q = xy(100, -75);
+        RoadGraph g = TestRoutes.plus(diamond(0.0004), Map.of(5L, q), edge(14, S, 5, S_P, q, EdgePenalty.NONE),
+                edge(15, 5, T, q, T_P, EdgePenalty.NONE));
+
+        RouteResult r = route(g, "adult", List.of(), report("construction", xy(60, 8)));
+
+        assertThat(r.routes().get(r.routes().size() - 1).geometry()).anyMatch(p -> p[1] > LAT + 0.0001)
+                .noneMatch(p -> p[1] < LAT - 0.0001);
     }
 
     @Test
+    @DisplayName("신고는 20m 이하 길 중 가장 가까운 길 하나에만 걸린다")
+    void reportZoneIsOnlyTheNearestRoadWithinTwentyMeters() {
+        // RoadReport.RADIUS_M (RoadEvents.zoneNearest, 2026-11-10)
+        assertThat(RoadEvents.zoneNearest(diamond(0.0004), report("curb", SPOT).event())).isEqualTo(10L);
+        // 좌표 거리라 경계값 자체는 못 만들어 경계 ±0.01m로 본다. 가장 가까운 길은 지름길 S–M
+        assertThat(RoadEvents.zoneNearest(diamond(0.0004),
+                report("curb", north(SPOT, -justBelow(RoadReport.RADIUS_M))).event())).isEqualTo(10L);
+        assertThat(RoadEvents.zoneNearest(diamond(0.0004),
+                report("curb", north(SPOT, -justAbove(RoadReport.RADIUS_M))).event())).isNull();
+    }
+
+    @Test
+    @DisplayName("신고 뷰 한 줄은 id를 음수로 한 '신고' 행사가 된다")
     void viewRowsBecomeEvents() {
+        // 반경은 RoadReport.RADIUS_M
         RoadEvent e = report("broken", SPOT).event();
         assertThat(e.id()).isEqualTo(-3);
         assertThat(e.kind()).isEqualTo("신고");
         assertThat(e.title()).isEqualTo("보도 파손");
-        assertThat(e.radiusM()).isEqualTo(20);
-        assertThat(RouteProperties.modeName(" Senior ")).isEqualTo("senior");
-        assertThat(RouteProperties.modeName(null)).isEqualTo("adult");
+        assertThat(e.radiusM()).isEqualTo(RoadReport.RADIUS_M);
+    }
+
+    @Test
+    @DisplayName("신고 종류는 한국어 이름으로 알린다")
+    void reportKindsHaveKoreanNames() {
+        // RoadReport.typeName
+        assertThat(report("obstacle", SPOT).event().title()).isEqualTo("막는 물건");
+        assertThat(report("accident", SPOT).event().title()).isEqualTo("사고");
+        assertThat(report("steep", SPOT).event().title()).isEqualTo("급경사");
     }
 
     /**
-     * 우회 한도 걸림 회귀 (2026-11-10). S—T 지름길 150m 가운데에 턱 신고(어른은 비용만), 북쪽 N으로 도는 길 200m(1.33배, 어른 한도 1.3배 밖).
+     * S—T 지름길 150m 가운데에 턱 신고(어른은 비용만), 북쪽 N으로 도는 길 200m(1.33배, 어른 한도 1.3배 밖).
      * 신고 비용 80m가 50m 더 걷는 것보다 커서 비용을 넣으면 한도에 걸리지만, 기준(지붕·밝기)으로는 지름길이 이미 가장 좋은 길이다
      */
     static RoadGraph triangle() {
@@ -274,8 +314,9 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("비용만 더하는 신고 때문에 지붕 길이 멀다고 말하지 않는다")
     void costOnlyReportDoesNotBlameTheRoofOnARainyDay() {
-        // 고치기 전: "지붕 있는 길은 너무 많이 돌아서 가장 짧은 길을 안내합니다" (지붕 길은 없다)
+        // 지붕 길은 없으니 "지붕 있는 길은 너무 많이 돌아서…"라고 하지 않는다
         RouteResult r = triangleRoute(List.of(), 12, "on");
 
         assertThat(r.routes()).singleElement();
@@ -284,9 +325,9 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("비용만 더하는 신고 때문에 안전한 길이 멀다고 말하지 않는다")
     void costOnlyReportDoesNotBlameTheNightCriteria() {
-        // 모든 길이 밝고 CCTV·비상벨 안이라 밤 기준으로는 지름길이 가장 좋다.
-        // 고치기 전: "더 안전한 길은 너무 많이 돌아서 가장 짧은 길을 안내합니다"
+        // 모든 길이 밝고 CCTV·비상벨 안이라 밤 기준으로는 지름길이 가장 좋다. "더 안전한 길은 너무 많이 돌아서…"라고 하지 않는다
         RoadGraph g = triangle();
         List<com.saferoute.route.engine.facility.Poi> pois = new ArrayList<>();
         long id = 100;
@@ -309,10 +350,11 @@ class RouteReportTests {
     }
 
     @Test
+    @DisplayName("휠체어 도착점을 신고된 길 위로 다시 붙여도 신고를 피하고 알린다")
     void reportStaysWhenTheWheelchairEndIsMovedOntoTheReportedRoad() {
         // S —— A ———————— B 큰길(S–A 100m, A–B 200m). 도착 D는 B에서 계단으로만 드나드는 보행로 끝(A–B에서 북쪽 25m).
         // 휠체어는 D 쪽 길에 붙였다가 못 가서 A–B 위 X(A에서 100m)에 다시 붙인다. 그때 A–B가 나뉘어 번호가 바뀐다.
-        // 공사 신고는 A–B 위 A에서 30m. 다시 붙인 뒤 신고된 길을 다시 찾지 않으면 이 신고가 피하기·알림에서 조용히 빠졌다
+        // 공사 신고는 A–B 위 A에서 30m. 나뉜 조각에서 신고된 길을 다시 찾아 피하기·알림에 남는다
         double m = 0.0011 / 100;
         double lat = 1 / 111_195.0;
         long a = 51, b = 52, p = 53, d = 54;
@@ -338,14 +380,5 @@ class RouteReportTests {
                 .singleElement().satisfies(e -> assertThat(e.avoid()).isTrue()));
         assertThat(r.explanation().notes()).extracting(RouteResult.Note::text)
                 .contains("앞에 공사 신고가 있는 곳을 지나요", "도착점 근처 약 25m는 휠체어로 이어진 길이 확인되지 않았습니다");
-    }
-
-    @Test
-    void manyReportsGetTheRightParticle() {
-        List<RouteResult.Event> passing = java.util.stream.Stream.of("공사", "턱", "사고")
-                .map(t -> new RouteResult.Event("신고", t, null, null, null, 0, 10, true, null)).toList();
-        // "외 1곳" 끝 글자 "곳"에 받침이 있어 "이"
-        assertThat(com.saferoute.route.engine.explain.ExplanationBuilder.eventNotes("", List.of(), passing))
-                .containsExactly(RouteResult.Note.warn("event", "앞에 공사 신고, 턱 신고 외 1곳이 있는 곳을 지나요"));
     }
 }

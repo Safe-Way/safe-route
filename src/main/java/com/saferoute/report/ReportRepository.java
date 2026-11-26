@@ -206,7 +206,8 @@ public class ReportRepository {
         List<ReportItem> out = new ArrayList<>();
         jdbc.query("SELECT r.id, r.report_type, r.mode, r.memo, r.lat, r.lon, r.status,"
                         + " DATE_FORMAT(r.created_at, '%Y-%m-%dT%H:%i') AS created,"
-                        + " (SELECT COUNT(*) FROM road_report_photo p WHERE p.report_id = r.id) AS photos"
+                        + " (SELECT COUNT(*) FROM road_report_photo p WHERE p.report_id = r.id) AS photos,"
+                        + (vehicle3h ? " r.photo_label" : " NULL AS photo_label")
                         + " FROM road_report r WHERE r.status IN ('open', 'confirmed')"
                         + " AND MBRContains(ST_GeomFromText(?, 0), r.geom)"
                         + " AND " + stillKept(0, vehicle3h)
@@ -220,7 +221,7 @@ public class ReportRepository {
                     }
                     out.add(new ReportItem(id, type, ReportType.name(type), rs.getString("mode"), rs.getString("memo"),
                             rs.getDouble("lat"), rs.getDouble("lon"), rs.getString("status"), rs.getString("created"),
-                            List.copyOf(urls)));
+                            List.copyOf(urls), "obstacle".equals(type) && "vehicle".equals(rs.getString("photo_label"))));
                 }, box(west, south, east, north), limit);
         return out;
     }

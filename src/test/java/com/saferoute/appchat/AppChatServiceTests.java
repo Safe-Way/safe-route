@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
@@ -34,12 +35,13 @@ class AppChatServiceTests {
 
     @BeforeEach
     void setUp() {
-        when(gemini.available()).thenReturn(true);
+        boolean hasKey = true; // 기본은 키가 있는 서버. 키 없는 상황은 그 테스트에서만 바꾼다
+        when(gemini.available()).thenReturn(hasKey);
         mvc = MockMvcBuilders.standaloneSetup(new AppChatController(service))
                 .setControllerAdvice(new ApiErrorHandler()).build();
     }
 
-    static AppChatRequest said(String... userLines) {
+    static AppChatRequest userSaid(String... userLines) {
         List<AppChatRequest.Line> h = new java.util.ArrayList<>();
         for (String s : userLines) {
             h.add(new AppChatRequest.Line(true, s));
@@ -48,16 +50,22 @@ class AppChatServiceTests {
     }
 
     @Test
-    void setupPicksOnlyAppValues() {
-        when(gemini.structured(anyString(), any(), any())).thenReturn("""
+    @DisplayName("처음 설정: 제미나이가 앱에 없는 값(HUGE·ROCKET)이나 중복을 줘도 앱이 아는 값만 남긴다")
+    void setupKeepsKnownValues() {
+        String geminiAnswer = """
                 {"type":"pick","mode":"SENIOR","textSize":"HUGE","voiceGuide":true,"sosButton":true,
                  "extraMapItems":["TOILET","ROCKET","TOILET"],"reason":"어머님이 천천히 걸으셔서 어르신 모드로 맞췄어요.",
                  "question":"","choices":[]}
-                """);
-        Map<String, Object> r = service.setup(said("우리 엄마가 70대인데 다리가 좀 불편해요"));
-        assertThat(r).containsEntry("type", "pick").containsEntry("mode", "SENIOR")
-                .containsEntry("textSize", "NORMAL").containsEntry("sosButton", true)
-                .containsEntry("extraMapItems", List.of("TOILET"));
+                """;
+        when(gemini.structured(anyString(), any(), any())).thenReturn(geminiAnswer);
+
+        Map<String, Object> setting = service.setup(userSaid("우리 엄마가 70대인데 다리가 좀 불편해요"));
+
+        assertThat(setting).containsEntry("type", "pick")
+                .containsEntry("mode", "SENIOR")                     // 아는 값은 그대로
+                .containsEntry("sosButton", true)
+                .containsEntry("textSize", "NORMAL")                 // 모르는 HUGE → 기본값
+                .containsEntry("extraMapItems", List.of("TOILET"));  // ROCKET 빼고, 중복 하나로
     }
 
     @Test
@@ -85,7 +93,7 @@ class AppChatServiceTests {
                  "voiceGuide":true,"sosButton":false,"addMapItems":[],"removeMapItems":[],"nearbyKind":"toilet",
                  "placeQuery":"","choices":[]}
                 """);
-        Map<String, Object> r = service.map(said("화장실 어디야"));
+        Map<String, Object> r = service.map(userSaid("화장실 어디야"));
         assertThat(r).isEqualTo(Map.of("action", "nearby", "say", "가까운 화장실을 찾아볼게요.", "nearbyKind", "toilet"));
     }
 
@@ -96,7 +104,7 @@ class AppChatServiceTests {
                  "voiceGuide":true,"sosButton":false,"addMapItems":["SUBWAY","X"],"removeMapItems":[],
                  "nearbyKind":"none","placeQuery":"","choices":[]}
                 """);
-        Map<String, Object> r = service.map(said("글씨가 안 보여"));
+        Map<String, Object> r = service.map(userSaid("글씨가 안 보여"));
         assertThat(r).containsEntry("textSize", "LARGE").containsEntry("mode", null)
                 .containsEntry("addMapItems", List.of("SUBWAY"));
     }
@@ -110,16 +118,20 @@ class AppChatServiceTests {
                         .content("{\"history\":[{\"fromUser\":true,\"text\":\"택시 불러 줘\"}]}"))
                 .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.code").value("AI_UNAVAILABLE"));
         when(gemini.structured(anyString(), any(), any())).thenReturn("not json");
-        assertThatThrownBy(() -> service.map(said("안녕"))).isInstanceOf(AppChatException.class)
+        assertThatThrownBy(() -> service.map(userSaid("안녕"))).isInstanceOf(AppChatException.class)
                 .extracting("code").isEqualTo("AI_UNAVAILABLE");
         when(gemini.structured(anyString(), any(), any())).thenReturn(null);
-        assertThatThrownBy(() -> service.setup(said("안녕"))).extracting("code").isEqualTo("AI_UNAVAILABLE");
+        assertThatThrownBy(() -> service.setup(userSaid("안녕"))).extracting("code").isEqualTo("AI_UNAVAILABLE");
     }
 
     @Test
-    void noKeyMeansUnavailableWithoutCalling() {
-        when(gemini.available()).thenReturn(false);
-        assertThatThrownBy(() -> service.setup(said("안녕"))).extracting("code").isEqualTo("AI_UNAVAILABLE");
+    @DisplayName("API 키가 없으면 제미나이를 한 번도 부르지 않고 AI_UNAVAILABLE(앱이 자체 규칙을 쓰라는 뜻)로 답한다")
+    void noKeyNoGemini() {
+        boolean hasKey = false;
+        when(gemini.available()).thenReturn(hasKey);
+
+        assertThatThrownBy(() -> service.setup(userSaid("안녕")))
+                .extracting("code").isEqualTo("AI_UNAVAILABLE");
         verify(gemini, never()).structured(anyString(), any(), any());
     }
 
