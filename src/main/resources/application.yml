@@ -66,6 +66,8 @@ assistant:
   # 답 하나에 쓰는 시간 한도 (2026-11-16, 앱 박민수 님과 합의). 앱이 10초에 끊으므로 그보다 먼저 답한다.
   # 제미나이 왕복·다시 묻기를 모두 합쳐 이 시간을 넘으면 기다리지 않고 규칙(RuleBrain)으로 답한다
   answer-budget-ms: ${ASSISTANT_ANSWER_BUDGET_MS:7000}
+  # 앱 화면 AI(/api/ai/setup-chat·map-chat·pick-answer) 답 하나 시간 한도 (2026-11-26). 넘으면 503 → 앱이 자기 규칙으로 답한다
+  app-chat-budget-ms: ${ASSISTANT_APP_CHAT_BUDGET_MS:8000}
   report-near-m: 30
   # 비서 토큰 줄이기 R4: 지식 조각 전문 검색 점수가 이보다 낮으면 붙이지 않음 (A파트 찾기 시험 1등 점수 1.4~11)
   knowledge-min-score: 1.0
@@ -120,7 +122,7 @@ rate-limit:
   enabled: ${RATE_LIMIT_ENABLED:true}
   per-minute: 120              # /api 전체, 게스트마다
   ip-per-minute: 600           # /api 전체, IP마다 (통신사 NAT로 여러 사람이 한 IP일 수 있어 넉넉히)
-  assistant-per-minute: 20     # POST /api/assistant (제미나이 비용)
+  assistant-per-minute: 20     # POST /api/assistant·/api/ai/* 합쳐서 (제미나이 비용)
   assistant-per-day: 300
   assistant-ip-per-minute: 60
   reports-per-hour: 10         # POST /api/reports (사진 3장·16MB까지)

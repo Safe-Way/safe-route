@@ -165,6 +165,32 @@ public class GeminiClient {
     }
 
     /**
+     * structured 와 같고, 남은 시간(leftMs)만큼만 기다린다 (앱 화면 AI 창구 시간 한도, 2026-11-26).
+     * 모델을 바꿔 다시 묻는 것까지 모두 합쳐 이 시간 안에 끝내고, 넘으면 null (앱은 자기 규칙으로 답한다).
+     * 넘긴 호출은 뒤에서 호출 한도까지 돌다 끝나고 답은 버린다
+     */
+    public String structured(String system, List<Object> contents, Map<String, Object> schema, long leftMs) {
+        if (!available() || leftMs <= 0) {
+            return null;
+        }
+        java.util.concurrent.Future<String> call = WAITER.submit(() -> structured(system, contents, schema));
+        try {
+            return call.get(leftMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            call.cancel(true);
+            log.warn("제미나이가 남은 시간({}ms) 안에 답하지 않아 앱 규칙으로 넘김", leftMs);
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            call.cancel(true);
+            return null;
+        } catch (java.util.concurrent.ExecutionException e) {
+            log.warn("제미나이 호출 실패: {}", e.getCause() == null ? "-" : e.getCause().getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /**
      * 정해진 JSON 모양(responseSchema)으로만 답하게 묻는다 (앱의 말로 맞추기·지도 비서용, 도구 없음).
      *
      * @return 제미나이가 준 JSON 글자 (parts 의 text 를 이은 것). 키 없음·실패·빈 답이면 null

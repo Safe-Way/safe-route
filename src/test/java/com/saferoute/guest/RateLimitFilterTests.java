@@ -112,6 +112,27 @@ class RateLimitFilterTests {
     }
 
     @Test
+    @DisplayName("앱 화면 AI 창구도 비서 한도를 같이 쓴다")
+    void appAiSharesAssistantLimit() throws Exception {
+        // /api/ai/* 도 제미나이를 부르므로 비서 한도(게스트 1번)에 같이 센다. 비서를 한 번 쓰면 앱 AI도 막힌다
+        assertThat(call("POST", "/api/ai/map-chat", "203.0.113.7", "g1").getStatus()).isEqualTo(200);
+        assertThat(call("POST", "/api/ai/pick-answer", "203.0.113.7", "g1").getStatus()).isEqualTo(429);
+        assertThat(call("POST", "/api/assistant", "203.0.113.7", "g1").getStatus()).isEqualTo(429);
+        assertThat(call("POST", "/api/ai/setup-chat", "203.0.113.7", "g2").getStatus()).isEqualTo(200);   // 다른 사람은 따로
+    }
+
+    @Test
+    @DisplayName("제미나이 부르는 창구 구분")
+    void geminiPathsAreRecognized() {
+        assertThat(RateLimitFilter.callsGemini("/api/assistant")).isTrue();
+        assertThat(RateLimitFilter.callsGemini("/api/ai/setup-chat")).isTrue();
+        assertThat(RateLimitFilter.callsGemini("/api/ai/map-chat")).isTrue();
+        assertThat(RateLimitFilter.callsGemini("/api/ai/pick-answer")).isTrue();
+        assertThat(RateLimitFilter.callsGemini("/api/places")).isFalse();
+        assertThat(RateLimitFilter.callsGemini("/api/aide")).isFalse();
+    }
+
+    @Test
     @DisplayName("신고 한도는 시간당")
     void reportsLimitIsPerHour() throws Exception {
         // 1시간 칸의 한가운데(01:30)라 남은 시간이 30분 → 안내 문구가 "1시간"이 아니라 "30분 뒤에"가 된다
