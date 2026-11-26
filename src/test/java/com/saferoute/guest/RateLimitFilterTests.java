@@ -80,9 +80,9 @@ class RateLimitFilterTests {
     @Test
     @DisplayName("한도를 넘으면 429와 다시 시도할 시각을 준다")
     void blocksAfterLimitWith429AndRetryAfter() throws Exception {
-        // 게스트 번호가 없는 요청은 IP로 센다. 일반 게스트 한도 3번까지는 통과, 4번째에 429
+        // 게스트 번호가 없는 요청은 IP 한도로만 센다. IP 한도 5번까지는 통과, 6번째에 429
         // 앱은 Retry-After(초)를 보고 기다렸다 다시 부르므로 1~60초 안의 값이어야 한다
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 5; i++) {
             assertThat(call("GET", "/api/places", "203.0.113.7", null).getStatus()).isEqualTo(200);
         }
         MockHttpServletResponse res = call("GET", "/api/places", "203.0.113.7", null);
@@ -119,6 +119,17 @@ class RateLimitFilterTests {
         assertThat(call("POST", "/api/ai/pick-answer", "203.0.113.7", "g1").getStatus()).isEqualTo(429);
         assertThat(call("POST", "/api/assistant", "203.0.113.7", "g1").getStatus()).isEqualTo(429);
         assertThat(call("POST", "/api/ai/setup-chat", "203.0.113.7", "g2").getStatus()).isEqualTo(200);   // 다른 사람은 따로
+    }
+
+    @Test
+    @DisplayName("번호 없는 앱 화면 AI는 같은 와이파이의 여러 폰이 한 사람 몫을 나눠 쓰지 않는다")
+    void guestlessAiUsesOnlyIpLimit() throws Exception {
+        // 발표장: 폰 여러 대가 같은 IP로, 게스트 번호 없이 /api/ai 를 부른다.
+        // 게스트 한도(1번)로 세면 두 번째 폰부터 막히지만, IP 한도(일반 5번)까지는 모두 통과해야 한다
+        for (int i = 0; i < 5; i++) {
+            assertThat(call("POST", "/api/ai/map-chat", "203.0.113.7", null).getStatus()).isEqualTo(200);
+        }
+        assertThat(call("POST", "/api/ai/map-chat", "203.0.113.7", null).getStatus()).isEqualTo(429);   // IP 상한
     }
 
     @Test

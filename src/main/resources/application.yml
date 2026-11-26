@@ -117,14 +117,16 @@ guest-auth:
   enforce: ${GUEST_AUTH_ENFORCE:false}
 
 # /api 요청 수 제한 (공개 배포 준비 1-2, com.saferoute.guest.RateLimitFilter). 서버 한 대 안에서 센다.
-# 게스트 번호(없으면 IP)마다 세고, 번호를 바꿔 가며 부르는 것을 막으려고 IP마다 넉넉한 상한을 따로 둔다.
+# 게스트 번호마다 세고, 번호를 바꿔 가며 부르는 것을 막으려고 IP마다 넉넉한 상한을 따로 둔다.
+# 번호 없이 온 요청(앱 화면 AI 등)은 IP 상한으로만 센다: 발표장처럼 한 와이파이에 폰이 많아도 한 사람 몫을 나눠 쓰지 않게 (2026-11-26)
 rate-limit:
   enabled: ${RATE_LIMIT_ENABLED:true}
   per-minute: 120              # /api 전체, 게스트마다
   ip-per-minute: 600           # /api 전체, IP마다 (통신사 NAT로 여러 사람이 한 IP일 수 있어 넉넉히)
   assistant-per-minute: 20     # POST /api/assistant·/api/ai/* 합쳐서 (제미나이 비용)
   assistant-per-day: 300
-  assistant-ip-per-minute: 60
+  assistant-ip-per-minute: ${RATE_LIMIT_ASSISTANT_IP_PER_MINUTE:60}   # 한 와이파이(발표장 등) 전체
+  assistant-ip-per-day: ${RATE_LIMIT_ASSISTANT_IP_PER_DAY:2000}      # 번호 없는 요청도 하루 비용 상한이 있게
   reports-per-hour: 10         # POST /api/reports (사진 3장·16MB까지)
   reports-ip-per-hour: 30
 
