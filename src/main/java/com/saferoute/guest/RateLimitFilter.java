@@ -24,8 +24,9 @@ import java.util.List;
 /**
  * /api 요청 수 제한 (2026-11-23, 공개 배포 준비 1-2).
  *
- * <p>비서(제미나이 비용)와 사진 신고(요청 하나 16MB까지)를 누가 끝없이 부르지 못하게 한다.
+ * <p>비서·앱 화면 AI(제미나이 비용)와 사진 신고(요청 하나 16MB까지)를 누가 끝없이 부르지 못하게 한다.
  * 게스트 번호(본인 확인 필터가 찾은 것)마다 세고, 번호를 바꿔 가며 부르는 것을 막으려고 IP마다 넉넉한 상한도 둔다.
+ * 번호 없이 온 요청은 IP 상한으로만 센다 (같은 와이파이의 여러 사람이 한 사람 몫을 나눠 쓰지 않게).
  * 넘으면 429와 Retry-After(초)를 돌려준다.
  *
  * <p>IP는 학교 nginx가 넘긴 X-Real-IP를 쓴다. 단, 바로 앞이 우리 프록시(사설·루프백 주소)일 때만 믿는다.
@@ -56,6 +57,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                            @Value("${rate-limit.assistant-per-minute:20}") int assistantPerMinute,
                            @Value("${rate-limit.assistant-per-day:300}") int assistantPerDay,
                            @Value("${rate-limit.assistant-ip-per-minute:60}") int assistantIpPerMinute,
+                           @Value("${rate-limit.assistant-ip-per-day:2000}") int assistantIpPerDay,
                            @Value("${rate-limit.reports-per-hour:10}") int reportsPerHour,
                            @Value("${rate-limit.reports-ip-per-hour:30}") int reportsIpPerHour) {
         this(new RateLimiter(Clock.systemUTC()), enabled,
@@ -63,7 +65,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
                         List.of(new RateLimiter.Rule("api-ip", ipPerMinute, Duration.ofMinutes(1)))),
                 new Rules(List.of(new RateLimiter.Rule("assistant", assistantPerMinute, Duration.ofMinutes(1)),
                         new RateLimiter.Rule("assistant-day", assistantPerDay, Duration.ofDays(1))),
-                        List.of(new RateLimiter.Rule("assistant-ip", assistantIpPerMinute, Duration.ofMinutes(1)))),
+                        List.of(new RateLimiter.Rule("assistant-ip", assistantIpPerMinute, Duration.ofMinutes(1)),
+                                new RateLimiter.Rule("assistant-ip-day", assistantIpPerDay, Duration.ofDays(1)))),
                 new Rules(List.of(new RateLimiter.Rule("reports", reportsPerHour, Duration.ofHours(1))),
                         List.of(new RateLimiter.Rule("reports-ip", reportsIpPerHour, Duration.ofHours(1)))));
     }
@@ -98,17 +101,19 @@ public class RateLimitFilter extends OncePerRequestFilter {
         apply.add(general);
         String uri = req.getRequestURI();
         if ("POST".equals(req.getMethod())) {
-            if (uri.equals("/api/assistant") || uri.startsWith("/api/assistant/")) {
+            if (callsGemini(uri)) {
                 apply.add(assistant);
             } else if (uri.equals("/api/reports")) {
                 apply.add(reports);
             }
         }
         for (Rules rules : apply) {
-            for (RateLimiter.Rule r : rules.perGuest()) {
-                long wait = limiter.hit(r, guest != null ? "g:" + guest : "ip:" + ip);
+            // 게스트 번호가 없으면 IP 한도만 본다 (2026-11-26). 게스트 한도를 IP로 세면 발표장처럼
+            // 같은 와이파이를 쓰는 폰들이 한 사람 몫(비서 1분 20번)을 나눠 쓰게 된다. IP 한도는 여러 사람 몫으로 넉넉하다
+            for (RateLimiter.Rule r : guest == null ? List.<RateLimiter.Rule>of() : rules.perGuest()) {
+                long wait = limiter.hit(r, "g:" + guest);
                 if (wait > 0) {
-                    reject(res, r, guest != null ? guest.substring(0, Math.min(8, guest.length())) + "…" : ip, wait);
+                    reject(res, r, guest.substring(0, Math.min(8, guest.length())) + "…", wait);
                     return;
                 }
             }
@@ -121,6 +126,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
             }
         }
         chain.doFilter(req, res);
+    }
+
+    /**
+     * 제미나이를 부르는 창구: 비서와 앱 화면 AI(말로 맞추기·지도 비서·답 고르기, 2026-11-26).
+     * 같은 비서 한도를 함께 쓴다 (한 사람이 어느 창구로 부르든 제미나이 비용은 같다)
+     */
+    static boolean callsGemini(String uri) {
+        return uri.equals("/api/assistant") || uri.startsWith("/api/assistant/") || uri.startsWith("/api/ai/");
     }
 
     private static void reject(HttpServletResponse res, RateLimiter.Rule r, String who, long wait) throws IOException {

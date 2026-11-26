@@ -141,6 +141,47 @@ class GeminiClientTests {
     }
 
     @Test
+    void structuredGivesUpWhenTimeRunsOut() {
+        // 앱 화면 AI 시간 한도 (11-26): 제미나이가 2초 걸려도 남은 0.2초만 기다리고 null (앱은 자기 규칙으로)
+        RestClient.Builder b = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(b).build();
+        GeminiClient c = new GeminiClient(b, "k", "gemini-test", 10_000);
+        server.expect(requestTo(GEN_URL)).andRespond(request -> {
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return withSuccess(SHORT_ANSWER, MediaType.APPLICATION_JSON).createResponse(request);
+        });
+        List<Object> contents = List.of(Map.of("role", "user", "parts", List.of(Map.of("text", "안녕"))));
+        long start = System.nanoTime();
+        assertThat(c.structured("지시", contents, Map.of("type", "object"), 200)).isNull();
+        assertThat((System.nanoTime() - start) / 1_000_000).isLessThan(1500);
+    }
+
+    @Test
+    void structuredWithinTimeGivesAnswer() {
+        RestClient.Builder b = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(b).build();
+        GeminiClient c = new GeminiClient(b, "k", "gemini-test", 10_000);
+        server.expect(requestTo(GEN_URL)).andRespond(withSuccess(SHORT_ANSWER, MediaType.APPLICATION_JSON));
+        List<Object> contents = List.of(Map.of("role", "user", "parts", List.of(Map.of("text", "안녕"))));
+        assertThat(c.structured("지시", contents, Map.of("type", "object"), 5000)).isEqualTo("네");
+        server.verify();
+    }
+
+    @Test
+    void structuredWithNoTimeLeftSendsNothing() {
+        RestClient.Builder b = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(b).build();
+        server.expect(ExpectedCount.never(), MockRestRequestMatchers.anything());
+        GeminiClient c = new GeminiClient(b, "k", "gemini-test", 10_000);
+        assertThat(c.structured("지시", List.of(), Map.of("type", "object"), 0)).isNull();
+        server.verify();
+    }
+
+    @Test
     void noUsageMetadataMeansNoUsage() {
         TokenUsage usage = new TokenUsage();
         GeminiClient.countTokens(null, "m", usage, 7);

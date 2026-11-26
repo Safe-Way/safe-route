@@ -8,6 +8,8 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.saferoute.assistant.GeminiClient;
@@ -70,10 +72,23 @@ public class AppChatService {
             say에는 사용자에게 할 말을 존댓말 한국어 한두 문장(80자 안쪽)으로. 한자나 다른 언어는 쓰지 마.
             """ + "지도 항목: " + names(MAP_ITEMS) + ".";
 
-    private final GeminiClient gemini;
+    /** 기본 시간 한도 ms. 앱이 10초에 끊으므로 그보다 먼저 답한다 */
+    static final long DEFAULT_BUDGET_MS = 8000;
 
+    private final GeminiClient gemini;
+    /** 답 하나에 쓰는 시간 한도 ms (assistant.app-chat-budget-ms). 모델을 바꿔 다시 묻는 것까지 합친 시간 */
+    private final long budgetMs;
+
+    /** 테스트용: 기본 한도(8초) */
     public AppChatService(GeminiClient gemini) {
+        this(gemini, DEFAULT_BUDGET_MS);
+    }
+
+    @Autowired
+    public AppChatService(GeminiClient gemini,
+            @Value("${assistant.app-chat-budget-ms:8000}") long budgetMs) {
         this.gemini = gemini;
+        this.budgetMs = budgetMs;
     }
 
     // ---------- 말로 맞추기 ----------
@@ -280,7 +295,7 @@ public class AppChatService {
         if (!gemini.available()) {
             throw AppChatException.unavailable();
         }
-        String text = gemini.structured(system, contents, schema);
+        String text = gemini.structured(system, contents, schema, budgetMs);
         if (text == null) {
             throw AppChatException.unavailable();
         }

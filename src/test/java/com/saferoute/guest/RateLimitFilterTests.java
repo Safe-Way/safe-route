@@ -80,9 +80,9 @@ class RateLimitFilterTests {
     @Test
     @DisplayName("한도를 넘으면 429와 다시 시도할 시각을 준다")
     void blocksAfterLimitWith429AndRetryAfter() throws Exception {
-        // 게스트 번호가 없는 요청은 IP로 센다. 일반 게스트 한도 3번까지는 통과, 4번째에 429
+        // 게스트 번호가 없는 요청은 IP 한도로만 센다. IP 한도 5번까지는 통과, 6번째에 429
         // 앱은 Retry-After(초)를 보고 기다렸다 다시 부르므로 1~60초 안의 값이어야 한다
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 5; i++) {
             assertThat(call("GET", "/api/places", "203.0.113.7", null).getStatus()).isEqualTo(200);
         }
         MockHttpServletResponse res = call("GET", "/api/places", "203.0.113.7", null);
@@ -109,6 +109,38 @@ class RateLimitFilterTests {
         assertThat(call("POST", "/api/assistant", "203.0.113.7", "g1").getStatus()).isEqualTo(200);
         assertThat(call("POST", "/api/assistant", "203.0.113.7", "g1").getStatus()).isEqualTo(429);
         assertThat(call("GET", "/api/places", "203.0.113.7", "g1").getStatus()).isEqualTo(200);   // 다른 창구는 아직 됨
+    }
+
+    @Test
+    @DisplayName("앱 화면 AI 창구도 비서 한도를 같이 쓴다")
+    void appAiSharesAssistantLimit() throws Exception {
+        // /api/ai/* 도 제미나이를 부르므로 비서 한도(게스트 1번)에 같이 센다. 비서를 한 번 쓰면 앱 AI도 막힌다
+        assertThat(call("POST", "/api/ai/map-chat", "203.0.113.7", "g1").getStatus()).isEqualTo(200);
+        assertThat(call("POST", "/api/ai/pick-answer", "203.0.113.7", "g1").getStatus()).isEqualTo(429);
+        assertThat(call("POST", "/api/assistant", "203.0.113.7", "g1").getStatus()).isEqualTo(429);
+        assertThat(call("POST", "/api/ai/setup-chat", "203.0.113.7", "g2").getStatus()).isEqualTo(200);   // 다른 사람은 따로
+    }
+
+    @Test
+    @DisplayName("번호 없는 앱 화면 AI는 같은 와이파이의 여러 폰이 한 사람 몫을 나눠 쓰지 않는다")
+    void guestlessAiUsesOnlyIpLimit() throws Exception {
+        // 발표장: 폰 여러 대가 같은 IP로, 게스트 번호 없이 /api/ai 를 부른다.
+        // 게스트 한도(1번)로 세면 두 번째 폰부터 막히지만, IP 한도(일반 5번)까지는 모두 통과해야 한다
+        for (int i = 0; i < 5; i++) {
+            assertThat(call("POST", "/api/ai/map-chat", "203.0.113.7", null).getStatus()).isEqualTo(200);
+        }
+        assertThat(call("POST", "/api/ai/map-chat", "203.0.113.7", null).getStatus()).isEqualTo(429);   // IP 상한
+    }
+
+    @Test
+    @DisplayName("제미나이 부르는 창구 구분")
+    void geminiPathsAreRecognized() {
+        assertThat(RateLimitFilter.callsGemini("/api/assistant")).isTrue();
+        assertThat(RateLimitFilter.callsGemini("/api/ai/setup-chat")).isTrue();
+        assertThat(RateLimitFilter.callsGemini("/api/ai/map-chat")).isTrue();
+        assertThat(RateLimitFilter.callsGemini("/api/ai/pick-answer")).isTrue();
+        assertThat(RateLimitFilter.callsGemini("/api/places")).isFalse();
+        assertThat(RateLimitFilter.callsGemini("/api/aide")).isFalse();
     }
 
     @Test

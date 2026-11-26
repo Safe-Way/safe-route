@@ -11,10 +11,14 @@ import java.nio.FloatBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReadParam;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,7 +121,7 @@ public class PhotoClassifier implements AutoCloseable {
             return null;
         }
         try {
-            BufferedImage img = ImageIO.read(new ByteArrayInputStream(image));
+            BufferedImage img = decode(image, MAX_PIXELS);
             if (img == null) {
                 return null; // 자바 기본으로는 JPG·PNG 만 읽힌다
             }
@@ -135,6 +139,51 @@ public class PhotoClassifier implements AutoCloseable {
             log.warn("신고 사진 판단 실패 (신고는 그대로 저장): {}", e.toString());
             return null;
         }
+    }
+
+    /**
+     * 사진 크기(가로×세로)를 먼저 읽고, 이보다 크면 건너뛰며 읽어 이만큼 안으로 줄인다 (2026-11-26).
+     * 파일은 5MB 안이어도 픽셀이 아주 큰 PNG(한 가지 색으로 가득 찬 그림 등)는 통째로 풀면 몇 GB가 된다.
+     * 휴대폰 사진 1,200만 화소(4032×3024)는 그대로 읽어서 판단 결과가 예전과 같다
+     */
+    static final long MAX_PIXELS = 4096L * 4096L;
+
+    /**
+     * 그림을 읽는다. 픽셀 수가 maxPixels 를 넘으면 n칸마다 한 칸만 읽어(subsampling) 메모리를 그만큼만 쓴다.
+     * 자바 기본으로 못 읽는 그림(HEIC·WEBP 등)이면 null
+     */
+    static BufferedImage decode(byte[] image, long maxPixels) throws IOException {
+        try (ImageInputStream in = ImageIO.createImageInputStream(new ByteArrayInputStream(image))) {
+            if (in == null) {
+                return null;
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
+            if (!readers.hasNext()) {
+                return null;
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(in, true, true);
+                long pixels = (long) reader.getWidth(0) * reader.getHeight(0);
+                ImageReadParam param = reader.getDefaultReadParam();
+                int step = skipStep(pixels, maxPixels);
+                if (step > 1) {
+                    param.setSourceSubsampling(step, step, 0, 0);
+                    log.info("신고 사진이 커서 {}칸마다 한 칸씩 읽음 ({}×{})", step, reader.getWidth(0), reader.getHeight(0));
+                }
+                return reader.read(0, param);
+            } finally {
+                reader.dispose();
+            }
+        }
+    }
+
+    /** 픽셀 수가 maxPixels 안에 들어오려면 몇 칸마다 한 칸 읽어야 하는지. 이미 작으면 1 */
+    static int skipStep(long pixels, long maxPixels) {
+        if (pixels <= maxPixels) {
+            return 1;
+        }
+        return (int) Math.ceil(Math.sqrt((double) pixels / maxPixels));
     }
 
     private float[] run(float[] chw) throws Exception {
